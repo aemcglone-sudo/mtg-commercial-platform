@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
@@ -13,7 +12,6 @@ interface SavedInfo {
 }
 
 export default function SettingsPage() {
-  const { data: session } = useSession();
   const router = useRouter();
 
   const [saved, setSaved] = useState<SavedInfo | null>(null);
