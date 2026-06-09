@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
     const cartItems: Array<{ productId: string; quantity: number }> = [];
 
     for (const [cardName, quantity] of cards) {
-      const card = cardData.get(cardName);
+      const card = cardData.get(cardName) as any;
       if (card?.tcgplayer_id) {
         cartItems.push({
           productId: String(card.tcgplayer_id),
