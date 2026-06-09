@@ -114,7 +114,6 @@ export default function SettingsPage() {
             </Link>
             <h1 className="text-lg font-bold">Settings</h1>
           </div>
-          <span className="text-sm text-zinc-500">{session?.user?.name}</span>
         </div>
       </header>
 
