@@ -21,6 +21,10 @@ primary_region = 'iad'
   source = 'data'
   destination = '/data'
 
+[[volumes]]
+  name = 'data'
+  size = 10
+
 [[vm]]
   memory = '1gb'
   cpu_kind = 'shared'
