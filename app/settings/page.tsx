@@ -290,21 +290,6 @@ export default function SettingsPage() {
           </div>
         </section>
 
-        {/* Account section (placeholder for future) */}
-        <section className="space-y-4 border-t border-zinc-800 pt-8">
-          <h2 className="text-base font-semibold">Account</h2>
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-zinc-500">Username</span>
-              <span className="text-zinc-200">{session?.user?.name}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-zinc-500">Email</span>
-              <span className="text-zinc-200">{session?.user?.email}</span>
-            </div>
-          </div>
-          <p className="text-xs text-zinc-600">Password change and Google/Apple login coming soon.</p>
-        </section>
       </div>
     </div>
   );
