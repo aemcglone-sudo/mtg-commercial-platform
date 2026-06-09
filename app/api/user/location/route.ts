@@ -33,7 +33,7 @@ export async function GET(req: NextRequest): Promise<Response> {
   }
 }
 
-export async function POST(req: Request): Promise<Response> {
+export async function POST(req: NextRequest): Promise<Response> {
   try {
     const userId = await getAuthenticatedUserId(req);
     if (!userId) {
