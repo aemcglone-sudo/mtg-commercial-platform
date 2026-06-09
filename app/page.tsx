@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useSession, signOut } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import CollectionBrowser, { type CollectionCardData } from '@/components/CollectionBrowser';
 import DeckFinderTab from '@/components/DeckFinderTab';
@@ -36,7 +36,7 @@ const TABS: { id: PortalTab; label: string; icon: string }[] = [
 ];
 
 export default function Home() {
-  const { data: session } = useSession();
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<PortalTab>('decks');
   const [collection, setCollection] = useState<CollectionResult | null>(null);
   const [collectionText, setCollectionText] = useState('');
@@ -94,8 +94,6 @@ export default function Home() {
 
   // Load user decks
   useEffect(() => {
-    if (!session?.user?.id) return;
-
     fetch('/api/decks')
       .then((r) => r.json())
       .then((data) => {
@@ -104,7 +102,7 @@ export default function Home() {
         }
       })
       .catch(() => {});
-  }, [session?.user?.id]);
+  }, []);
 
   // Persist active tab to localStorage
   useEffect(() => {
@@ -136,6 +134,12 @@ export default function Home() {
 
   function handleCardClick(cardName: string) {
     setSelectedCard(cardName);
+  }
+
+  async function handleLogout() {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    router.push('/login');
+    router.refresh();
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -177,17 +181,16 @@ export default function Home() {
               </button>
             )}
 
-            {session?.user && (
-              <div className="relative" ref={menuRef}>
+            <div className="relative" ref={menuRef}>
               <button
                 type="button"
                 onClick={() => setUserMenuOpen((v) => !v)}
                 className="flex items-center gap-2 text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
               >
                 <span className="w-7 h-7 rounded-full bg-amber-400 text-black flex items-center justify-center font-bold text-xs">
-                  {(session.user.name ?? 'U')[0].toUpperCase()}
+                  M
                 </span>
-                <span className="hidden sm:block">{session.user.name}</span>
+                <span className="hidden sm:block">MTG</span>
                 <span className="text-xs text-zinc-600">{userMenuOpen ? '▲' : '▼'}</span>
               </button>
 
@@ -203,15 +206,14 @@ export default function Home() {
                   <div className="border-t border-zinc-800 my-1" />
                   <button
                     type="button"
-                    onClick={() => signOut({ callbackUrl: '/login' })}
+                    onClick={handleLogout}
                     className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-zinc-400 hover:text-red-400 hover:bg-zinc-800 transition-colors"
                   >
                     Sign out
                   </button>
                 </div>
               )}
-              </div>
-            )}
+            </div>
           </div>
         </div>
 
