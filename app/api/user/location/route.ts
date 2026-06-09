@@ -1,3 +1,4 @@
+import { NextRequest } from 'next/server';
 import { getAuthenticatedUserId } from '@/lib/auth';
 import { findOne, run } from '@/lib/db';
 
