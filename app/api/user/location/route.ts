@@ -6,7 +6,7 @@ interface LocationPreference {
   saved_at: string;
 }
 
-export async function GET(): Promise<Response> {
+export async function GET(req: NextRequest): Promise<Response> {
   try {
     const userId = await getAuthenticatedUserId(req);
     if (!userId) {

@@ -1,11 +1,11 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, NextRequest } from 'next/server';
 import { getAuthenticatedUserId } from '@/lib/auth';
 import { findOne, findMany } from '@/lib/db';
 
 interface Row { parsedData: string; rawText: string; detectedFormat: string | null; createdAt: string }
 interface InventoryItem { name: string; quantity: number; collectionType?: string | null }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const userId = await getAuthenticatedUserId(req);
   if (!userId) return NextResponse.json(null);
 
@@ -96,7 +96,7 @@ export async function GET() {
   }
 }
 
-export async function DELETE() {
+export async function DELETE(req: NextRequest) {
   const userId = await getAuthenticatedUserId(req);
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
