@@ -1,4 +1,4 @@
-import { auth } from '@/lib/auth';
+import { getAuthenticatedUserId } from '@/lib/auth';
 import { findOne, run } from '@/lib/db';
 
 interface LocationPreference {
@@ -8,14 +8,14 @@ interface LocationPreference {
 
 export async function GET(): Promise<Response> {
   try {
-    const session = await auth();
-    if (!session?.user?.id) {
+    const userId = await getAuthenticatedUserId(req);
+    if (!userId) {
       return Response.json(null);
     }
 
     const location = await findOne<LocationPreference>(
       'SELECT address, savedAt as saved_at FROM user_location_preferences WHERE userId = ?',
-      [session.user.id]
+      [userId]
     );
 
     if (!location) {
@@ -34,8 +34,8 @@ export async function GET(): Promise<Response> {
 
 export async function POST(req: Request): Promise<Response> {
   try {
-    const session = await auth();
-    if (!session?.user?.id) {
+    const userId = await getAuthenticatedUserId(req);
+    if (!userId) {
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -48,10 +48,10 @@ export async function POST(req: Request): Promise<Response> {
     const now = new Date().toISOString();
 
     // Upsert: delete old and insert new (works with older SQLite)
-    await run('DELETE FROM user_location_preferences WHERE userId = ?', [session.user.id]);
+    await run('DELETE FROM user_location_preferences WHERE userId = ?', [userId]);
     await run(
       'INSERT INTO user_location_preferences (id, userId, address, savedAt) VALUES (?, ?, ?, ?)',
-      [crypto.randomUUID(), session.user.id, cleanAddress, now]
+      [crypto.randomUUID(), userId, cleanAddress, now]
     );
 
     return Response.json({

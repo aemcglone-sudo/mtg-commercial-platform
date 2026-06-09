@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
+import { getAuthenticatedUserId } from '@/lib/auth';
 import { findMany, run } from '@/lib/db';
 import { randomUUID } from 'crypto';
 
@@ -15,15 +15,15 @@ export interface DeckData {
 }
 
 export async function GET(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user?.id) {
+  const userId = await getAuthenticatedUserId(req);
+  if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   try {
     const decks = await findMany<any>(
       `SELECT id, userId, name, format, strategy, cards, personaType, coreGoal, lastAnalyzed, createdAt, updatedAt FROM decks WHERE userId = ? ORDER BY createdAt DESC`,
-      [session.user.id]
+      [userId]
     );
 
     const parsed = decks.map(d => ({
@@ -39,8 +39,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user?.id) {
+  const userId = await getAuthenticatedUserId(req);
+  if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
     await run(
       `INSERT INTO decks (id, userId, name, format, strategy, cards, createdAt, updatedAt)
        VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
-      [id, session.user.id, name, format, strategy || null, cardsJson]
+      [id, userId, name, format, strategy || null, cardsJson]
     );
 
     return NextResponse.json({

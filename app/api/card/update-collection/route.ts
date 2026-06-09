@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
+import { getAuthenticatedUserId } from '@/lib/auth';
 import { run } from '@/lib/db';
 
 export async function PATCH(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user?.id) {
+  const userId = await getAuthenticatedUserId(req);
+  if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -19,7 +19,7 @@ export async function PATCH(req: NextRequest) {
     await run(
       `UPDATE inventory_items SET collectionType = ?, updatedAt = datetime('now')
        WHERE userId = ? AND name = ? AND itemType = 'cards'`,
-      [collectionType, session.user.id, name]
+      [collectionType, userId, name]
     );
 
     return NextResponse.json({ success: true });

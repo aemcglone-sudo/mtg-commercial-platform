@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
+import { getAuthenticatedUserId } from '@/lib/auth';
 import { findMany, run } from '@/lib/db';
 import { randomUUID } from 'crypto';
 
@@ -19,15 +19,15 @@ interface StoredChat {
 }
 
 export async function GET(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user?.id) {
+  const userId = await getAuthenticatedUserId(req);
+  if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   try {
     const chats = await findMany<any>(
       `SELECT id, title, createdAt, updatedAt FROM shahrazad_chats WHERE userId = ? ORDER BY updatedAt DESC LIMIT 50`,
-      [session.user.id]
+      [userId]
     );
 
     return NextResponse.json(chats);
@@ -38,8 +38,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user?.id) {
+  const userId = await getAuthenticatedUserId(req);
+  if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
        VALUES (?, ?, ?, ?,
          COALESCE((SELECT createdAt FROM shahrazad_chats WHERE id = ?), ?),
          ?)`,
-      [id, session.user.id, title, messagesJson, id, now, now]
+      [id, userId, title, messagesJson, id, now, now]
     );
 
     return NextResponse.json({ id, title });

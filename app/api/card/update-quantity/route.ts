@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
+import { getAuthenticatedUserId } from '@/lib/auth';
 import { run } from '@/lib/db';
 
 export async function PATCH(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user?.id) {
+  const userId = await getAuthenticatedUserId(req);
+  if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -24,14 +24,14 @@ export async function PATCH(req: NextRequest) {
       // Delete the card if quantity is 0
       await run(
         `DELETE FROM inventory_items WHERE userId = ? AND name = ? AND itemType = 'cards'`,
-        [session.user.id, name]
+        [userId, name]
       );
     } else {
       // Update the quantity
       await run(
         `UPDATE inventory_items SET quantity = ?, updatedAt = datetime('now')
          WHERE userId = ? AND name = ? AND itemType = 'cards'`,
-        [quantity, session.user.id, name]
+        [quantity, userId, name]
       );
     }
 

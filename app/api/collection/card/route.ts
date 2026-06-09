@@ -4,7 +4,7 @@
  * Body: { name: string, quantity?: number }
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
+import { getAuthenticatedUserId } from '@/lib/auth';
 import { findOne, run } from '@/lib/db';
 import { getCards, cardPrice, cardImageUrl } from '@/lib/scryfall';
 
@@ -41,13 +41,13 @@ async function saveRow(id: string, data: ParsedData, rawText: string) {
 }
 
 export async function PATCH(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const userId = await getAuthenticatedUserId(req);
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { name, quantity = 1 } = await req.json();
   if (!name?.trim()) return NextResponse.json({ error: 'name required' }, { status: 400 });
 
-  const row = await getRow(session.user.id);
+  const row = await getRow(userId);
   if (!row?.parsedData) return NextResponse.json({ error: 'No collection found' }, { status: 404 });
 
   const data: ParsedData = JSON.parse(row.parsedData);
@@ -79,13 +79,13 @@ export async function PATCH(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const userId = await getAuthenticatedUserId(req);
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { name } = await req.json();
   if (!name?.trim()) return NextResponse.json({ error: 'name required' }, { status: 400 });
 
-  const row = await getRow(session.user.id);
+  const row = await getRow(userId);
   if (!row?.parsedData) return NextResponse.json({ error: 'No collection found' }, { status: 404 });
 
   const data: ParsedData = JSON.parse(row.parsedData);

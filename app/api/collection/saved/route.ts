@@ -1,18 +1,18 @@
 import { NextResponse } from 'next/server';
-import { auth } from '@/lib/auth';
+import { getAuthenticatedUserId } from '@/lib/auth';
 import { findOne, findMany } from '@/lib/db';
 
 interface Row { parsedData: string; rawText: string; detectedFormat: string | null; createdAt: string }
 interface InventoryItem { name: string; quantity: number; collectionType?: string | null }
 
 export async function GET() {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json(null);
+  const userId = await getAuthenticatedUserId(req);
+  if (!userId) return NextResponse.json(null);
 
   // Load all inventory items (source of truth for quantities and types)
   const items = await findMany<InventoryItem>(
     `SELECT name, quantity, collectionType FROM inventory_items WHERE userId = ? AND itemType = 'cards' ORDER BY name`,
-    [session.user.id]
+    [userId]
   );
 
   if (!items || items.length === 0) return NextResponse.json(null);
@@ -25,7 +25,7 @@ export async function GET() {
   const uploads = await findMany<Row>(
     `SELECT parsedData, rawText, detectedFormat, createdAt
      FROM collection_uploads WHERE userId = ? ORDER BY createdAt DESC`,
-    [session.user.id]
+    [userId]
   );
 
   try {
@@ -97,11 +97,11 @@ export async function GET() {
 }
 
 export async function DELETE() {
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const userId = await getAuthenticatedUserId(req);
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { run } = await import('@/lib/db');
-  await run(`DELETE FROM collection_uploads WHERE userId = ?`, [session.user.id]);
-  await run(`DELETE FROM inventory_items WHERE userId = ? AND itemType = 'cards'`, [session.user.id]);
+  await run(`DELETE FROM collection_uploads WHERE userId = ?`, [userId]);
+  await run(`DELETE FROM inventory_items WHERE userId = ? AND itemType = 'cards'`, [userId]);
   return NextResponse.json({ success: true });
 }

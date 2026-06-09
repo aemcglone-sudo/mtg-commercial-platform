@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
-import { auth } from '@/lib/auth';
+import { getAuthenticatedUserId } from '@/lib/auth';
 import { parseCollectionWithClaude } from '@/lib/parse-with-claude';
 import { parseCollection } from '@/lib/parse-collection';
 import { getCards, cardPrice, cardImageUrl } from '@/lib/scryfall';
@@ -9,7 +9,7 @@ import { findOne, run } from '@/lib/db';
 export const maxDuration = 540; // 9 minutes - near Vercel limit
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
+  const userId = await getAuthenticatedUserId(req);
   const body = await req.json();
   const text: string = body.text ?? '';
   const collectionType: 'paper' | 'arena' = body.collectionType ?? 'paper';
@@ -81,8 +81,7 @@ export async function POST(req: NextRequest) {
   };
 
   // Persist to DB when authenticated
-  if (session?.user?.id) {
-    const userId = session.user.id;
+  if (userId) {
     const parsedData = JSON.stringify(result);
 
     try {
