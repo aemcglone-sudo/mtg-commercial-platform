@@ -21,6 +21,9 @@ primary_region = 'iad'
   source = 'data'
   destination = '/data'
 
+[env]
+  DATABASE_URL = 'file:/data/production.db'
+
 [[volumes]]
   name = 'data'
   size = 10
