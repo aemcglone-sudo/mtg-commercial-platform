@@ -1,0 +1,103 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  email        String   @unique
+  passwordHash String?  // null when using OAuth only
+  googleId     String?  @unique  // reserved for Google OAuth
+  appleId      String?  @unique  // reserved for Apple OAuth
+  avatarUrl    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+
+  @@map("users")
+}
+
+// Stores uploaded collection snapshots per user
+model CollectionUpload {
+  id             String   @id @default(cuid())
+  userId         String   // references NextAuth user ID (not enforced as FK since auth uses separate tables)
+  rawText        String   // original upload text
+  detectedFormat String?
+  parsedData     String?  // JSON: {collectionSize, totalCards, collectionCards}
+  createdAt      DateTime @default(now())
+
+  @@map("collection_uploads")
+}
+
+// Collectibles inventory — sports cards, Funko Pops, etc.
+model InventoryItem {
+  id             String   @id @default(cuid())
+  userId         String   // references NextAuth user ID (not enforced as FK since auth uses separate tables)
+  name           String
+  itemType       String   // cards | figures | digital | other
+  collectionType String?  // paper | arena (for MTG cards)
+  statusLocation String   @default("storage") // in_binder | on_display | storage | out_for_grading | for_sale
+  brandSet       String?
+  estimatedValue Float?
+  primaryImageUrl String?
+  isBase         Boolean  @default(false)
+  isParallel     Boolean  @default(false)
+  isAutograph    Boolean  @default(false)
+  isRookie       Boolean  @default(false)
+  gradingCompany String?  // PSA | BGS | SGC
+  gradeScore     Float?
+  productLine    String?  // Funko Pop! Sports, Animation, etc.
+  packaging      String?  // in_box | out_of_box
+  quantity       Int      @default(1)
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  deckItems DeckItem[]
+
+  @@map("inventory_items")
+}
+
+// Decks / binders
+model Deck {
+  id           String    @id @default(cuid())
+  userId       String    // references NextAuth user ID (not enforced as FK since auth uses separate tables)
+  name         String
+  format       String?   // Standard, Pioneer, Commander, Modern, Legacy
+  strategy     String?   // deck strategy description
+  cards        String?   // JSON: {cardName: quantity}
+  personaType  String?   // speculator | curator | completionist
+  coreGoal     String?
+  lastAnalyzed DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  items DeckItem[]
+
+  @@map("decks")
+}
+
+model DeckItem {
+  id     String @id @default(cuid())
+  deckId String
+  deck   Deck   @relation(fields: [deckId], references: [id], onDelete: Cascade)
+  itemId String
+  item   InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([deckId, itemId])
+  @@map("deck_items")
+}
+
+// User location preference for venue discovery
+model UserLocationPreference {
+  id        String   @id @default(cuid())
+  userId    String   @unique // references NextAuth user ID
+  address   String   // user's location (city, ZIP, or full address)
+  savedAt   DateTime @default(now()) @updatedAt
+
+  @@map("user_location_preferences")
+}
