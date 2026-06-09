@@ -2,7 +2,7 @@ import { NextResponse, NextRequest } from 'next/server';
 import { run } from '@/lib/db';
 import { getAuthenticatedUserId } from '@/lib/auth';
 
-export async function POST(request: Request) {
+export async function POST(req: NextRequest) {
   const userId = await getAuthenticatedUserId(req);
 
   if (!userId) {
@@ -10,7 +10,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const body = await request.json();
+    const body = await req.json();
     const { name, address, city, state, zipCode, latitude, longitude, formats, phone, website, venueType } = body;
 
     if (!name || !latitude || !longitude || !city || !state) {
