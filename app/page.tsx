@@ -29,15 +29,15 @@ export interface DeckResult {
 }
 
 const TABS: { id: PortalTab; label: string; icon: string }[] = [
-  { id: 'decks',      label: 'Top Decks',     icon: '⭐' },
   { id: 'collection', label: 'My Collection', icon: '🃏' },
   { id: 'mydecks',    label: 'My Decks & Lists', icon: '🎯' },
+  { id: 'decks',      label: 'Top Decks',     icon: '⭐' },
   { id: 'chat',       label: 'Ask Shahrazad', icon: '💬' },
 ];
 
 export default function Home() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<PortalTab>('decks');
+  const [activeTab, setActiveTab] = useState<PortalTab>('collection');
   const [collection, setCollection] = useState<CollectionResult | null>(null);
   const [collectionText, setCollectionText] = useState('');
   const [decks, setDecks] = useState<DeckResult | null>(null);
