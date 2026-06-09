@@ -135,14 +135,14 @@ export async function POST(req: NextRequest) {
             // Update quantity
             await run(
               `UPDATE inventory_items SET quantity = quantity + ?, updatedAt = datetime('now') WHERE id = ?`,
-              [card.quantity, existing.id]
+              [Number(card.quantity), existing.id]
             );
           } else {
             // Insert new card
             await run(
               `INSERT INTO inventory_items (id, userId, name, itemType, collectionType, quantity, createdAt, updatedAt)
                VALUES (?, ?, ?, 'cards', ?, ?, datetime('now'), datetime('now'))`,
-              [randomUUID(), userId, card.name, collectionType, card.quantity]
+              [randomUUID(), userId, card.name, collectionType, Number(card.quantity)]
             );
           }
         }
