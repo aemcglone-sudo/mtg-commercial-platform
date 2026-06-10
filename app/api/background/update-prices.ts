@@ -4,13 +4,11 @@ import {
   fetchScryfallPrices,
   storePrices,
   archivePrices,
-  detectSpikes,
   updateCollectionStats,
 } from '@/lib/scryfall-prices';
-import Database from 'better-sqlite3';
-import { join } from 'path';
+import { PrismaClient } from '@prisma/client';
 
-const dbPath = join(process.cwd(), 'dev.db');
+const prisma = new PrismaClient();
 
 /**
  * Background job to update card prices daily
@@ -19,7 +17,7 @@ const dbPath = join(process.cwd(), 'dev.db');
  */
 export async function GET(req: NextRequest) {
   try {
-    // Simple auth check - can be improved
+    // Simple auth check
     const authHeader = req.headers.get('authorization');
     if (authHeader !== `Bearer ${process.env.BACKGROUND_JOB_SECRET || 'secret'}`) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -29,7 +27,7 @@ export async function GET(req: NextRequest) {
     console.log('Starting daily price update...');
 
     // Get all card names from collection
-    const cardNames = getCollectionCardNames();
+    const cardNames = await getCollectionCardNames();
     console.log(`Found ${cardNames.length} unique cards to price`);
 
     if (cardNames.length === 0) {
@@ -53,32 +51,28 @@ export async function GET(req: NextRequest) {
     console.log(`Fetched ${prices.length} prices`);
 
     // Store in database
-    storePrices(prices);
+    await storePrices(prices);
     console.log('Prices stored');
 
     // Archive for history
-    archivePrices();
+    await archivePrices();
     console.log('Prices archived to history');
 
-    // Detect spikes
-    const spikes = detectSpikes();
-    console.log(`Detected ${spikes.length} price spikes`);
-
     // Update stats for all users
-    const db = new Database(dbPath);
-    const userStmt = db.prepare('SELECT DISTINCT userId FROM inventory_items WHERE itemType = ?');
-    const users = userStmt.all('cards') as any[];
+    const users = await prisma.inventoryItem.findMany({
+      where: { itemType: 'cards' },
+      distinct: ['userId'],
+      select: { userId: true },
+    });
 
     for (const user of users) {
-      updateCollectionStats(user.userId);
+      await updateCollectionStats(user.userId);
     }
     console.log(`Updated stats for ${users.length} users`);
 
     return NextResponse.json({
       success: true,
       cardsPriced: prices.length,
-      spikesDetected: spikes.length,
-      spikes: spikes.slice(0, 10), // Top 10
       usersUpdated: users.length,
       duration: Date.now() - startTime,
     });

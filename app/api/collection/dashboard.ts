@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import Database from 'better-sqlite3';
-import { join } from 'path';
+import { PrismaClient } from '@prisma/client';
 
-const dbPath = join(process.cwd(), 'dev.db');
+const prisma = new PrismaClient();
 
 export async function GET(req: NextRequest) {
   try {
@@ -10,57 +9,58 @@ export async function GET(req: NextRequest) {
     // When Phase 2 adds multi-user, this will use authenticated user ID
     const userId = req.headers.get('x-user-id') || 'default-user';
 
-    const db = new Database(dbPath);
-
     // Get collection stats
-    const statsStmt = db.prepare(`
-      SELECT
-        totalValueUsd,
-        valueChange7d,
-        uniqueCardCount,
-        totalCardCount,
-        lastUpdated
-      FROM collection_stats
-      WHERE userId = ?
-    `);
-    const stats = statsStmt.get(userId) as any;
+    const stats = await prisma.collectionStats.findUnique({
+      where: { userId },
+    });
 
     // Get card counts by type
-    const typeStmt = db.prepare(`
-      SELECT
-        SUM(CASE WHEN collectionType = 'paper' THEN quantity ELSE 0 END) as paperCount,
-        SUM(CASE WHEN collectionType = 'arena' THEN quantity ELSE 0 END) as arenaCount
-      FROM inventory_items
-      WHERE userId = ? AND itemType = 'cards'
-    `);
-    const counts = typeStmt.get(userId) as any;
+    const items = await prisma.inventoryItem.findMany({
+      where: { userId, itemType: 'cards' },
+      include: {
+        _count: true,
+      },
+    });
+
+    const paperCount = items
+      .filter(i => i.collectionType === 'paper')
+      .reduce((sum, i) => sum + (i.quantity || 0), 0);
+
+    const arenaCount = items
+      .filter(i => i.collectionType === 'arena')
+      .reduce((sum, i) => sum + (i.quantity || 0), 0);
 
     // Get top valuable cards
-    const topStmt = db.prepare(`
-      SELECT
-        ii.name,
-        ii.quantity,
-        COALESCE(cp.priceUsd, 0) as price,
-        COALESCE(cp.priceUsd, 0) * ii.quantity as totalValue
-      FROM inventory_items ii
-      LEFT JOIN card_prices cp ON ii.name = cp.cardName
-      WHERE ii.userId = ? AND ii.itemType = 'cards'
-      ORDER BY totalValue DESC
-      LIMIT 10
-    `);
-    const topCards = topStmt.all(userId) as any[];
+    const topCards: Array<{name: string; quantity: number; price: number; totalValue: number}> = [];
+
+    for (const item of items.slice(0, 10)) {
+      const price = await prisma.cardPrice.findFirst({
+        where: { cardName: item.name },
+        orderBy: { lastUpdated: 'desc' },
+      });
+
+      if (price?.priceUsd) {
+        topCards.push({
+          name: item.name,
+          quantity: item.quantity || 0,
+          price: price.priceUsd,
+          totalValue: price.priceUsd * (item.quantity || 0),
+        });
+      }
+    }
+
+    topCards.sort((a, b) => b.totalValue - a.totalValue);
 
     // Get recent price updates
-    const pricesStmt = db.prepare(`
-      SELECT
-        cardName,
-        priceUsd,
-        lastUpdated
-      FROM card_prices
-      ORDER BY lastUpdated DESC
-      LIMIT 20
-    `);
-    const recentPrices = pricesStmt.all() as any[];
+    const recentPrices = await prisma.cardPrice.findMany({
+      orderBy: { lastUpdated: 'desc' },
+      take: 20,
+      select: {
+        cardName: true,
+        priceUsd: true,
+        lastUpdated: true,
+      },
+    });
 
     return NextResponse.json({
       collection: {
@@ -68,17 +68,17 @@ export async function GET(req: NextRequest) {
         valueChange7d: stats?.valueChange7d ?? 0,
         uniqueCards: stats?.uniqueCardCount ?? 0,
         totalCards: stats?.totalCardCount ?? 0,
-        paperCards: counts?.paperCount ?? 0,
-        arenaCards: counts?.arenaCount ?? 0,
+        paperCards: paperCount,
+        arenaCards: arenaCount,
         lastUpdated: stats?.lastUpdated,
       },
-      topCards: topCards.map((card: any) => ({
+      topCards: topCards.map(card => ({
         name: card.name,
         quantity: card.quantity,
         price: card.price,
         totalValue: card.totalValue,
       })),
-      recentPrices: recentPrices.map((p: any) => ({
+      recentPrices: recentPrices.map(p => ({
         name: p.cardName,
         price: p.priceUsd,
         updated: p.lastUpdated,
