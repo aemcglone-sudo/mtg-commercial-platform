@@ -1,86 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { getPrices } from '@/lib/price-cache';
 
 export async function GET(req: NextRequest) {
   try {
-    // For now, use a default user ID (single-user app)
-    // When Phase 2 adds multi-user, this will use authenticated user ID
-    const userId = req.headers.get('x-user-id') || 'default-user';
+    const prices = getPrices();
 
-    // Get collection stats
-    const stats = await prisma.collectionStats.findUnique({
-      where: { userId },
-    });
+    // Convert to array
+    const priceArray = Array.from(prices.values())
+      .sort((a, b) => (b.usd || 0) - (a.usd || 0));
 
-    // Get card counts by type
-    const items = await prisma.inventoryItem.findMany({
-      where: { userId, itemType: 'cards' },
-      include: {
-        _count: true,
-      },
-    });
-
-    const paperCount = items
-      .filter(i => i.collectionType === 'paper')
-      .reduce((sum, i) => sum + (i.quantity || 0), 0);
-
-    const arenaCount = items
-      .filter(i => i.collectionType === 'arena')
-      .reduce((sum, i) => sum + (i.quantity || 0), 0);
-
-    // Get top valuable cards
-    const topCards: Array<{name: string; quantity: number; price: number; totalValue: number}> = [];
-
-    for (const item of items.slice(0, 10)) {
-      const price = await prisma.cardPrice.findFirst({
-        where: { cardName: item.name },
-        orderBy: { lastUpdated: 'desc' },
-      });
-
-      if (price?.priceUsd) {
-        topCards.push({
-          name: item.name,
-          quantity: item.quantity || 0,
-          price: price.priceUsd,
-          totalValue: price.priceUsd * (item.quantity || 0),
-        });
-      }
-    }
-
-    topCards.sort((a, b) => b.totalValue - a.totalValue);
-
-    // Get recent price updates
-    const recentPrices = await prisma.cardPrice.findMany({
-      orderBy: { lastUpdated: 'desc' },
-      take: 20,
-      select: {
-        cardName: true,
-        priceUsd: true,
-        lastUpdated: true,
-      },
-    });
+    const totalValue = priceArray.reduce((sum, p) => sum + (p.usd || 0), 0);
 
     return NextResponse.json({
       collection: {
-        totalValue: stats?.totalValueUsd ?? 0,
-        valueChange7d: stats?.valueChange7d ?? 0,
-        uniqueCards: stats?.uniqueCardCount ?? 0,
-        totalCards: stats?.totalCardCount ?? 0,
-        paperCards: paperCount,
-        arenaCards: arenaCount,
-        lastUpdated: stats?.lastUpdated,
+        totalValue,
+        valueChange7d: 0, // Will be calculated later
+        uniqueCards: priceArray.length,
+        totalCards: priceArray.length,
+        paperCards: 0,
+        arenaCards: 0,
+        lastUpdated: new Date().toISOString(),
       },
-      topCards: topCards.map(card => ({
-        name: card.name,
-        quantity: card.quantity,
-        price: card.price,
-        totalValue: card.totalValue,
+      topCards: priceArray.slice(0, 10).map(p => ({
+        name: p.name,
+        quantity: 1,
+        price: p.usd || 0,
+        totalValue: p.usd || 0,
       })),
-      recentPrices: recentPrices.map(p => ({
-        name: p.cardName,
-        price: p.priceUsd,
+      recentPrices: priceArray.slice(0, 20).map(p => ({
+        name: p.name,
+        price: p.usd || 0,
         updated: p.lastUpdated,
       })),
     });
