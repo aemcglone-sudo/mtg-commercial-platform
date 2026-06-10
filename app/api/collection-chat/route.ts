@@ -1,8 +1,8 @@
 import { NextRequest } from 'next/server';
-import Anthropic from '@anthropic-ai/sdk';
+import Groq from 'groq-sdk';
 import { analyzeForChat, extractDeckFromContext, formatCardsForStream } from '@/lib/magic-agent/chat-integration';
 
-const client = new Anthropic();
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 interface CardEntry { name: string; qty: number; value: number | null; collectionType?: 'paper' | 'arena' }
 interface ChatMessage { role: 'user' | 'assistant'; content: string }
@@ -10,8 +10,8 @@ interface ChatMessage { role: 'user' | 'assistant'; content: string }
 async function generateOptions(messages: ChatMessage[]): Promise<string[]> {
   try {
     const last = messages.slice(-4);
-    const res = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+    const res = await groq.messages.create({
+      model: 'llama-3.3-70b-versatile',
       max_tokens: 256,
       system: `Given the end of a Magic: The Gathering collection chat, return 3 short follow-up buttons.
 Rules:
@@ -256,21 +256,17 @@ OUTPUT RULES — follow these exactly, every response:
       try {
         let fullResponse = '';
 
-        const anthropicStream = client.messages.stream({
-          model: 'claude-sonnet-4-6',
+        const response = await groq.messages.create({
+          model: 'llama-3.3-70b-versatile',
           max_tokens: 2048,
           system,
           messages: incomingMessages,
         });
 
-        for await (const event of anthropicStream) {
-          if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-            fullResponse += event.delta.text;
-            controller.enqueue(
-              encoder.encode(`data: ${JSON.stringify({ type: 'text', text: event.delta.text })}\n\n`)
-            );
-          }
-        }
+        fullResponse = response.content.find((b) => b.type === 'text')?.text ?? '';
+        controller.enqueue(
+          encoder.encode(`data: ${JSON.stringify({ type: 'text', text: fullResponse })}\n\n`)
+        );
 
         // Generate follow-up options from Haiku after main response
         const allMessages: ChatMessage[] = [
