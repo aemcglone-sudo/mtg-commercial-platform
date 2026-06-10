@@ -6,11 +6,9 @@ const dbPath = join(process.cwd(), 'dev.db');
 
 export async function GET(req: NextRequest) {
   try {
-    // Get userId from headers (set by middleware/auth)
-    const userId = req.headers.get('x-user-id');
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    // For now, use a default user ID (single-user app)
+    // When Phase 2 adds multi-user, this will use authenticated user ID
+    const userId = req.headers.get('x-user-id') || 'default-user';
 
     const db = new Database(dbPath);
 

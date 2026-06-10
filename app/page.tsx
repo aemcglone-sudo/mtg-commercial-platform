@@ -9,6 +9,7 @@ import CollectionChatTab from '@/components/CollectionChatTab';
 import MyDecksTab from '@/components/MyDecksTab';
 import { CopilotSidebar } from '@/components/CopilotSidebar';
 import CardDetailModal from '@/components/CardDetailModal';
+import CollectionDashboard from '@/components/CollectionDashboard';
 import type { MatchedDeck } from '@/lib/deck-matcher';
 import type { DeckSummary } from '@/components/CardPreviewModal';
 
@@ -269,16 +270,19 @@ export default function Home() {
             )}
 
             {activeTab === 'collection' && collection && (
-              <CollectionBrowser
-                cards={collection.collectionCards}
-                totalCards={collection.totalCards}
-                detectedFormat={collection.detectedFormat}
-                decks={userDecks}
-                onCollectionChange={(updated) =>
-                  setCollection((prev) => prev ? { ...prev, ...updated } : prev)
-                }
-                onAskAboutCard={handleAskAboutCard}
-              />
+              <div className="space-y-8">
+                <CollectionDashboard />
+                <CollectionBrowser
+                  cards={collection.collectionCards}
+                  totalCards={collection.totalCards}
+                  detectedFormat={collection.detectedFormat}
+                  decks={userDecks}
+                  onCollectionChange={(updated) =>
+                    setCollection((prev) => prev ? { ...prev, ...updated } : prev)
+                  }
+                  onAskAboutCard={handleAskAboutCard}
+                />
+              </div>
             )}
             {activeTab === 'mydecks' && (
               <MyDecksTab collection={collection?.collectionCards || []} />
