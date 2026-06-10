@@ -2,13 +2,12 @@ import { NextRequest } from 'next/server';
 import Groq from 'groq-sdk';
 import { analyzeForChat, extractDeckFromContext, formatCardsForStream } from '@/lib/magic-agent/chat-integration';
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-
 interface CardEntry { name: string; qty: number; value: number | null; collectionType?: 'paper' | 'arena' }
 interface ChatMessage { role: 'user' | 'assistant'; content: string }
 
 async function generateOptions(messages: ChatMessage[]): Promise<string[]> {
   try {
+    const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
     const last = messages.slice(-4);
     const res = await groq.messages.create({
       model: 'llama-3.3-70b-versatile',
@@ -254,6 +253,7 @@ OUTPUT RULES — follow these exactly, every response:
   const stream = new ReadableStream({
     async start(controller) {
       try {
+        const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
         let fullResponse = '';
 
         const response = await groq.messages.create({
