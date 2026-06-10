@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import CollectionBrowser, { type CollectionCardData } from '@/components/CollectionBrowser';
 import DeckFinderTab from '@/components/DeckFinderTab';
+import CollectionChatTab from '@/components/CollectionChatTab';
 import MyDecksTab from '@/components/MyDecksTab';
 import { CopilotSidebar } from '@/components/CopilotSidebar';
 import CardDetailModal from '@/components/CardDetailModal';
@@ -12,7 +13,7 @@ import type { MatchedDeck } from '@/lib/deck-matcher';
 import type { DeckSummary } from '@/components/CardPreviewModal';
 
 type DeckWithoutCards = Omit<MatchedDeck, 'cards'>;
-type PortalTab = 'collection' | 'decks' | 'mydecks';
+type PortalTab = 'collection' | 'decks' | 'chat' | 'mydecks';
 
 export interface CollectionResult {
   collectionSize: number;
@@ -31,6 +32,7 @@ const TABS: { id: PortalTab; label: string; icon: string }[] = [
   { id: 'collection', label: 'My Collection', icon: '🃏' },
   { id: 'mydecks',    label: 'My Decks & Lists', icon: '🎯' },
   { id: 'decks',      label: 'Top Decks',     icon: '⭐' },
+  { id: 'chat',       label: 'Ask Shahrazad', icon: '💬' },
 ];
 
 export default function Home() {
@@ -44,6 +46,7 @@ export default function Home() {
   const [analyzeError, setAnalyzeError] = useState('');
   const [loading, setLoading] = useState(true);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [chatMessage, setChatMessage] = useState('');
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -105,6 +108,18 @@ export default function Home() {
   useEffect(() => {
     localStorage.setItem('activeTab', activeTab);
   }, [activeTab]);
+
+  function handleAskAboutCard(cardName: string, question: string) {
+    setChatMessage(question);
+    setActiveTab('chat');
+  }
+
+  // Auto-analyze decks when collection loads
+  useEffect(() => {
+    if (collection && !decks && !analyzing) {
+      handleAnalyze();
+    }
+  }, [collection, decks, analyzing, handleAnalyze]);
 
   // Close user menu on outside click
   useEffect(() => {
@@ -262,6 +277,7 @@ export default function Home() {
                 onCollectionChange={(updated) =>
                   setCollection((prev) => prev ? { ...prev, ...updated } : prev)
                 }
+                onAskAboutCard={handleAskAboutCard}
               />
             )}
             {activeTab === 'mydecks' && (
@@ -275,6 +291,26 @@ export default function Home() {
                 onAnalyze={handleAnalyze}
                 collection={collection?.collectionCards || []}
               />
+            )}
+            {activeTab === 'chat' && collection && (
+              <CollectionChatTab collection={collection} prefillMessage={chatMessage} onMessageSent={() => setChatMessage('')} />
+            )}
+            {activeTab === 'chat' && !collection && (
+              <div className="text-center py-24 space-y-6">
+                <div className="text-6xl">💬</div>
+                <div className="space-y-2">
+                  <h2 className="text-2xl font-bold">Upload a collection first</h2>
+                  <p className="text-zinc-500 max-w-sm mx-auto">
+                    Shahrazad needs your collection to provide personalized advice.
+                  </p>
+                </div>
+                <Link
+                  href="/settings"
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-black bg-amber-400 hover:bg-amber-300 transition-colors"
+                >
+                  ⚙️ Go to Settings
+                </Link>
+              </div>
             )}
           </>
         )}
