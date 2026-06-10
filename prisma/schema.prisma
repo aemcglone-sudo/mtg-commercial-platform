@@ -101,3 +101,79 @@ model UserLocationPreference {
 
   @@map("user_location_preferences")
 }
+
+// ──── SPRINT 1: PRICE TRACKING ────
+
+// Current card prices
+model CardPrice {
+  id              String   @id @default(cuid())
+  cardName        String
+  cardSetCode     String?
+
+  priceUsd        Float?
+  priceFoilUsd    Float?
+  priceEur        Float?
+
+  source          String   @default("scryfall") // scryfall, tcgplayer
+  lastUpdated     DateTime @default(now())
+
+  @@unique([cardName, cardSetCode, source])
+  @@index([cardName])
+  @@index([lastUpdated])
+  @@map("card_prices")
+}
+
+// Historical prices for trend analysis
+model PriceHistory {
+  id              String   @id @default(cuid())
+  cardName        String
+  cardSetCode     String?
+
+  priceUsd        Float?
+  priceFoilUsd    Float?
+
+  recordedAt      DateTime @default(now())
+
+  @@unique([cardName, cardSetCode, recordedAt])
+  @@index([cardName, recordedAt])
+  @@map("price_history")
+}
+
+// Collection value analytics
+model CollectionStats {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+
+  // Value tracking
+  totalValueUsd   Float    @default(0)
+  valueChange7d   Float?   // % change in last 7 days
+
+  // Composition
+  uniqueCardCount Int      @default(0)
+  totalCardCount  Int      @default(0)
+  duplicateCount  Int      @default(0)
+
+  lastUpdated     DateTime @default(now()) @updatedAt
+
+  @@map("collection_stats")
+}
+
+// Price spike alerts
+model PriceAlert {
+  id              String   @id @default(cuid())
+  userId          String
+  cardName        String
+
+  alertType       String   // 'spike' | 'crash'
+  previousPrice   Float
+  currentPrice    Float
+  changePercent   Float
+
+  triggered       Boolean  @default(false)
+  triggeredAt     DateTime?
+
+  createdAt       DateTime @default(now())
+
+  @@index([userId])
+  @@map("price_alerts")
+}
