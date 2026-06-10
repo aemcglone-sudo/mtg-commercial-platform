@@ -323,8 +323,10 @@ OUTPUT RULES — follow these exactly, every response:
           body: JSON.stringify({
             model: 'llama-3.3-70b-versatile',
             max_tokens: 2048,
-            system,
-            messages: incomingMessages,
+            messages: [
+              { role: 'system', content: system },
+              ...incomingMessages,
+            ],
           }),
         });
 
