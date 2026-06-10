@@ -1,5 +1,4 @@
 import { NextRequest } from 'next/server';
-import Groq from 'groq-sdk';
 import { analyzeForChat, extractDeckFromContext, formatCardsForStream } from '@/lib/magic-agent/chat-integration';
 
 interface CardEntry { name: string; qty: number; value: number | null; collectionType?: 'paper' | 'arena' }
@@ -7,12 +6,20 @@ interface ChatMessage { role: 'user' | 'assistant'; content: string }
 
 async function generateOptions(messages: ChatMessage[]): Promise<string[]> {
   try {
-    const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
     const last = messages.slice(-4);
-    const res = await groq.messages.create({
-      model: 'llama-3.3-70b-versatile',
-      max_tokens: 256,
-      system: `Given the end of a Magic: The Gathering collection chat, return 3 short follow-up buttons.
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
+        max_tokens: 256,
+        messages: [
+          {
+            role: 'system',
+            content: `Given the end of a Magic: The Gathering collection chat, return 3 short follow-up buttons.
 Rules:
 - Return ONLY a valid JSON array of strings, nothing else
 - Max 5 words per option
@@ -20,14 +27,16 @@ Rules:
 - Examples: "Build this deck", "What's missing?", "Show me another option", "How much will it cost?"
 - If a specific deck or archetype was just mentioned, include options about it
 - Never repeat the user's last question`,
-      messages: [
-        {
-          role: 'user',
-          content: `Conversation so far:\n${last.map((m) => `${m.role}: ${m.content.slice(0, 200)}`).join('\n')}\n\nReturn 3 follow-up button options as a JSON array.`,
-        },
-      ],
+          },
+          {
+            role: 'user',
+            content: `Conversation so far:\n${last.map((m) => `${m.role}: ${m.content.slice(0, 200)}`).join('\n')}\n\nReturn 3 follow-up button options as a JSON array.`,
+          },
+        ],
+      }),
     });
-    const text = res.content.find((b) => b.type === 'text')?.text ?? '[]';
+    const data = await res.json() as any;
+    const text = data.choices?.[0]?.message?.content ?? '[]';
     const match = text.match(/\[[\s\S]*\]/);
     if (!match) return [];
     const parsed = JSON.parse(match[0]);
@@ -254,21 +263,25 @@ OUTPUT RULES — follow these exactly, every response:
     async start(controller) {
       try {
         if (!process.env.GROQ_API_KEY) {
-          console.error('GROQ_API_KEY is not set');
           throw new Error('GROQ_API_KEY environment variable is missing');
         }
-        const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-        console.log('Groq initialized:', groq ? 'success' : 'failed');
-        let fullResponse = '';
 
-        const response = await groq.messages.create({
-          model: 'llama-3.3-70b-versatile',
-          max_tokens: 2048,
-          system,
-          messages: incomingMessages,
+        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'llama-3.3-70b-versatile',
+            max_tokens: 2048,
+            system,
+            messages: incomingMessages,
+          }),
         });
 
-        fullResponse = response.content.find((b) => b.type === 'text')?.text ?? '';
+        const data = await res.json() as any;
+        const fullResponse = data.choices?.[0]?.message?.content ?? '';
         controller.enqueue(
           encoder.encode(`data: ${JSON.stringify({ type: 'text', text: fullResponse })}\n\n`)
         );
