@@ -7,36 +7,39 @@ interface ChatMessage { role: 'user' | 'assistant'; content: string }
 async function generateOptions(messages: ChatMessage[]): Promise<string[]> {
   try {
     const last = messages.slice(-4);
-    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
-        max_tokens: 256,
-        messages: [
-          {
-            role: 'system',
-            content: `Given the end of a Magic: The Gathering collection chat, return 3 short follow-up buttons.
+    const systemPrompt = `Given the end of a Magic: The Gathering collection chat, return 3 short follow-up buttons.
 Rules:
 - Return ONLY a valid JSON array of strings, nothing else
 - Max 5 words per option
 - Mix of actions and questions relevant to what was just discussed
 - Examples: "Build this deck", "What's missing?", "Show me another option", "How much will it cost?"
 - If a specific deck or archetype was just mentioned, include options about it
-- Never repeat the user's last question`,
-          },
+- Never repeat the user's last question`;
+
+    const userContent = `Conversation so far:\n${last.map((m) => `${m.role}: ${m.content.slice(0, 200)}`).join('\n')}\n\nReturn 3 follow-up button options as a JSON array.`;
+
+    const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=' + process.env.GOOGLE_API_KEY, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        systemInstruction: {
+          parts: [{ text: systemPrompt }]
+        },
+        contents: [
           {
             role: 'user',
-            content: `Conversation so far:\n${last.map((m) => `${m.role}: ${m.content.slice(0, 200)}`).join('\n')}\n\nReturn 3 follow-up button options as a JSON array.`,
-          },
+            parts: [{ text: userContent }]
+          }
         ],
+        generationConfig: {
+          maxOutputTokens: 256
+        }
       }),
     });
     const data = await res.json() as any;
-    const text = data.choices?.[0]?.message?.content ?? '[]';
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '[]';
     const match = text.match(/\[[\s\S]*\]/);
     if (!match) return [];
     const parsed = JSON.parse(match[0]);
@@ -310,28 +313,33 @@ OUTPUT RULES — follow these exactly, every response:
   const stream = new ReadableStream({
     async start(controller) {
       try {
-        if (!process.env.GROQ_API_KEY) {
-          throw new Error('GROQ_API_KEY environment variable is missing');
+        if (!process.env.GOOGLE_API_KEY) {
+          throw new Error('GOOGLE_API_KEY environment variable is missing');
         }
 
-        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        const contents = incomingMessages.map(msg => ({
+          role: msg.role === 'user' ? 'user' : 'model',
+          parts: [{ text: msg.content }]
+        }));
+
+        const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=' + process.env.GOOGLE_API_KEY, {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            model: 'llama-3.3-70b-versatile',
-            max_tokens: 2048,
-            messages: [
-              { role: 'system', content: system },
-              ...incomingMessages,
-            ],
+            systemInstruction: {
+              parts: [{ text: system }]
+            },
+            contents,
+            generationConfig: {
+              maxOutputTokens: 2048
+            }
           }),
         });
 
         const data = await res.json() as any;
-        const fullResponse = data.choices?.[0]?.message?.content ?? '';
+        const fullResponse = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
         controller.enqueue(
           encoder.encode(`data: ${JSON.stringify({ type: 'text', text: fullResponse })}\n\n`)
         );
