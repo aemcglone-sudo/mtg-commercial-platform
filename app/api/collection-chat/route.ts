@@ -253,7 +253,12 @@ OUTPUT RULES — follow these exactly, every response:
   const stream = new ReadableStream({
     async start(controller) {
       try {
+        if (!process.env.GROQ_API_KEY) {
+          console.error('GROQ_API_KEY is not set');
+          throw new Error('GROQ_API_KEY environment variable is missing');
+        }
         const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+        console.log('Groq initialized:', groq ? 'success' : 'failed');
         let fullResponse = '';
 
         const response = await groq.messages.create({
