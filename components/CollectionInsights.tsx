@@ -5,9 +5,10 @@ import type { CollectionCardData } from './CollectionBrowser';
 
 interface Props {
   cards: CollectionCardData[];
+  onCardClick?: (cardName: string) => void;
 }
 
-export default function CollectionInsights({ cards }: Props) {
+export default function CollectionInsights({ cards, onCardClick }: Props) {
   const insights = useMemo(() => {
     const totalUnique = cards.length;
     const totalCards = cards.reduce((s, c) => s + c.quantity, 0);
@@ -192,7 +193,13 @@ export default function CollectionInsights({ cards }: Props) {
             <div key={card.name} className="flex items-center justify-between text-sm">
               <div className="flex items-center gap-2">
                 <span className="text-xs text-zinc-600 font-semibold w-6 text-right">#{idx + 1}</span>
-                <span className="text-zinc-300 truncate">{card.name}</span>
+                <button
+                  type="button"
+                  onClick={() => onCardClick?.(card.name)}
+                  className="text-zinc-300 truncate hover:text-amber-400 transition-colors text-left cursor-pointer"
+                >
+                  {card.name}
+                </button>
               </div>
               <div className="flex items-center gap-2 text-right">
                 <span className="text-xs text-zinc-500">×{card.quantity}</span>

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import CollectionInsights from './CollectionInsights';
+import CardDetailModal from './CardDetailModal';
 import type { CollectionCardData } from './CollectionBrowser';
 
 interface InsightsData {
@@ -35,6 +36,7 @@ export default function CollectionInsightsTab({ cards = [] }: Props) {
   const [data, setData] = useState<InsightsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedCard, setSelectedCard] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/collection/dashboard')
@@ -86,7 +88,16 @@ export default function CollectionInsightsTab({ cards = [] }: Props) {
 
       {/* Full Width Integrated Dashboard */}
       {cards.length > 0 && (
-        <CollectionInsights cards={cards} />
+        <CollectionInsights cards={cards} onCardClick={setSelectedCard} />
+      )}
+
+      {/* Card Detail Modal */}
+      {selectedCard && (
+        <CardDetailModal
+          cardName={selectedCard}
+          onClose={() => setSelectedCard(null)}
+          collectionCard={cards.find(c => c.name === selectedCard)}
+        />
       )}
 
       {/* Coming Soon Sections */}
