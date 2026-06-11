@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import CollectionDashboard from './CollectionDashboard';
 import CollectionInsights from './CollectionInsights';
 import type { CollectionCardData } from './CollectionBrowser';
 
@@ -85,21 +84,10 @@ export default function CollectionInsightsTab({ cards = [] }: Props) {
         </button>
       </div>
 
-      {/* Two Column Layout: Insights + Dashboard */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Left Column: Collection Insights */}
-        {cards.length > 0 && (
-          <div>
-            <CollectionInsights cards={cards} />
-          </div>
-        )}
-
-        {/* Right Column: Portfolio Value */}
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
-          <h3 className="text-lg font-bold mb-6">Portfolio Value</h3>
-          <CollectionDashboard />
-        </div>
-      </div>
+      {/* Full Width Integrated Dashboard */}
+      {cards.length > 0 && (
+        <CollectionInsights cards={cards} />
+      )}
 
       {/* Coming Soon Sections */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
