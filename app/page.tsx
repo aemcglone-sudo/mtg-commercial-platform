@@ -9,12 +9,12 @@ import CollectionChatTab from '@/components/CollectionChatTab';
 import MyDecksTab from '@/components/MyDecksTab';
 import { CopilotSidebar } from '@/components/CopilotSidebar';
 import CardDetailModal from '@/components/CardDetailModal';
-import CollectionDashboard from '@/components/CollectionDashboard';
+import CollectionInsightsTab from '@/components/CollectionInsightsTab';
 import type { MatchedDeck } from '@/lib/deck-matcher';
 import type { DeckSummary } from '@/components/CardPreviewModal';
 
 type DeckWithoutCards = Omit<MatchedDeck, 'cards'>;
-type PortalTab = 'collection' | 'decks' | 'chat' | 'mydecks';
+type PortalTab = 'collection' | 'insights' | 'decks' | 'chat' | 'mydecks';
 
 export interface CollectionResult {
   collectionSize: number;
@@ -31,6 +31,7 @@ export interface DeckResult {
 
 const TABS: { id: PortalTab; label: string; icon: string }[] = [
   { id: 'collection', label: 'My Collection', icon: '🃏' },
+  { id: 'insights',   label: 'Insights',      icon: '📊' },
   { id: 'mydecks',    label: 'My Decks & Lists', icon: '🎯' },
   { id: 'decks',      label: 'Top Decks',     icon: '⭐' },
   { id: 'chat',       label: 'Ask Shahrazad', icon: '💬' },
@@ -77,7 +78,7 @@ export default function Home() {
   // Load saved collection and active tab on mount
   useEffect(() => {
     const savedTab = localStorage.getItem('activeTab') as PortalTab | null;
-    if (savedTab && ['collection', 'decks', 'chat', 'mydecks'].includes(savedTab)) {
+    if (savedTab && ['collection', 'insights', 'decks', 'chat', 'mydecks'].includes(savedTab)) {
       setActiveTab(savedTab);
     }
 
@@ -270,18 +271,35 @@ export default function Home() {
             )}
 
             {activeTab === 'collection' && collection && (
-              <div className="space-y-8">
-                <CollectionDashboard />
-                <CollectionBrowser
-                  cards={collection.collectionCards}
-                  totalCards={collection.totalCards}
-                  detectedFormat={collection.detectedFormat}
-                  decks={userDecks}
-                  onCollectionChange={(updated) =>
-                    setCollection((prev) => prev ? { ...prev, ...updated } : prev)
-                  }
-                  onAskAboutCard={handleAskAboutCard}
-                />
+              <CollectionBrowser
+                cards={collection.collectionCards}
+                totalCards={collection.totalCards}
+                detectedFormat={collection.detectedFormat}
+                decks={userDecks}
+                onCollectionChange={(updated) =>
+                  setCollection((prev) => prev ? { ...prev, ...updated } : prev)
+                }
+                onAskAboutCard={handleAskAboutCard}
+              />
+            )}
+            {activeTab === 'insights' && collection && (
+              <CollectionInsightsTab />
+            )}
+            {activeTab === 'insights' && !collection && (
+              <div className="text-center py-24 space-y-6">
+                <div className="text-6xl">📊</div>
+                <div className="space-y-2">
+                  <h2 className="text-2xl font-bold">Upload a collection first</h2>
+                  <p className="text-zinc-500 max-w-sm mx-auto">
+                    View price trends, collection value, and insights about your Magic collection.
+                  </p>
+                </div>
+                <Link
+                  href="/settings"
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-black bg-amber-400 hover:bg-amber-300 transition-colors"
+                >
+                  ⚙️ Go to Settings
+                </Link>
               </div>
             )}
             {activeTab === 'mydecks' && (
