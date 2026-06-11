@@ -36,9 +36,45 @@ export default function CollectionInsights({ cards, onCardClick }: Props) {
       rarityCounts.set(rarity, (rarityCounts.get(rarity) ?? 0) + card.quantity);
     }
 
-    // Top 5 most valuable cards
+    // Top 5 most valuable cards (by monetary value)
     const topValueCards = [...cards]
       .sort((a, b) => (b.priceUsd ?? 0) - (a.priceUsd ?? 0))
+      .slice(0, 5);
+
+    // Power score based on legendaries
+    const getPowerScore = (card: CollectionCardData): number => {
+      let score = 0;
+
+      // Legendary status (highest priority)
+      if (card.type_line?.toLowerCase().includes('legendary')) {
+        score += 100;
+      }
+
+      // Planeswalker (very high priority)
+      if (card.type_line?.toLowerCase().includes('planeswalker')) {
+        score += 150;
+      }
+
+      // Rarity
+      const rarityScores: Record<string, number> = {
+        'mythic': 40,
+        'rare': 20,
+        'uncommon': 5,
+        'common': 0,
+      };
+      score += rarityScores[card.rarity?.toLowerCase() ?? ''] ?? 0;
+
+      // Saga, Enchantment, Artifact (notable card types)
+      if (card.type_line?.toLowerCase().includes('saga')) score += 15;
+      if (card.type_line?.toLowerCase().includes('creature legendary')) score += 25;
+
+      return score;
+    };
+
+    // Top 5 most powerful cards (legendary/planeswalker)
+    const topPowerCards = [...cards]
+      .filter(c => c.type_line?.toLowerCase().includes('legendary') || c.type_line?.toLowerCase().includes('planeswalker'))
+      .sort((a, b) => getPowerScore(b) - getPowerScore(a))
       .slice(0, 5);
 
     return {
@@ -49,6 +85,7 @@ export default function CollectionInsights({ cards, onCardClick }: Props) {
       colorCounts,
       rarityCounts,
       topValueCards,
+      topPowerCards,
     };
   }, [cards]);
 
@@ -185,30 +222,60 @@ export default function CollectionInsights({ cards, onCardClick }: Props) {
         </div>
       </div>
 
-      {/* Top Cards */}
-      <div className="bg-zinc-800/30 rounded-lg p-4">
-        <h4 className="text-sm font-semibold text-zinc-300 mb-3">Top Cards</h4>
-        <div className="space-y-2">
-          {insights.topValueCards.map((card, idx) => (
-            <div key={card.name} className="flex items-center justify-between text-sm">
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-zinc-600 font-semibold w-6 text-right">#{idx + 1}</span>
-                <button
-                  type="button"
-                  onClick={() => onCardClick?.(card.name)}
-                  className="text-zinc-300 truncate hover:text-amber-400 transition-colors text-left cursor-pointer"
-                >
-                  {card.name}
-                </button>
-              </div>
-              <div className="flex items-center gap-2 text-right">
-                <span className="text-xs text-zinc-500">×{card.quantity}</span>
-                <span className="text-amber-400 font-semibold min-w-[60px]">
+      {/* Top Cards - Value vs Power */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Left: Most Valuable */}
+        <div className="bg-zinc-800/30 rounded-lg p-4">
+          <h4 className="text-sm font-semibold text-zinc-300 mb-3">💰 Highest Value</h4>
+          <div className="space-y-2">
+            {insights.topValueCards.map((card, idx) => (
+              <div key={`value-${card.name}`} className="flex items-center justify-between text-sm">
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  <span className="text-xs text-zinc-600 font-semibold w-6 text-right shrink-0">#{idx + 1}</span>
+                  <button
+                    type="button"
+                    onClick={() => onCardClick?.(card.name)}
+                    className="text-zinc-300 truncate hover:text-amber-400 transition-colors text-left cursor-pointer"
+                  >
+                    {card.name}
+                  </button>
+                </div>
+                <span className="text-amber-400 font-semibold ml-2 shrink-0">
                   ${((card.priceUsd ?? 0) * card.quantity).toFixed(0)}
                 </span>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
+        </div>
+
+        {/* Right: Most Powerful */}
+        <div className="bg-zinc-800/30 rounded-lg p-4">
+          <h4 className="text-sm font-semibold text-zinc-300 mb-3">⚡ Most Powerful</h4>
+          <div className="space-y-2">
+            {insights.topPowerCards.length > 0 ? (
+              insights.topPowerCards.map((card, idx) => (
+                <div key={`power-${card.name}`} className="flex items-center justify-between text-sm">
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <span className="text-xs text-zinc-600 font-semibold w-6 text-right shrink-0">#{idx + 1}</span>
+                    <button
+                      type="button"
+                      onClick={() => onCardClick?.(card.name)}
+                      className="text-zinc-300 truncate hover:text-purple-400 transition-colors text-left cursor-pointer"
+                    >
+                      {card.name}
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-1 ml-2 shrink-0">
+                    {card.type_line?.toLowerCase().includes('planeswalker') && <span className="text-xs text-purple-400">PW</span>}
+                    {card.type_line?.toLowerCase().includes('legendary creature') && <span className="text-xs text-orange-400">L</span>}
+                    {card.rarity?.toLowerCase() === 'mythic' && <span className="text-xs text-orange-500">M</span>}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="text-xs text-zinc-500 text-center py-4">No legendary cards</p>
+            )}
+          </div>
         </div>
       </div>
     </div>
