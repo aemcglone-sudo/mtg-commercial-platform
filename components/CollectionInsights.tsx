@@ -6,9 +6,10 @@ import type { CollectionCardData } from './CollectionBrowser';
 interface Props {
   cards: CollectionCardData[];
   onCardClick?: (cardName: string) => void;
+  cardSentiment?: Record<string, number>; // Card name -> sentiment score
 }
 
-export default function CollectionInsights({ cards, onCardClick }: Props) {
+export default function CollectionInsights({ cards, onCardClick, cardSentiment = {} }: Props) {
   const insights = useMemo(() => {
     const totalUnique = cards.length;
     const totalCards = cards.reduce((s, c) => s + c.quantity, 0);
@@ -41,39 +42,40 @@ export default function CollectionInsights({ cards, onCardClick }: Props) {
       .sort((a, b) => (b.priceUsd ?? 0) - (a.priceUsd ?? 0))
       .slice(0, 5);
 
-    // Power score based on legendaries
+    // Power score based on community sentiment from Tavily
     const getPowerScore = (card: CollectionCardData): number => {
+      // Primary: Use Tavily sentiment if available (0-100)
+      if (cardSentiment[card.name]) {
+        return cardSentiment[card.name];
+      }
+
+      // Fallback: Score based on rarity and type for cards without sentiment data
       let score = 0;
 
-      // Legendary status (highest priority)
-      if (card.typeLine?.toLowerCase().includes('legendary')) {
-        score += 100;
-      }
-
       // Planeswalker (very high priority)
-      if (card.type_line?.toLowerCase().includes('planeswalker')) {
-        score += 150;
+      if (card.typeLine?.toLowerCase().includes('planeswalker')) {
+        score += 80;
       }
 
-      // Rarity
+      // Legendary status
+      if (card.typeLine?.toLowerCase().includes('legendary')) {
+        score += 70;
+      }
+
+      // Rarity (premium for rare/mythic)
       const rarityScores: Record<string, number> = {
-        'mythic': 40,
-        'rare': 20,
+        'mythic': 30,
+        'rare': 15,
         'uncommon': 5,
         'common': 0,
       };
       score += rarityScores[card.rarity?.toLowerCase() ?? ''] ?? 0;
 
-      // Saga, Enchantment, Artifact (notable card types)
-      if (card.type_line?.toLowerCase().includes('saga')) score += 15;
-      if (card.type_line?.toLowerCase().includes('creature legendary')) score += 25;
-
-      return score;
+      return Math.max(0, Math.min(100, score));
     };
 
-    // Top 5 most powerful cards (legendary/planeswalker)
+    // Top 5 most powerful cards (ranked by community sentiment)
     const topPowerCards = [...cards]
-      .filter(c => c.type_line?.toLowerCase().includes('legendary') || c.type_line?.toLowerCase().includes('planeswalker'))
       .sort((a, b) => getPowerScore(b) - getPowerScore(a))
       .slice(0, 5);
 
@@ -266,8 +268,8 @@ export default function CollectionInsights({ cards, onCardClick }: Props) {
                     </button>
                   </div>
                   <div className="flex items-center gap-1 ml-2 shrink-0">
-                    {card.type_line?.toLowerCase().includes('planeswalker') && <span className="text-xs text-purple-400">PW</span>}
-                    {card.type_line?.toLowerCase().includes('legendary creature') && <span className="text-xs text-orange-400">L</span>}
+                    {card.typeLine?.toLowerCase().includes('planeswalker') && <span className="text-xs text-purple-400">PW</span>}
+                    {card.typeLine?.toLowerCase().includes('legendary creature') && <span className="text-xs text-orange-400">L</span>}
                     {card.rarity?.toLowerCase() === 'mythic' && <span className="text-xs text-orange-500">M</span>}
                   </div>
                 </div>

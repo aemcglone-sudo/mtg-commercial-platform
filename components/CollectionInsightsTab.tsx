@@ -37,6 +37,7 @@ export default function CollectionInsightsTab({ cards = [] }: Props) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
+  const [cardSentiment, setCardSentiment] = useState<Record<string, number>>({});
 
   useEffect(() => {
     fetch('/api/collection/dashboard')
@@ -48,6 +49,32 @@ export default function CollectionInsightsTab({ cards = [] }: Props) {
       .catch(err => console.error('Insights error:', err))
       .finally(() => setLoading(false));
   }, []);
+
+  // Fetch card sentiment from Tavily for top cards
+  useEffect(() => {
+    if (cards.length === 0) return;
+
+    // Get top cards by value to analyze
+    const topCardNames = [...cards]
+      .sort((a, b) => (b.priceUsd ?? 0) - (a.priceUsd ?? 0))
+      .slice(0, 10)
+      .map(c => c.name);
+
+    fetch('/api/card-sentiment', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cards: topCardNames }),
+    })
+      .then(r => r.json())
+      .then((data: any) => {
+        const sentiment: Record<string, number> = {};
+        for (const result of data.results) {
+          sentiment[result.card] = result.score;
+        }
+        setCardSentiment(sentiment);
+      })
+      .catch(err => console.error('Card sentiment error:', err));
+  }, [cards]);
 
   const handleRefreshPrices = async () => {
     setRefreshing(true);
@@ -88,7 +115,7 @@ export default function CollectionInsightsTab({ cards = [] }: Props) {
 
       {/* Full Width Integrated Dashboard */}
       {cards.length > 0 && (
-        <CollectionInsights cards={cards} onCardClick={setSelectedCard} />
+        <CollectionInsights cards={cards} onCardClick={setSelectedCard} cardSentiment={cardSentiment} />
       )}
 
       {/* Card Detail Modal */}
