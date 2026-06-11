@@ -32,9 +32,17 @@ export default function CollectionDashboard() {
 
   useEffect(() => {
     fetch('/api/collection/dashboard')
-      .then(r => r.json())
+      .then(async r => {
+        if (!r.ok) {
+          throw new Error(`API error: ${r.status}`);
+        }
+        return r.json();
+      })
       .then(setData)
-      .catch(err => setError(err.message))
+      .catch(err => {
+        console.error('Dashboard error:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load dashboard');
+      })
       .finally(() => setLoading(false));
   }, []);
 

@@ -4,7 +4,13 @@ export function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
   // Allow access to login and public routes
-  if (pathname === '/login' || pathname === '/register' || pathname.startsWith('/api/auth/verify-passcode')) {
+  if (
+    pathname === '/login' ||
+    pathname === '/register' ||
+    pathname.startsWith('/api/auth/verify-passcode') ||
+    pathname === '/api/collection/dashboard' ||
+    pathname.startsWith('/api/background/')
+  ) {
     return NextResponse.next();
   }
 

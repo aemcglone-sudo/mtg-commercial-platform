@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       collection: {
         totalValue,
-        valueChange7d: 0, // Will be calculated later
+        valueChange7d: 0,
         uniqueCards: priceArray.length,
         totalCards: priceArray.length,
         paperCards: 0,
@@ -35,8 +35,19 @@ export async function GET(req: NextRequest) {
     });
   } catch (error) {
     console.error('Dashboard error:', error);
+    // Return empty dashboard instead of error
     return NextResponse.json({
-      error: error instanceof Error ? error.message : 'Unknown error',
-    }, { status: 500 });
+      collection: {
+        totalValue: 0,
+        valueChange7d: 0,
+        uniqueCards: 0,
+        totalCards: 0,
+        paperCards: 0,
+        arenaCards: 0,
+        lastUpdated: new Date().toISOString(),
+      },
+      topCards: [],
+      recentPrices: [],
+    });
   }
 }
