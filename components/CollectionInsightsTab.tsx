@@ -28,6 +28,20 @@ interface InsightsData {
   }>;
 }
 
+interface ExpensiveCard {
+  name: string;
+  price: number;
+  set: string;
+}
+
+interface TrendingCard {
+  name: string;
+  discussionCount: number;
+  trend: number;
+  arrow: '▲' | '▼';
+  trendColor: 'text-green-500' | 'text-red-500';
+}
+
 interface Props {
   cards?: CollectionCardData[];
 }
@@ -38,15 +52,21 @@ export default function CollectionInsightsTab({ cards = [] }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
   const [cardSentiment, setCardSentiment] = useState<Record<string, number>>({});
+  const [expensiveCards, setExpensiveCards] = useState<ExpensiveCard[]>([]);
+  const [trendingCards, setTrendingCards] = useState<TrendingCard[]>([]);
 
   useEffect(() => {
-    fetch('/api/collection/dashboard')
-      .then(async r => {
-        if (!r.ok) throw new Error(`API error: ${r.status}`);
-        return r.json();
+    Promise.all([
+      fetch('/api/collection/dashboard').then(r => r.ok ? r.json() : null),
+      fetch('/api/expensive-cards').then(r => r.ok ? r.json() : { cards: [] }),
+      fetch('/api/trending-cards').then(r => r.ok ? r.json() : { cards: [] }),
+    ])
+      .then(([dashData, expensiveData, trendingData]) => {
+        if (dashData) setData(dashData);
+        setExpensiveCards(expensiveData?.cards ?? []);
+        setTrendingCards(trendingData?.cards ?? []);
       })
-      .then(setData)
-      .catch(err => console.error('Insights error:', err))
+      .catch(err => console.error('Dashboard error:', err))
       .finally(() => setLoading(false));
   }, []);
 
@@ -115,7 +135,13 @@ export default function CollectionInsightsTab({ cards = [] }: Props) {
 
       {/* Full Width Integrated Dashboard */}
       {cards.length > 0 && (
-        <CollectionInsights cards={cards} onCardClick={setSelectedCard} cardSentiment={cardSentiment} />
+        <CollectionInsights
+          cards={cards}
+          onCardClick={setSelectedCard}
+          cardSentiment={cardSentiment}
+          expensiveCards={expensiveCards}
+          trendingCards={trendingCards}
+        />
       )}
 
       {/* Card Detail Modal */}

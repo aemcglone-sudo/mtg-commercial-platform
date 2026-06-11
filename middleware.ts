@@ -9,6 +9,8 @@ export function middleware(request: NextRequest) {
     pathname === '/register' ||
     pathname.startsWith('/api/auth/verify-passcode') ||
     pathname === '/api/collection/dashboard' ||
+    pathname === '/api/expensive-cards' ||
+    pathname === '/api/trending-cards' ||
     pathname.startsWith('/api/background/')
   ) {
     return NextResponse.next();
