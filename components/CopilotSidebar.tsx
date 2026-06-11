@@ -25,7 +25,7 @@ interface CopilotSidebarProps {
   };
   isOpen: boolean;
   onToggle: () => void;
-  currentTab?: 'collection' | 'mydecks' | 'decks' | 'news' | 'chat' | 'venues';
+  currentTab?: 'collection' | 'insights' | 'mydecks' | 'decks' | 'news' | 'chat' | 'venues';
   onCardClick?: (cardName: string) => void;
 }
 

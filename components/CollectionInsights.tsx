@@ -40,8 +40,8 @@ export default function CollectionInsights({
   const filteredCards = useMemo(() => {
     if (formatFilter === 'all') return cards;
     return cards.filter(card => {
-      if (formatFilter === 'paper') return card.format !== 'arena';
-      if (formatFilter === 'arena') return card.format === 'arena';
+      if (formatFilter === 'paper') return card.collectionType !== 'arena';
+      if (formatFilter === 'arena') return card.collectionType === 'arena';
       return true;
     });
   }, [cards, formatFilter]);
