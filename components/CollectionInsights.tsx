@@ -46,7 +46,7 @@ export default function CollectionInsights({ cards, onCardClick }: Props) {
       let score = 0;
 
       // Legendary status (highest priority)
-      if (card.type_line?.toLowerCase().includes('legendary')) {
+      if (card.typeLine?.toLowerCase().includes('legendary')) {
         score += 100;
       }
 
