@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import CollectionDashboard from './CollectionDashboard';
+import CollectionInsights from './CollectionInsights';
+import type { CollectionCardData } from './CollectionBrowser';
 
 interface InsightsData {
   collection: {
@@ -26,7 +28,11 @@ interface InsightsData {
   }>;
 }
 
-export default function CollectionInsightsTab() {
+interface Props {
+  cards?: CollectionCardData[];
+}
+
+export default function CollectionInsightsTab({ cards = [] }: Props) {
   const [data, setData] = useState<InsightsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -70,6 +76,7 @@ export default function CollectionInsightsTab() {
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">Collection Insights</h2>
         <button
+          type="button"
           onClick={handleRefreshPrices}
           disabled={refreshing}
           className="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-600 text-black font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -77,6 +84,11 @@ export default function CollectionInsightsTab() {
           {refreshing ? '⟳ Updating...' : '⟳ Update Prices'}
         </button>
       </div>
+
+      {/* Collection Insights Card */}
+      {cards.length > 0 && (
+        <CollectionInsights cards={cards} />
+      )}
 
       {/* Dashboard Section */}
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">

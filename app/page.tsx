@@ -283,7 +283,7 @@ export default function Home() {
               />
             )}
             {activeTab === 'insights' && collection && (
-              <CollectionInsightsTab />
+              <CollectionInsightsTab cards={collection.collectionCards} />
             )}
             {activeTab === 'insights' && !collection && (
               <div className="text-center py-24 space-y-6">

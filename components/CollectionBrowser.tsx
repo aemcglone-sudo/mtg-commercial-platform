@@ -2,7 +2,6 @@
 
 import { useState, useMemo, useCallback } from 'react';
 import QuickAddCard from './QuickAddCard';
-import CollectionInsights from './CollectionInsights';
 import CardPreviewModal, { type DeckSummary } from './CardPreviewModal';
 import EditCardModal from './EditCardModal';
 import { getRulesHint } from '@/lib/rules-hints';
@@ -255,9 +254,6 @@ export default function CollectionBrowser({ cards, totalCards, detectedFormat, d
 
   return (
     <div className="space-y-4">
-
-      {/* Collection Insights */}
-      <CollectionInsights cards={cards} />
 
       {/* Summary + controls */}
       <div className="flex flex-wrap items-center gap-3">
