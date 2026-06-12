@@ -750,6 +750,8 @@ function DeckDetail({
 }) {
   const [sortColumn, setSortColumn] = useState<'name' | 'qty' | 'price' | 'type' | 'cmc' | 'color'>('name');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysis, setAnalysis] = useState<any>(null);
 
   // Build a map of card name to collection types for easy lookup
   const cardCollectionTypes = useMemo(() => {
@@ -771,9 +773,10 @@ function DeckDetail({
     return s + price * qty;
   }, 0);
   const missingValue = missingCards.reduce((s, [name, qty]) => {
-    const price = collection.get(name)?.priceUsd ?? 0;
+    const price = allCollectionCards.find(c => c.name === name)?.priceUsd ?? 0;
     return s + price * qty;
   }, 0);
+  const totalValue = ownedValue + missingValue;
 
   // Helper function to get card data from any source (owned or unowned)
   const getCardData = (name: string) => {
@@ -859,7 +862,7 @@ function DeckDetail({
 
       {/* Coverage Stats - only for decks, not lists */}
       {deck.format !== 'List' && (
-      <div className="grid grid-cols-3 gap-2 sm:gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4">
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-2 sm:p-4">
           <div className="text-xs text-zinc-500 mb-0.5 sm:mb-1">Coverage</div>
           <div className="text-xl sm:text-2xl font-bold text-amber-400">{coveragePct.toFixed(0)}%</div>
@@ -872,6 +875,10 @@ function DeckDetail({
           <div className="text-xs text-zinc-500 mb-0.5 sm:mb-1">Missing</div>
           <div className="text-xl sm:text-2xl font-bold text-red-400">{missingCards.length}</div>
         </div>
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-2 sm:p-4">
+          <div className="text-xs text-zinc-500 mb-0.5 sm:mb-1">Total Value</div>
+          <div className="text-xl sm:text-2xl font-bold text-cyan-400">${totalValue.toFixed(2)}</div>
+        </div>
       </div>
       )}
 
@@ -883,18 +890,91 @@ function DeckDetail({
         {deck.format !== 'List' && (
           <button
             type="button"
-            onClick={() => {
-              // Store deck ID in session storage for Shahrazad to reference
-              sessionStorage.setItem('deckToAnalyze', deck.id);
-              // Trigger Shahrazad to analyze this deck
-              window.dispatchEvent(new CustomEvent('analyzeDeck', { detail: { deckId: deck.id, deckName: deck.name } }));
+            onClick={async () => {
+              setAnalyzing(true);
+              try {
+                const res = await fetch('/api/decks/analyze', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ deckId: deck.id }),
+                });
+                if (res.ok) {
+                  const data = await res.json();
+                  setAnalysis(data);
+                } else {
+                  alert('Failed to analyze deck');
+                }
+              } catch (err) {
+                console.error('Analysis error:', err);
+                alert('Error analyzing deck');
+              } finally {
+                setAnalyzing(false);
+              }
             }}
-            className="w-full px-6 py-3 rounded-xl font-semibold text-black bg-purple-400 hover:bg-purple-300 transition-colors"
+            disabled={analyzing}
+            className="w-full px-6 py-3 rounded-xl font-semibold text-black bg-purple-400 hover:bg-purple-300 disabled:opacity-50 transition-colors"
           >
-            🧙 Analyze with Shahrazad
+            🧙 {analyzing ? 'Analyzing…' : 'Analyze with Shahrazad'}
           </button>
         )}
       </div>
+
+      {/* Shahrazad Analysis Results */}
+      {analysis && (
+        <div className="space-y-4 bg-zinc-900 border border-zinc-800 rounded-xl p-6">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-zinc-100">🧙 Shahrazad's Analysis</h3>
+            <button
+              type="button"
+              onClick={() => setAnalysis(null)}
+              className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+            >
+              Close
+            </button>
+          </div>
+
+          <div>
+            <p className="text-sm text-zinc-300 mb-2">{analysis.summary}</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <h4 className="text-sm font-semibold text-emerald-400 mb-2">Strengths</h4>
+              <ul className="space-y-1 text-xs text-zinc-300">
+                {analysis.strengths?.map((s: string, i: number) => (
+                  <li key={i}>✓ {s}</li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <h4 className="text-sm font-semibold text-red-400 mb-2">Weaknesses</h4>
+              <ul className="space-y-1 text-xs text-zinc-300">
+                {analysis.weaknesses?.map((w: string, i: number) => (
+                  <li key={i}>✗ {w}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+
+          <div>
+            <h4 className="text-sm font-semibold text-amber-400 mb-2">Card Recommendations</h4>
+            <div className="space-y-2">
+              {analysis.recommendations?.map((rec: any, i: number) => (
+                <div key={i} className="bg-zinc-800 rounded-lg p-3 text-xs">
+                  <div className="flex items-start justify-between mb-1">
+                    <span className="font-semibold text-zinc-100">{rec.card}</span>
+                    <span className={`text-xs px-2 py-0.5 rounded ${rec.inCollection ? 'bg-emerald-900 text-emerald-300' : 'bg-amber-900 text-amber-300'}`}>
+                      {rec.inCollection ? 'You own this' : 'Need to acquire'}
+                    </span>
+                  </div>
+                  <p className="text-zinc-400">{rec.reason}</p>
+                  <p className="text-zinc-500 mt-1">Suggested: {rec.suggestedQuantity}x</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* List View - for lists, show sortable table */}
       {deck.format === 'List' ? (
