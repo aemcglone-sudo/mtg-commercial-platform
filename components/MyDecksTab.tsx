@@ -752,6 +752,11 @@ function DeckDetail({
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [analyzing, setAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<any>(null);
+  const [editMode, setEditMode] = useState(false);
+  const [editCards, setEditCards] = useState<Record<string, number>>({});
+  const [searchInput, setSearchInput] = useState('');
+  const [searchResults, setSearchResults] = useState<Array<{ name: string; imageUrl: string | null }>>([]);
+  const [saving, setSaving] = useState(false);
 
   // Build a map of card name to collection types for easy lookup
   const cardCollectionTypes = useMemo(() => {
@@ -838,29 +843,112 @@ function DeckDetail({
     }
   }
 
+  async function handleSearchCards(query: string) {
+    if (!query.trim()) {
+      setSearchResults([]);
+      return;
+    }
+    try {
+      const res = await fetch(`https://api.scryfall.com/cards/search?q=${encodeURIComponent(query)}&unique=cards`);
+      if (res.ok) {
+        const data = await res.json();
+        const results = (data.data || []).slice(0, 10).map((card: any) => ({
+          name: card.name,
+          imageUrl: card.image_uris?.normal || null,
+        }));
+        setSearchResults(results);
+      }
+    } catch (err) {
+      console.error('Card search error:', err);
+    }
+  }
+
+  function handleEditStart() {
+    setEditCards({ ...deck.cards });
+    setEditMode(true);
+  }
+
+  async function handleSaveEdits() {
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/decks/${deck.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cards: editCards }),
+      });
+      if (res.ok) {
+        setEditMode(false);
+        onUpdate();
+      } else {
+        alert('Failed to save deck');
+      }
+    } catch (err) {
+      console.error('Save error:', err);
+      alert('Error saving deck');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function addCardToEdit(cardName: string, qty: number = 1) {
+    setEditCards(prev => ({
+      ...prev,
+      [cardName]: (prev[cardName] || 0) + qty,
+    }));
+    setSearchInput('');
+    setSearchResults([]);
+  }
+
+  function removeCardFromEdit(cardName: string) {
+    setEditCards(prev => {
+      const updated = { ...prev };
+      delete updated[cardName];
+      return updated;
+    });
+  }
+
+  function updateCardQtyInEdit(cardName: string, qty: number) {
+    if (qty <= 0) {
+      removeCardFromEdit(cardName);
+    } else {
+      setEditCards(prev => ({ ...prev, [cardName]: qty }));
+    }
+  }
+
   return (
     <div className="space-y-4 sm:space-y-6">
       {/* Header */}
       <div className="flex items-start justify-between gap-2">
         <button
           type="button"
-          onClick={onBack}
+          onClick={editMode ? () => setEditMode(false) : onBack}
           className="text-xs sm:text-sm text-zinc-400 hover:text-zinc-200 transition-colors whitespace-nowrap"
         >
-          ← Back
+          {editMode ? '✕ Cancel Edit' : '← Back'}
         </button>
-        <button
-          type="button"
-          onClick={async () => {
-            if (confirm('Delete this deck?')) {
-              await fetch(`/api/decks/${deck.id}`, { method: 'DELETE' });
-              onDelete();
-            }
-          }}
-          className="text-xs sm:text-sm text-red-400 hover:text-red-300 transition-colors whitespace-nowrap"
-        >
-          Delete
-        </button>
+        <div className="flex gap-2">
+          {!editMode && deck.format !== 'List' && (
+            <button
+              type="button"
+              onClick={handleEditStart}
+              className="text-xs sm:text-sm text-amber-400 hover:text-amber-300 transition-colors whitespace-nowrap"
+            >
+              ✏️ Edit
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={async () => {
+              if (confirm('Delete this deck?')) {
+                await fetch(`/api/decks/${deck.id}`, { method: 'DELETE' });
+                onDelete();
+              }
+            }}
+            className="text-xs sm:text-sm text-red-400 hover:text-red-300 transition-colors whitespace-nowrap"
+          >
+            Delete
+          </button>
+        </div>
       </div>
 
       {/* Deck Info */}
@@ -929,6 +1017,92 @@ function DeckDetail({
           </button>
         )}
       </div>
+
+      {/* Edit Mode */}
+      {editMode && (
+        <div className="space-y-4 bg-zinc-900 border border-zinc-800 rounded-xl p-6">
+          <h3 className="text-lg font-semibold text-zinc-100">✏️ Edit Deck Cards</h3>
+
+          <div>
+            <label className="block text-sm text-zinc-400 mb-2">Search and Add Cards</label>
+            <input
+              type="text"
+              value={searchInput}
+              onChange={e => {
+                setSearchInput(e.target.value);
+                handleSearchCards(e.target.value);
+              }}
+              placeholder="Search for a card..."
+              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-amber-500"
+            />
+            {searchResults.length > 0 && (
+              <div className="mt-2 max-h-40 overflow-y-auto bg-zinc-800 border border-zinc-700 rounded-lg">
+                {searchResults.map(card => (
+                  <button
+                    key={card.name}
+                    type="button"
+                    onClick={() => addCardToEdit(card.name)}
+                    className="w-full text-left px-4 py-2 hover:bg-zinc-700 transition-colors text-sm text-zinc-200 border-b border-zinc-700 last:border-b-0"
+                  >
+                    {card.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <h4 className="text-sm font-semibold text-zinc-400 mb-3">Cards in Deck ({Object.values(editCards).reduce((a, b) => a + b, 0)})</h4>
+            <div className="space-y-2 max-h-96 overflow-y-auto bg-zinc-800 rounded-lg p-4">
+              {Object.entries(editCards).length === 0 ? (
+                <p className="text-xs text-zinc-600 text-center py-4">No cards added</p>
+              ) : (
+                Object.entries(editCards)
+                  .sort(([a], [b]) => a.localeCompare(b))
+                  .map(([cardName, qty]) => (
+                    <div key={cardName} className="flex items-center gap-2 text-xs bg-zinc-700 rounded p-2">
+                      <input
+                        type="number"
+                        min="1"
+                        max="99"
+                        value={qty}
+                        onChange={e => updateCardQtyInEdit(cardName, parseInt(e.target.value) || 0)}
+                        title="Card quantity"
+                        className="w-10 bg-zinc-600 border border-zinc-500 rounded px-1 py-0.5 text-zinc-100 text-center"
+                      />
+                      <span className="flex-1 truncate text-zinc-200">{cardName}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeCardFromEdit(cardName)}
+                        className="text-red-400 hover:text-red-300 transition-colors font-bold"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))
+              )}
+            </div>
+          </div>
+
+          <div className="flex gap-3 pt-4">
+            <button
+              type="button"
+              onClick={() => setEditMode(false)}
+              className="flex-1 px-4 py-2 rounded-lg text-sm font-semibold text-zinc-400 bg-zinc-800 hover:bg-zinc-700 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleSaveEdits}
+              disabled={saving}
+              className="flex-1 px-4 py-2 rounded-lg text-sm font-semibold text-black bg-amber-400 hover:bg-amber-300 disabled:opacity-50 transition-colors"
+            >
+              {saving ? 'Saving…' : 'Save Changes'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Shahrazad Analysis Results */}
       {analysis && (
