@@ -10,6 +10,7 @@ interface Deck {
   format: string;
   strategy: string;
   cards: Record<string, number>;
+  commander?: string;
   createdAt: string;
 }
 
@@ -341,6 +342,8 @@ export default function MyDecksTab({ collection }: Props) {
 function NewDeckForm({ onCancel, onSave }: { onCancel: () => void; onSave: () => void }) {
   const [name, setName] = useState('');
   const [format, setFormat] = useState('Commander');
+  const [commander, setCommander] = useState('');
+  const [commanderResults, setCommanderResults] = useState<Array<{ name: string; imageUrl: string | null }>>([]);
   const [strategy, setStrategy] = useState('');
   const [deckCards, setDeckCards] = useState<Record<string, number>>({});
   const [saving, setSaving] = useState(false);
@@ -372,6 +375,26 @@ function NewDeckForm({ onCancel, onSave }: { onCancel: () => void; onSave: () =>
       console.error('Card search error:', err);
     } finally {
       setSearching(false);
+    }
+  }
+
+  async function handleSearchCommander(query: string) {
+    if (!query.trim()) {
+      setCommanderResults([]);
+      return;
+    }
+    try {
+      const res = await fetch(`https://api.scryfall.com/cards/search?q=${encodeURIComponent(query)} type:legendary type:creature&unique=cards`);
+      if (res.ok) {
+        const data = await res.json();
+        const results = (data.data || []).slice(0, 8).map((card: any) => ({
+          name: card.name,
+          imageUrl: card.image_uris?.normal || null,
+        }));
+        setCommanderResults(results);
+      }
+    } catch (err) {
+      console.error('Commander search error:', err);
     }
   }
 
@@ -422,21 +445,30 @@ function NewDeckForm({ onCancel, onSave }: { onCancel: () => void; onSave: () =>
 
   async function handleCreate() {
     if (!name.trim()) return;
+    if (format === 'Commander' && !commander.trim()) {
+      setError('Commander is required for Commander format');
+      return;
+    }
     setSaving(true);
     setError('');
     setSuccess('');
     try {
-      console.log('Creating deck:', { name, format, strategy, cards: deckCards });
+      const deckData: any = { name, format, strategy, cards: deckCards };
+      if (format === 'Commander') {
+        deckData.commander = commander;
+      }
+      console.log('Creating deck:', deckData);
       const res = await fetch('/api/decks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, format, strategy, cards: deckCards }),
+        body: JSON.stringify(deckData),
       });
       const data = await res.json();
       if (res.ok) {
         setSuccess(`✓ Deck "${name}" created!`);
         setTimeout(() => {
           setName('');
+          setCommander('');
           setStrategy('');
           setDeckCards({});
           onSave();
@@ -485,7 +517,13 @@ function NewDeckForm({ onCancel, onSave }: { onCancel: () => void; onSave: () =>
             <label className="block text-sm text-zinc-400 mb-2">Format</label>
             <select
               value={format}
-              onChange={e => setFormat(e.target.value)}
+              onChange={e => {
+                setFormat(e.target.value);
+                if (e.target.value !== 'Commander') {
+                  setCommander('');
+                  setCommanderResults([]);
+                }
+              }}
               title="Select deck format"
               className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 text-zinc-100 focus:outline-none focus:border-amber-500"
             >
@@ -496,6 +534,39 @@ function NewDeckForm({ onCancel, onSave }: { onCancel: () => void; onSave: () =>
               <option>Legacy</option>
             </select>
           </div>
+
+          {format === 'Commander' && (
+            <div>
+              <label className="block text-sm text-zinc-400 mb-2">Commander *</label>
+              <input
+                type="text"
+                value={commander}
+                onChange={e => {
+                  setCommander(e.target.value);
+                  handleSearchCommander(e.target.value);
+                }}
+                placeholder="Search legendary creatures..."
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-amber-500"
+              />
+              {commanderResults.length > 0 && (
+                <div className="mt-2 max-h-32 overflow-y-auto bg-zinc-800 border border-zinc-700 rounded-lg">
+                  {commanderResults.map(card => (
+                    <button
+                      key={card.name}
+                      type="button"
+                      onClick={() => {
+                        setCommander(card.name);
+                        setCommanderResults([]);
+                      }}
+                      className="w-full text-left px-4 py-2 hover:bg-zinc-700 transition-colors text-sm text-zinc-200 border-b border-zinc-700 last:border-b-0"
+                    >
+                      {card.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           <div>
             <label className="block text-sm text-zinc-400 mb-2">Strategy (Optional)</label>
@@ -782,6 +853,7 @@ function DeckDetail({
       <div className="space-y-1 sm:space-y-2">
         <h2 className="text-2xl sm:text-3xl font-bold text-zinc-100">{deck.name}</h2>
         <p className="text-sm sm:text-base text-zinc-500">{deck.format}</p>
+        {deck.commander && <p className="text-sm text-purple-400">Commander: {deck.commander}</p>}
         {deck.strategy && <p className="text-xs sm:text-sm text-zinc-400 line-clamp-2">{deck.strategy}</p>}
       </div>
 
@@ -803,10 +875,26 @@ function DeckDetail({
       </div>
       )}
 
-      {/* Action Buttons - only for decks, not lists */}
-      {deck.format !== 'List' && missingCards.length > 0 && (
-        <TCGPlayerButton missingCards={missingCards} />
-      )}
+      {/* Action Buttons */}
+      <div className="space-y-2">
+        {deck.format !== 'List' && missingCards.length > 0 && (
+          <TCGPlayerButton missingCards={missingCards} />
+        )}
+        {deck.format !== 'List' && (
+          <button
+            type="button"
+            onClick={() => {
+              // Store deck ID in session storage for Shahrazad to reference
+              sessionStorage.setItem('deckToAnalyze', deck.id);
+              // Trigger Shahrazad to analyze this deck
+              window.dispatchEvent(new CustomEvent('analyzeDeck', { detail: { deckId: deck.id, deckName: deck.name } }));
+            }}
+            className="w-full px-6 py-3 rounded-xl font-semibold text-black bg-purple-400 hover:bg-purple-300 transition-colors"
+          >
+            🧙 Analyze with Shahrazad
+          </button>
+        )}
+      </div>
 
       {/* List View - for lists, show sortable table */}
       {deck.format === 'List' ? (
