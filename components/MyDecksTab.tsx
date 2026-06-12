@@ -342,10 +342,83 @@ function NewDeckForm({ onCancel, onSave }: { onCancel: () => void; onSave: () =>
   const [name, setName] = useState('');
   const [format, setFormat] = useState('Commander');
   const [strategy, setStrategy] = useState('');
-  const [deckList, setDeckList] = useState('');
+  const [deckCards, setDeckCards] = useState<Record<string, number>>({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [searchResults, setSearchResults] = useState<Array<{ name: string; imageUrl: string | null }>>([]);
+  const [searching, setSearching] = useState(false);
+  const [showPasteDeckList, setShowPasteDeckList] = useState(false);
+  const [pasteInput, setPasteInput] = useState('');
+
+  async function handleSearchCards(query: string) {
+    if (!query.trim()) {
+      setSearchResults([]);
+      return;
+    }
+    setSearching(true);
+    try {
+      const res = await fetch(`https://api.scryfall.com/cards/search?q=${encodeURIComponent(query)}&unique=cards`);
+      if (res.ok) {
+        const data = await res.json();
+        const results = (data.data || []).slice(0, 10).map((card: any) => ({
+          name: card.name,
+          imageUrl: card.image_uris?.normal || null,
+        }));
+        setSearchResults(results);
+      }
+    } catch (err) {
+      console.error('Card search error:', err);
+    } finally {
+      setSearching(false);
+    }
+  }
+
+  function addCard(cardName: string, qty: number = 1) {
+    setDeckCards(prev => ({
+      ...prev,
+      [cardName]: (prev[cardName] || 0) + qty,
+    }));
+    setSearchInput('');
+    setSearchResults([]);
+  }
+
+  function removeCard(cardName: string) {
+    setDeckCards(prev => {
+      const updated = { ...prev };
+      delete updated[cardName];
+      return updated;
+    });
+  }
+
+  function updateCardQty(cardName: string, qty: number) {
+    if (qty <= 0) {
+      removeCard(cardName);
+    } else {
+      setDeckCards(prev => ({ ...prev, [cardName]: qty }));
+    }
+  }
+
+  function handlePasteDeckList() {
+    const cards: Record<string, number> = {};
+    if (pasteInput.trim()) {
+      const lines = pasteInput.split('\n');
+      for (const line of lines) {
+        const match = line.match(/^(\d+)x?\s+(.+)$/i);
+        if (match) {
+          const qty = parseInt(match[1]);
+          const cardName = match[2].trim();
+          if (cardName && qty > 0) {
+            cards[cardName] = (cards[cardName] || 0) + qty;
+          }
+        }
+      }
+    }
+    setDeckCards(prev => ({ ...prev, ...cards }));
+    setPasteInput('');
+    setShowPasteDeckList(false);
+  }
 
   async function handleCreate() {
     if (!name.trim()) return;
@@ -353,37 +426,19 @@ function NewDeckForm({ onCancel, onSave }: { onCancel: () => void; onSave: () =>
     setError('');
     setSuccess('');
     try {
-      // Parse deck list (format: "4 Card Name", "2x Other Card", etc.)
-      const cards: Record<string, number> = {};
-      if (deckList.trim()) {
-        const lines = deckList.split('\n');
-        for (const line of lines) {
-          const match = line.match(/^(\d+)x?\s+(.+)$/i);
-          if (match) {
-            const qty = parseInt(match[1]);
-            const cardName = match[2].trim();
-            if (cardName && qty > 0) {
-              cards[cardName] = (cards[cardName] || 0) + qty;
-            }
-          }
-        }
-      }
-
-      console.log('Creating deck:', { name, format, strategy, cards });
+      console.log('Creating deck:', { name, format, strategy, cards: deckCards });
       const res = await fetch('/api/decks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, format, strategy, cards }),
+        body: JSON.stringify({ name, format, strategy, cards: deckCards }),
       });
-      console.log('Deck creation response:', res.status);
       const data = await res.json();
-      console.log('Deck creation data:', data);
       if (res.ok) {
         setSuccess(`✓ Deck "${name}" created!`);
         setTimeout(() => {
           setName('');
           setStrategy('');
-          setDeckList('');
+          setDeckCards({});
           onSave();
         }, 1000);
       } else {
@@ -398,86 +453,168 @@ function NewDeckForm({ onCancel, onSave }: { onCancel: () => void; onSave: () =>
   }
 
   return (
-    <div className="space-y-4 max-w-2xl mx-auto">
+    <div className="space-y-4 max-w-4xl mx-auto">
       <h2 className="text-2xl font-bold text-zinc-100">Create New Deck</h2>
 
-      <div className="space-y-4 bg-zinc-900 border border-zinc-800 rounded-xl p-6">
-        {error && (
-          <div className="bg-red-900/30 border border-red-800 rounded-lg p-3">
-            <p className="text-sm text-red-400">{error}</p>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Left side: Form */}
+        <div className="lg:col-span-2 space-y-4 bg-zinc-900 border border-zinc-800 rounded-xl p-6">
+          {error && (
+            <div className="bg-red-900/30 border border-red-800 rounded-lg p-3">
+              <p className="text-sm text-red-400">{error}</p>
+            </div>
+          )}
+          {success && (
+            <div className="bg-green-900/30 border border-green-800 rounded-lg p-3">
+              <p className="text-sm text-green-400">{success}</p>
+            </div>
+          )}
+
+          <div>
+            <label className="block text-sm text-zinc-400 mb-2">Deck Name</label>
+            <input
+              type="text"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="e.g., Grixis Control"
+              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-amber-500"
+            />
           </div>
-        )}
-        {success && (
-          <div className="bg-green-900/30 border border-green-800 rounded-lg p-3">
-            <p className="text-sm text-green-400">{success}</p>
+
+          <div>
+            <label className="block text-sm text-zinc-400 mb-2">Format</label>
+            <select
+              value={format}
+              onChange={e => setFormat(e.target.value)}
+              title="Select deck format"
+              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 text-zinc-100 focus:outline-none focus:border-amber-500"
+            >
+              <option>Standard</option>
+              <option>Pioneer</option>
+              <option>Commander</option>
+              <option>Modern</option>
+              <option>Legacy</option>
+            </select>
           </div>
-        )}
 
-        <div>
-          <label className="block text-sm text-zinc-400 mb-2">Deck Name</label>
-          <input
-            type="text"
-            value={name}
-            onChange={e => setName(e.target.value)}
-            placeholder="e.g., Grixis Control"
-            className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-amber-500"
-          />
-        </div>
+          <div>
+            <label className="block text-sm text-zinc-400 mb-2">Strategy (Optional)</label>
+            <textarea
+              value={strategy}
+              onChange={e => setStrategy(e.target.value)}
+              placeholder="How do you play this deck? What's the main strategy?"
+              rows={3}
+              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-amber-500 resize-none"
+            />
+          </div>
 
-        <div>
-          <label className="block text-sm text-zinc-400 mb-2">Format</label>
-          <select
-            value={format}
-            onChange={e => setFormat(e.target.value)}
-            title="Select deck format"
-            className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 text-zinc-100 focus:outline-none focus:border-amber-500"
-          >
-            <option>Standard</option>
-            <option>Pioneer</option>
-            <option>Commander</option>
-            <option>Modern</option>
-            <option>Legacy</option>
-          </select>
-        </div>
+          <div>
+            <label className="block text-sm text-zinc-400 mb-2">Add Cards</label>
+            <input
+              type="text"
+              value={searchInput}
+              onChange={e => {
+                setSearchInput(e.target.value);
+                handleSearchCards(e.target.value);
+              }}
+              placeholder="Search for a card..."
+              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-amber-500"
+            />
+            {searchResults.length > 0 && (
+              <div className="mt-2 max-h-40 overflow-y-auto bg-zinc-800 border border-zinc-700 rounded-lg">
+                {searchResults.map(card => (
+                  <button
+                    key={card.name}
+                    type="button"
+                    onClick={() => addCard(card.name)}
+                    className="w-full text-left px-4 py-2 hover:bg-zinc-700 transition-colors text-sm text-zinc-200 border-b border-zinc-700 last:border-b-0"
+                  >
+                    {card.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
-        <div>
-          <label className="block text-sm text-zinc-400 mb-2">Deck List (Optional)</label>
-          <textarea
-            value={deckList}
-            onChange={e => setDeckList(e.target.value)}
-            placeholder={`4 Lightning Bolt\n4 Counterspell\n20 Island`}
-            rows={4}
-            className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-amber-500 resize-none font-mono text-sm"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm text-zinc-400 mb-2">Strategy (Optional)</label>
-          <textarea
-            value={strategy}
-            onChange={e => setStrategy(e.target.value)}
-            placeholder="How do you play this deck? What's the main strategy?"
-            rows={3}
-            className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-amber-500 resize-none"
-          />
-        </div>
-
-        <div className="flex gap-3 pt-4">
           <button
             type="button"
-            onClick={onCancel}
-            className="flex-1 px-4 py-2 rounded-lg text-sm font-semibold text-zinc-400 bg-zinc-800 hover:bg-zinc-700 transition-colors"
+            onClick={() => setShowPasteDeckList(!showPasteDeckList)}
+            className="text-xs text-zinc-400 hover:text-amber-400 transition-colors"
           >
-            Cancel
+            {showPasteDeckList ? '▼ Hide' : '▶ Show'} paste deck list
           </button>
-          <button
-            type="button"
-            onClick={handleCreate}
-            disabled={!name.trim() || saving}
-            className="flex-1 px-4 py-2 rounded-lg text-sm font-semibold text-black bg-amber-400 hover:bg-amber-300 disabled:opacity-50 transition-colors"
-          >
-            {saving ? 'Creating…' : 'Create Deck'}
-          </button>
+
+          {showPasteDeckList && (
+            <div className="space-y-2">
+              <textarea
+                value={pasteInput}
+                onChange={e => setPasteInput(e.target.value)}
+                placeholder={`4 Lightning Bolt\n4 Counterspell\n20 Island`}
+                rows={3}
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-amber-500 resize-none font-mono text-sm"
+              />
+              <button
+                type="button"
+                onClick={handlePasteDeckList}
+                className="text-xs px-3 py-1 rounded bg-amber-400/20 text-amber-400 hover:bg-amber-400/30 transition-colors"
+              >
+                Add from list
+              </button>
+            </div>
+          )}
+
+          <div className="flex gap-3 pt-4">
+            <button
+              type="button"
+              onClick={onCancel}
+              className="flex-1 px-4 py-2 rounded-lg text-sm font-semibold text-zinc-400 bg-zinc-800 hover:bg-zinc-700 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleCreate}
+              disabled={!name.trim() || saving || Object.keys(deckCards).length === 0}
+              title={Object.keys(deckCards).length === 0 ? 'Add at least one card' : undefined}
+              className="flex-1 px-4 py-2 rounded-lg text-sm font-semibold text-black bg-amber-400 hover:bg-amber-300 disabled:opacity-50 transition-colors"
+            >
+              {saving ? 'Creating…' : `Create Deck (${Object.keys(deckCards).length} unique)`}
+            </button>
+          </div>
+        </div>
+
+        {/* Right side: Cards preview */}
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
+          <h3 className="text-sm font-semibold text-zinc-400 mb-4">Cards in Deck ({Object.values(deckCards).reduce((a, b) => a + b, 0)})</h3>
+          <div className="space-y-2 max-h-96 overflow-y-auto">
+            {Object.entries(deckCards).length === 0 ? (
+              <p className="text-xs text-zinc-600 text-center py-4">No cards added yet</p>
+            ) : (
+              Object.entries(deckCards)
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([cardName, qty]) => (
+                  <div key={cardName} className="flex items-center gap-2 text-xs">
+                    <input
+                      type="number"
+                      min="1"
+                      max="99"
+                      value={qty}
+                      onChange={e => updateCardQty(cardName, parseInt(e.target.value) || 0)}
+                      title="Card quantity"
+                      className="w-10 bg-zinc-800 border border-zinc-700 rounded px-1 py-0.5 text-zinc-100 text-center"
+                    />
+                    <span className="flex-1 truncate text-zinc-300">{cardName}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeCard(cardName)}
+                      className="text-red-400 hover:text-red-300 transition-colors"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))
+            )}
+          </div>
         </div>
       </div>
     </div>
