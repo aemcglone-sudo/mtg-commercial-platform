@@ -764,16 +764,26 @@ function DeckDetail({
     return typeMap;
   }, [allCollectionCards]);
 
+  // Create case-insensitive collection map for matching
+  const collectionLower = new Map(
+    Array.from(collection.entries()).map(([name, data]) => [name.toLowerCase(), { name, data }])
+  );
+
   const deckCards = Object.entries(deck.cards || {});
-  const ownedCards = deckCards.filter(([name]) => collection.has(name));
-  const missingCards = deckCards.filter(([name]) => !collection.has(name));
+  const ownedCards = deckCards.filter(([name]) =>
+    collectionLower.has(name.toLowerCase())
+  );
+  const missingCards = deckCards.filter(([name]) =>
+    !collectionLower.has(name.toLowerCase())
+  );
   const coveragePct = deckCards.length > 0 ? (ownedCards.length / deckCards.length) * 100 : 0;
   const ownedValue = ownedCards.reduce((s, [name, qty]) => {
-    const price = collection.get(name)?.priceUsd ?? 0;
+    const match = collectionLower.get(name.toLowerCase());
+    const price = match?.data?.priceUsd ?? 0;
     return s + price * qty;
   }, 0);
   const missingValue = missingCards.reduce((s, [name, qty]) => {
-    const price = allCollectionCards.find(c => c.name === name)?.priceUsd ?? 0;
+    const price = allCollectionCards.find(c => c.name.toLowerCase() === name.toLowerCase())?.priceUsd ?? 0;
     return s + price * qty;
   }, 0);
   const totalValue = ownedValue + missingValue;
@@ -781,11 +791,12 @@ function DeckDetail({
   // Helper function to get card data from any source (owned or unowned)
   const getCardData = (name: string) => {
     // First try the filtered collection (for owned cards)
-    if (collection.has(name)) {
-      return collection.get(name);
+    const match = collectionLower.get(name.toLowerCase());
+    if (match) {
+      return match.data;
     }
     // Then try the full collection (for unowned cards)
-    return allCollectionCards.find(c => c.name === name);
+    return allCollectionCards.find(c => c.name.toLowerCase() === name.toLowerCase());
   };
 
   const sortedOwnedCards = useMemo(() => {
