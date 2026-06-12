@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { Anthropic } from '@anthropic-ai/sdk';
 import { db } from '@/lib/db';
 
 interface DeckCard {
@@ -58,7 +57,7 @@ export async function POST(req: NextRequest) {
       quantity: qty,
     }));
 
-    // Format deck info for Claude
+    // Format deck info for Gemini
     const deckInfo = `
 Deck: ${deck.name}
 Format: ${deck.format}
@@ -72,11 +71,30 @@ User's collection has ${collection.length} cards including:
 ${deckCards.filter(c => collectionMap.has(c.name)).map(c => `- ${c.name}`).join('\n') || '- (no deck cards in collection)'}
     `;
 
-    const client = new Anthropic();
-    const response = await client.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
-      max_tokens: 1000,
-      system: `You are a Magic: The Gathering expert deck analyst. Analyze decks for strengths, weaknesses, and card recommendations.
+    const apiKey = process.env.GOOGLE_API_KEY;
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: 'Google API key not configured' },
+        { status: 500 }
+      );
+    }
+
+    const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey,
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [
+              {
+                text: `You are a Magic: The Gathering expert deck analyst. Analyze decks for strengths, weaknesses, and card recommendations.
+
+Analyze this ${deck.format} deck:
+${deckInfo}
+
 Format your response as JSON with these fields:
 {
   "strengths": ["strength1", "strength2", ...],
@@ -93,15 +111,24 @@ Format your response as JSON with these fields:
 }
 
 Provide 3-5 strengths, 3-5 weaknesses, and 5-7 recommendations. Consider the format, strategy, and mana curve.`,
-      messages: [
-        {
-          role: 'user',
-          content: `Analyze this ${deck.format} deck:\n${deckInfo}`,
+              },
+            ],
+          },
+        ],
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 1000,
         },
-      ],
+      }),
     });
 
-    const analysisText = response.content[0].type === 'text' ? response.content[0].text : '';
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(`Gemini API error: ${error.error?.message || 'Unknown error'}`);
+    }
+
+    const data = await response.json();
+    const analysisText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
 
     // Parse the JSON response
     const jsonMatch = analysisText.match(/\{[\s\S]*\}/);
