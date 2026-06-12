@@ -915,6 +915,42 @@ function DeckDetail({
     }
   }
 
+  // Helper to get card type from typeLine
+  function getCardType(typeLine: string | null): string {
+    if (!typeLine) return 'Other';
+    const lower = typeLine.toLowerCase();
+    if (lower.includes('creature')) return 'Creatures';
+    if (lower.includes('instant')) return 'Instants';
+    if (lower.includes('sorcery')) return 'Sorceries';
+    if (lower.includes('artifact')) return 'Artifacts';
+    if (lower.includes('enchantment')) return 'Enchantments';
+    if (lower.includes('planeswalker')) return 'Planeswalkers';
+    if (lower.includes('land')) return 'Lands';
+    return 'Other';
+  }
+
+  // Group cards by type
+  function groupCardsByType(cards: Record<string, number>, isEditMode: boolean = false) {
+    const source = isEditMode ? editCards : cards;
+    const groups: Record<string, Array<[string, number]>> = {};
+    const typeOrder = ['Creatures', 'Instants', 'Sorceries', 'Artifacts', 'Enchantments', 'Planeswalkers', 'Lands', 'Other'];
+
+    Object.entries(source).forEach(([name, qty]) => {
+      const cardData = getCardData(name);
+      const type = getCardType(cardData?.typeLine || null);
+      if (!groups[type]) groups[type] = [];
+      groups[type].push([name, qty]);
+    });
+
+    // Sort within each group alphabetically
+    Object.keys(groups).forEach(type => {
+      groups[type].sort(([a], [b]) => a.localeCompare(b));
+    });
+
+    // Return in type order
+    return typeOrder.filter(t => groups[t]).map(t => [t, groups[t]] as const);
+  }
+
   return (
     <div className="space-y-4 sm:space-y-6">
       {/* Header */}
@@ -1053,33 +1089,38 @@ function DeckDetail({
 
           <div>
             <h4 className="text-sm font-semibold text-zinc-400 mb-3">Cards in Deck ({Object.values(editCards).reduce((a, b) => a + b, 0)})</h4>
-            <div className="space-y-2 max-h-96 overflow-y-auto bg-zinc-800 rounded-lg p-4">
+            <div className="space-y-3 max-h-96 overflow-y-auto bg-zinc-800 rounded-lg p-4">
               {Object.entries(editCards).length === 0 ? (
                 <p className="text-xs text-zinc-600 text-center py-4">No cards added</p>
               ) : (
-                Object.entries(editCards)
-                  .sort(([a], [b]) => a.localeCompare(b))
-                  .map(([cardName, qty]) => (
-                    <div key={cardName} className="flex items-center gap-2 text-xs bg-zinc-700 rounded p-2">
-                      <input
-                        type="number"
-                        min="1"
-                        max="99"
-                        value={qty}
-                        onChange={e => updateCardQtyInEdit(cardName, parseInt(e.target.value) || 0)}
-                        title="Card quantity"
-                        className="w-10 bg-zinc-600 border border-zinc-500 rounded px-1 py-0.5 text-zinc-100 text-center"
-                      />
-                      <span className="flex-1 truncate text-zinc-200">{cardName}</span>
-                      <button
-                        type="button"
-                        onClick={() => removeCardFromEdit(cardName)}
-                        className="text-red-400 hover:text-red-300 transition-colors font-bold"
-                      >
-                        ✕
-                      </button>
+                groupCardsByType({}, true).map(([type, cards]) => (
+                  <div key={type}>
+                    <h5 className="text-xs font-semibold text-amber-400 mb-2 uppercase">{type}</h5>
+                    <div className="space-y-1 ml-2">
+                      {cards.map(([cardName, qty]) => (
+                        <div key={cardName} className="flex items-center gap-2 text-xs bg-zinc-700 rounded p-2">
+                          <input
+                            type="number"
+                            min="1"
+                            max="99"
+                            value={qty}
+                            onChange={e => updateCardQtyInEdit(cardName, parseInt(e.target.value) || 0)}
+                            title="Card quantity"
+                            className="w-10 bg-zinc-600 border border-zinc-500 rounded px-1 py-0.5 text-zinc-100 text-center"
+                          />
+                          <span className="flex-1 truncate text-zinc-200">{cardName}</span>
+                          <button
+                            type="button"
+                            onClick={() => removeCardFromEdit(cardName)}
+                            className="text-red-400 hover:text-red-300 transition-colors font-bold"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
                     </div>
-                  ))
+                  </div>
+                ))
               )}
             </div>
           </div>
@@ -1257,27 +1298,34 @@ function DeckDetail({
           )}
         </div>
       ) : (
-        /* Deck View - original two-column layout */
+        /* Deck View - grouped by type */
         <div className={`grid gap-6 grid-cols-1 md:grid-cols-2`}>
           {/* Owned Cards */}
           <div className="space-y-3">
             <h3 className="font-semibold text-zinc-100">
               ✓ Cards You Own ({ownedCards.length})
             </h3>
-            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-2">
+            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-3">
               {ownedCards.length === 0 ? (
                 <p className="text-sm text-zinc-600">None yet</p>
               ) : (
-                ownedCards.map(([name, qty]) => (
-                  <button
-                    key={name}
-                    type="button"
-                    onClick={() => onCardClick?.(name)}
-                    className="w-full flex justify-between text-sm text-left hover:bg-zinc-800 p-2 -mx-2 rounded transition-colors"
-                  >
-                    <span className="text-zinc-300">{qty}x {name}</span>
-                    <span className="text-amber-400">${(collection.get(name)?.priceUsd ?? 0).toFixed(2)}</span>
-                  </button>
+                groupCardsByType(Object.fromEntries(ownedCards)).map(([type, cards]) => (
+                  <div key={type}>
+                    <p className="text-xs font-semibold text-amber-400 uppercase mb-2">{type}</p>
+                    <div className="space-y-1 ml-2">
+                      {cards.map(([name, qty]) => (
+                        <button
+                          key={name}
+                          type="button"
+                          onClick={() => onCardClick?.(name)}
+                          className="w-full flex justify-between text-xs text-left hover:bg-zinc-800 p-2 -mx-2 rounded transition-colors"
+                        >
+                          <span className="text-zinc-300">{qty}x {name}</span>
+                          <span className="text-amber-400">${((collectionLower.get(name.toLowerCase())?.data?.priceUsd ?? 0) * qty).toFixed(2)}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 ))
               )}
               {ownedValue > 0 && (
@@ -1292,20 +1340,27 @@ function DeckDetail({
         {deck.format !== 'List' && (
         <div className="space-y-3">
           <h3 className="font-semibold text-zinc-100">✗ Cards You Need ({missingCards.length})</h3>
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-2">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-3">
             {missingCards.length === 0 ? (
               <p className="text-sm text-emerald-400">You own all cards! ✓</p>
             ) : (
-              missingCards.map(([name, qty]) => (
-                <button
-                  key={name}
-                  type="button"
-                  onClick={() => onCardClick?.(name)}
-                  className="w-full flex justify-between text-sm text-left hover:bg-zinc-800 p-2 -mx-2 rounded transition-colors"
-                >
-                  <span className="text-zinc-400">{qty}x {name}</span>
-                  <span className="text-zinc-600">—</span>
-                </button>
+              groupCardsByType(Object.fromEntries(missingCards)).map(([type, cards]) => (
+                <div key={type}>
+                  <p className="text-xs font-semibold text-red-400 uppercase mb-2">{type}</p>
+                  <div className="space-y-1 ml-2">
+                    {cards.map(([name, qty]) => (
+                      <button
+                        key={name}
+                        type="button"
+                        onClick={() => onCardClick?.(name)}
+                        className="w-full flex justify-between text-xs text-left hover:bg-zinc-800 p-2 -mx-2 rounded transition-colors"
+                      >
+                        <span className="text-zinc-400">{qty}x {name}</span>
+                        <span className="text-zinc-600">—</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
               ))
             )}
             {missingCards.length > 0 && (
