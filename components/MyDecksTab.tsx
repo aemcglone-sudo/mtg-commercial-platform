@@ -757,6 +757,7 @@ function DeckDetail({
   const [searchInput, setSearchInput] = useState('');
   const [searchResults, setSearchResults] = useState<Array<{ name: string; imageUrl: string | null }>>([]);
   const [saving, setSaving] = useState(false);
+  const [scryCardCache, setScryCardCache] = useState<Map<string, any>>(new Map());
 
   // Build a map of card name to collection types for easy lookup
   const cardCollectionTypes = useMemo(() => {
@@ -793,6 +794,32 @@ function DeckDetail({
   }, 0);
   const totalValue = ownedValue + missingValue;
 
+  // Fetch card data from Scryfall for cards not in collection
+  const fetchScryCard = async (name: string) => {
+    if (scryCardCache.has(name.toLowerCase())) {
+      return scryCardCache.get(name.toLowerCase());
+    }
+    try {
+      const res = await fetch(`https://api.scryfall.com/cards/named?fuzzy=${encodeURIComponent(name)}`);
+      if (res.ok) {
+        const card = await res.json();
+        const cardData = {
+          name: card.name,
+          priceUsd: card.prices?.usd ? parseFloat(card.prices.usd) : null,
+          typeLine: card.type_line || null,
+          cmc: card.cmc || null,
+          rarity: card.rarity || null,
+          colors: card.colors || [],
+        };
+        setScryCardCache(prev => new Map(prev).set(name.toLowerCase(), cardData));
+        return cardData;
+      }
+    } catch (err) {
+      console.error('Scryfall fetch error:', err);
+    }
+    return null;
+  };
+
   // Helper function to get card data from any source (owned or unowned)
   const getCardData = (name: string) => {
     // First try the filtered collection (for owned cards)
@@ -801,7 +828,12 @@ function DeckDetail({
       return match.data;
     }
     // Then try the full collection (for unowned cards)
-    return allCollectionCards.find(c => c.name.toLowerCase() === name.toLowerCase());
+    const collectionCard = allCollectionCards.find(c => c.name.toLowerCase() === name.toLowerCase());
+    if (collectionCard) {
+      return collectionCard;
+    }
+    // Finally try the cache for Scryfall cards
+    return scryCardCache.get(name.toLowerCase());
   };
 
   const sortedOwnedCards = useMemo(() => {
@@ -833,6 +865,20 @@ function DeckDetail({
     });
     return sorted;
   }, [deck.format, deckCards, ownedCards, allCollectionCards, collection, sortColumn, sortDirection]);
+
+  // Fetch Scryfall data for missing cards on mount
+  useEffect(() => {
+    const fetchMissingCards = async () => {
+      for (const [name] of missingCards) {
+        if (!scryCardCache.has(name.toLowerCase())) {
+          await fetchScryCard(name);
+        }
+      }
+    };
+    if (missingCards.length > 0) {
+      fetchMissingCards();
+    }
+  }, [missingCards, scryCardCache]);
 
   function handleSort(column: typeof sortColumn) {
     if (sortColumn === column) {
