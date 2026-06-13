@@ -24,7 +24,7 @@ export default function EditCardModal({ card, onSave, onClose }: Props) {
     setSaving(true);
     try {
       await onSave(collectionType);
-      onClose();
+      // Don't close immediately - let parent control timing so user sees the update
     } finally {
       setSaving(false);
     }
