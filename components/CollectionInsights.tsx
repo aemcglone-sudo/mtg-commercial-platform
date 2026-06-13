@@ -492,7 +492,7 @@ export default function CollectionInsights({
           <h3 className="text-base font-bold text-zinc-100 mb-4 whitespace-nowrap">💰 Most Valuable In My Collection</h3>
           <div className="overflow-y-auto h-48">
             {insights.topValueCards.map((card, idx) => (
-              <div key={`value-${card.name}`} className="flex items-center justify-between text-sm mb-2">
+              <div key={`value-${card.name}-${card.collectionType}`} className="flex items-center justify-between text-sm mb-2">
                 <div className="flex items-center gap-2 flex-1 min-w-0">
                   <span className="text-xs text-zinc-600 font-semibold w-5 text-right shrink-0">#{idx + 1}</span>
                   <button
@@ -583,7 +583,7 @@ export default function CollectionInsights({
           <div className="overflow-y-auto h-48">
             {trendingCards.length > 0 ? (
               trendingCards.map((card, idx) => (
-                <div key={`trending-${card.name}`} className="flex items-center justify-between text-sm mb-2">
+                <div key={`trending-${card.name}-${idx}`} className="flex items-center justify-between text-sm mb-2">
                   <div className="flex items-center gap-2 flex-1 min-w-0">
                     <span className="text-xs text-zinc-600 font-semibold w-5 text-right shrink-0">#{idx + 1}</span>
                     <button
