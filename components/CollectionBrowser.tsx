@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import QuickAddCard from './QuickAddCard';
 import CardPreviewModal, { type DeckSummary } from './CardPreviewModal';
 import EditCardModal from './EditCardModal';
@@ -138,6 +138,12 @@ export default function CollectionBrowser({ cards, totalCards, detectedFormat, d
   const [removingName, setRemovingName] = useState<string | null>(null);
   const [previewCard, setPreviewCard] = useState<CollectionCardData | null>(null);
   const [editingCard, setEditingCard] = useState<CollectionCardData | null>(null);
+  const [localCards, setLocalCards] = useState<CollectionCardData[]>(cards);
+
+  // Keep local cards in sync with prop
+  useEffect(() => {
+    setLocalCards(cards);
+  }, [cards]);
 
   const toggleItem = <T,>(arr: T[], item: T): T[] =>
     arr.includes(item) ? arr.filter((x) => x !== item) : [...arr, item];
@@ -165,23 +171,39 @@ export default function CollectionBrowser({ cards, totalCards, detectedFormat, d
 
   const handleEditCard = useCallback(async (collectionType: 'paper' | 'arena') => {
     if (!editingCard) return;
-    const res = await fetch('/api/card/update-collection', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: editingCard.name, collectionType }),
-    });
-    if (res.ok) {
-      // Update the card in the local array and notify parent
-      const updatedCards = cards.map((c) =>
+    try {
+      const res = await fetch('/api/card/update-collection', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: editingCard.name, collectionType }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Save failed' }));
+        console.error('Save failed:', err);
+        alert(`Failed to save: ${err.error || 'Unknown error'}`);
+        return;
+      }
+      // Update the card in the local array
+      const updatedCards = localCards.map((c) =>
         c.name === editingCard.name ? { ...c, collectionType } : c
       );
-      setEditingCard(null);
+      // Update the editing card to show the change immediately
+      setEditingCard({ ...editingCard, collectionType });
+      // Update local cards
+      setLocalCards(updatedCards);
+      // Notify parent of change
       onCollectionChange?.({
         collectionCards: updatedCards,
         collectionSize: updatedCards.length,
         totalCards,
         detectedFormat: detectedFormat ?? '',
       });
+      // Close modal after a brief delay so user sees the update
+      setTimeout(() => setEditingCard(null), 500);
+    } catch (err) {
+      console.error('Save error:', err);
+      alert('Failed to save card');
+      setEditingCard(null);
     }
   }, [editingCard, onCollectionChange, cards, totalCards, detectedFormat]);
 
@@ -193,7 +215,7 @@ export default function CollectionBrowser({ cards, totalCards, detectedFormat, d
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
-    let list = cards.filter((c) => {
+    let list = localCards.filter((c) => {
       if (q && !c.name.toLowerCase().includes(q)) return false;
       if (!matchesPriceTier(c.priceUsd, priceTier)) return false;
       if (qtyFilter === 'singles'   && c.quantity !== 1) return false;
@@ -227,7 +249,7 @@ export default function CollectionBrowser({ cards, totalCards, detectedFormat, d
       return sortAsc ? cmp : -cmp;
     });
     return list;
-  }, [cards, search, sortKey, sortAsc, priceTier, qtyFilter, selectedSet, collectionTypeFilter,
+  }, [localCards, search, sortKey, sortAsc, priceTier, qtyFilter, selectedSet, collectionTypeFilter,
       selectedColors, selectedTypes, selectedRarities, selectedCmc]);
 
   const activeFilterCount = [
@@ -243,7 +265,7 @@ export default function CollectionBrowser({ cards, totalCards, detectedFormat, d
     setCollectionTypeFilter('all');
   }
 
-  const totalValue = cards.reduce((s, c) => s + c.quantity * (c.priceUsd ?? 0), 0);
+  const totalValue = localCards.reduce((s, c) => s + c.quantity * (c.priceUsd ?? 0), 0);
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) setSortAsc((v) => !v);
@@ -259,7 +281,7 @@ export default function CollectionBrowser({ cards, totalCards, detectedFormat, d
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex gap-4 text-sm flex-1">
           <span className="text-zinc-500">
-            <span className="text-zinc-100 font-semibold">{cards.length}</span> unique
+            <span className="text-zinc-100 font-semibold">{localCards.length}</span> unique
           </span>
           <span className="text-zinc-500">
             <span className="text-zinc-100 font-semibold">{totalCards}</span> total
