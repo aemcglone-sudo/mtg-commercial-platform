@@ -757,7 +757,7 @@ function DeckDetail({
   const [searchInput, setSearchInput] = useState('');
   const [searchResults, setSearchResults] = useState<Array<{ name: string; imageUrl: string | null }>>([]);
   const [saving, setSaving] = useState(false);
-  const [scryCardCache, setScryCardCache] = useState<Map<string, any>>(new Map());
+  const [scryCardCache, setScryCardCache] = useState<Record<string, any>>({});
 
   // Build a map of card name to collection types for easy lookup
   const cardCollectionTypes = useMemo(() => {
@@ -796,8 +796,9 @@ function DeckDetail({
 
   // Fetch card data from Scryfall for cards not in collection
   const fetchScryCard = async (name: string) => {
-    if (scryCardCache.has(name.toLowerCase())) {
-      return scryCardCache.get(name.toLowerCase());
+    const key = name.toLowerCase();
+    if (scryCardCache[key]) {
+      return scryCardCache[key];
     }
     try {
       const res = await fetch(`https://api.scryfall.com/cards/named?fuzzy=${encodeURIComponent(name)}`);
@@ -811,11 +812,14 @@ function DeckDetail({
           rarity: card.rarity || null,
           colors: card.colors || [],
         };
-        setScryCardCache(prev => new Map(prev).set(name.toLowerCase(), cardData));
+        console.log(`Fetched ${name}:`, cardData);
+        setScryCardCache(prev => ({ ...prev, [key]: cardData }));
         return cardData;
+      } else {
+        console.error(`Scryfall error for ${name}: ${res.status}`);
       }
     } catch (err) {
-      console.error('Scryfall fetch error:', err);
+      console.error(`Scryfall fetch error for ${name}:`, err);
     }
     return null;
   };
@@ -833,7 +837,7 @@ function DeckDetail({
       return collectionCard;
     }
     // Finally try the cache for Scryfall cards
-    return scryCardCache.get(name.toLowerCase());
+    return scryCardCache[name.toLowerCase()];
   };
 
   const sortedOwnedCards = useMemo(() => {
@@ -870,7 +874,7 @@ function DeckDetail({
   useEffect(() => {
     const fetchMissingCards = async () => {
       for (const [name] of missingCards) {
-        if (!scryCardCache.has(name.toLowerCase())) {
+        if (!scryCardCache[name.toLowerCase()]) {
           await fetchScryCard(name);
         }
       }
