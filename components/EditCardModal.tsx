@@ -14,6 +14,7 @@ interface Props {
 export default function EditCardModal({ card, onSave, onClose }: Props) {
   const [collectionType, setCollectionType] = useState<'paper' | 'arena'>(card.collectionType);
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
 
   // Sync local state when card prop changes (including after save)
   useEffect(() => {
@@ -24,7 +25,8 @@ export default function EditCardModal({ card, onSave, onClose }: Props) {
     setSaving(true);
     try {
       await onSave(collectionType);
-      // Don't close immediately - let parent control timing so user sees the update
+      setSaved(true);
+      setTimeout(() => onClose(), 800);
     } finally {
       setSaving(false);
     }
@@ -83,10 +85,23 @@ export default function EditCardModal({ card, onSave, onClose }: Props) {
             <button
               type="button"
               onClick={handleSave}
-              disabled={saving || collectionType === card.collectionType}
-              className="flex-1 px-3 py-2 rounded-lg bg-amber-400 text-black font-medium text-sm hover:bg-amber-300 disabled:opacity-40 transition-colors"
+              disabled={saving || saved || collectionType === card.collectionType}
+              className={`flex-1 px-3 py-2 rounded-lg font-medium text-sm transition-colors ${
+                saved
+                  ? 'bg-emerald-500 text-white'
+                  : 'bg-amber-400 text-black hover:bg-amber-300 disabled:opacity-40'
+              }`}
             >
-              {saving ? 'Saving…' : 'Save'}
+              {saving ? (
+                <span className="inline-flex items-center gap-1">
+                  <span className="inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
+                  Saving…
+                </span>
+              ) : saved ? (
+                '✓ Saved!'
+              ) : (
+                'Save'
+              )}
             </button>
           </div>
         </div>
