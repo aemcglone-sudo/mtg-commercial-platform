@@ -188,7 +188,8 @@ export default function CollectionBrowser({ cards, totalCards, detectedFormat, d
         c.name === editingCard.name ? { ...c, collectionType } : c
       );
       // Update the editing card to show the change immediately
-      setEditingCard({ ...editingCard, collectionType });
+      const updatedEditingCard = { ...editingCard, collectionType };
+      setEditingCard(updatedEditingCard);
       // Update local cards
       setLocalCards(updatedCards);
       // Notify parent of change
@@ -198,8 +199,8 @@ export default function CollectionBrowser({ cards, totalCards, detectedFormat, d
         totalCards,
         detectedFormat: detectedFormat ?? '',
       });
-      // Close modal after a brief delay so user sees the update
-      setTimeout(() => setEditingCard(null), 500);
+      // Close modal after delay so user sees the update
+      setTimeout(() => setEditingCard(null), 1000);
     } catch (err) {
       console.error('Save error:', err);
       alert('Failed to save card');
