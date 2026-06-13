@@ -1398,17 +1398,23 @@ function DeckDetail({
                 <div key={type}>
                   <p className="text-xs font-semibold text-red-400 uppercase mb-2">{type}</p>
                   <div className="space-y-1 ml-2">
-                    {cards.map(([name, qty]) => (
-                      <button
-                        key={name}
-                        type="button"
-                        onClick={() => onCardClick?.(name)}
-                        className="w-full flex justify-between text-xs text-left hover:bg-zinc-800 p-2 -mx-2 rounded transition-colors"
-                      >
-                        <span className="text-zinc-400">{qty}x {name}</span>
-                        <span className="text-zinc-600">—</span>
-                      </button>
-                    ))}
+                    {cards.map(([name, qty]) => {
+                      const cardData = getCardData(name);
+                      const price = cardData?.priceUsd ?? 0;
+                      return (
+                        <button
+                          key={name}
+                          type="button"
+                          onClick={() => onCardClick?.(name)}
+                          className="w-full flex justify-between text-xs text-left hover:bg-zinc-800 p-2 -mx-2 rounded transition-colors"
+                        >
+                          <span className="text-zinc-400">{qty}x {name}</span>
+                          <span className={price > 0 ? 'text-amber-400 font-semibold' : 'text-zinc-600'}>
+                            {price > 0 ? `$${(price * qty).toFixed(2)}` : '—'}
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               ))
