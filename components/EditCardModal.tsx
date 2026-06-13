@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 interface Props {
   card: {
@@ -14,6 +14,11 @@ interface Props {
 export default function EditCardModal({ card, onSave, onClose }: Props) {
   const [collectionType, setCollectionType] = useState<'paper' | 'arena'>(card.collectionType);
   const [saving, setSaving] = useState(false);
+
+  // Sync local state when card prop changes (including after save)
+  useEffect(() => {
+    setCollectionType(card.collectionType);
+  }, [card.collectionType]);
 
   async function handleSave() {
     setSaving(true);
