@@ -804,6 +804,7 @@ function DeckDetail({
       const res = await fetch(`https://api.scryfall.com/cards/named?fuzzy=${encodeURIComponent(name)}`);
       if (res.ok) {
         const card = await res.json();
+        console.log(`Raw Scryfall response for ${name}:`, { prices: card.prices, usd: card.prices?.usd });
         const cardData = {
           name: card.name,
           priceUsd: card.prices?.usd ? parseFloat(card.prices.usd) : null,
@@ -812,7 +813,7 @@ function DeckDetail({
           rarity: card.rarity || null,
           colors: card.colors || [],
         };
-        console.log(`Fetched ${name}:`, cardData);
+        console.log(`Processed ${name}:`, cardData);
         setScryCardCache(prev => ({ ...prev, [key]: cardData }));
         return cardData;
       } else {
@@ -882,7 +883,7 @@ function DeckDetail({
     if (missingCards.length > 0) {
       fetchMissingCards();
     }
-  }, [missingCards, scryCardCache]);
+  }, [missingCards]);
 
   function handleSort(column: typeof sortColumn) {
     if (sortColumn === column) {
