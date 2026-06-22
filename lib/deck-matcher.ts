@@ -23,6 +23,7 @@ export interface MatchedDeck {
   format: string;
   metaShare?: number;
   commanderName?: string;
+  strategy?: string;
   totalCards: number;
   ownedCards: number;
   coveragePct: number;
@@ -39,6 +40,7 @@ export interface DeckSource {
   format: string;
   metaShare?: number;
   commanderName?: string;
+  strategy?: string;
   cards: Map<string, number>;
 }
 
@@ -117,6 +119,7 @@ export function matchDeckToCollection(
     format: deck.format,
     metaShare: deck.metaShare,
     commanderName: deck.commanderName,
+    strategy: deck.strategy,
     totalCards,
     ownedCards,
     coveragePct,

@@ -10,6 +10,7 @@ export interface DeckData {
   name: string;
   format?: string;
   strategy?: string;
+  deckType?: 'paper' | 'arena';
   cards: Record<string, number>;
   createdAt: string;
 }
@@ -22,7 +23,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const decks = await findMany<any>(
-      `SELECT id, userId, name, format, strategy, cards, personaType, coreGoal, lastAnalyzed, createdAt, updatedAt FROM decks WHERE userId = ? ORDER BY createdAt DESC`,
+      `SELECT id, "userId", name, format, strategy, "deckType", cards, "personaType", "coreGoal", "lastAnalyzed", "createdAt", "updatedAt" FROM decks WHERE "userId" = ? ORDER BY "createdAt" DESC`,
       [userId]
     );
 
@@ -31,7 +32,7 @@ export async function GET(req: NextRequest) {
       cards: d.cards ? JSON.parse(d.cards) : {},
     }));
 
-    return NextResponse.json(parsed);  // Returns array for backward compatibility
+    return NextResponse.json(parsed);
   } catch (err) {
     console.error('Decks fetch error:', err);
     return NextResponse.json({ error: `Failed to fetch decks: ${err instanceof Error ? err.message : String(err)}` }, { status: 500 });
@@ -45,7 +46,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { name, format, strategy, cards } = body;
+  const { name, format, strategy, deckType, cards } = body;
 
   if (!name || !format) {
     return NextResponse.json(
@@ -54,14 +55,16 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const resolvedDeckType = deckType === 'arena' ? 'arena' : 'paper';
+
   try {
     const id = randomUUID();
     const cardsJson = JSON.stringify(cards || {});
 
     await run(
-      `INSERT INTO decks (id, userId, name, format, strategy, cards, createdAt, updatedAt)
-       VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
-      [id, userId, name, format, strategy || null, cardsJson]
+      `INSERT INTO decks (id, "userId", name, format, strategy, "deckType", cards, "createdAt", "updatedAt")
+       VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+      [id, userId, name, format, strategy || null, resolvedDeckType, cardsJson]
     );
 
     return NextResponse.json({
@@ -69,6 +72,7 @@ export async function POST(req: NextRequest) {
       name,
       format,
       strategy: strategy || null,
+      deckType: resolvedDeckType,
       cards: cards || {},
     });
   } catch (err) {

@@ -25,8 +25,8 @@ export async function POST(req: NextRequest) {
     const eventTypesJson = JSON.stringify([venueType || 'casual']);
 
     await run(
-      `INSERT INTO community_venues (id, name, address, city, state, zipCode, latitude, longitude, formats, eventTypes, phone, website, userRating, reviewCount, createdAt)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO community_venues (id, name, address, city, state, "zipCode", latitude, longitude, formats, "eventTypes", phone, website, "userRating", "reviewCount", "createdAt")
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
       [
         id,
         name,
@@ -42,7 +42,6 @@ export async function POST(req: NextRequest) {
         website || '',
         5, // Start with 5 star rating for user-submitted
         1, // 1 review (the submission)
-        new Date().toISOString(),
       ]
     );
 

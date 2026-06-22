@@ -11,7 +11,7 @@ export async function GET(req: NextRequest) {
 
   // Load all inventory items (source of truth for quantities and types)
   const items = await findMany<InventoryItem>(
-    `SELECT name, quantity, collectionType FROM inventory_items WHERE userId = ? AND itemType = 'cards' ORDER BY name`,
+    `SELECT name, quantity, "collectionType" FROM inventory_items WHERE "userId" = ? AND "itemType" = 'cards' ORDER BY name`,
     [userId]
   );
 
@@ -23,8 +23,8 @@ export async function GET(req: NextRequest) {
 
   // Get metadata from all uploads (in reverse order so recent ones take precedence)
   const uploads = await findMany<Row>(
-    `SELECT parsedData, rawText, detectedFormat, createdAt
-     FROM collection_uploads WHERE userId = ? ORDER BY createdAt DESC`,
+    `SELECT "parsedData", "rawText", "detectedFormat", "createdAt"
+     FROM collection_uploads WHERE "userId" = ? ORDER BY "createdAt" DESC`,
     [userId]
   );
 
@@ -77,17 +77,18 @@ export async function GET(req: NextRequest) {
       };
     });
 
-    const finalArenaCount = collectionCards.filter(c => c.collectionType === 'arena').length;
-    console.log(`Returning collection with ${finalArenaCount} arena cards and ${collectionCards.filter(c => c.collectionType === 'paper').length} paper cards`);
+    // Paper only — arena cards stay in DB but are excluded from the UI
+    const paperCards = collectionCards.filter(c => c.collectionType !== 'arena');
+    console.log(`Returning collection with ${paperCards.length} paper cards (${collectionCards.length - paperCards.length} arena cards excluded)`);
 
-    const collectionSize = items.length;
-    const totalCards = items.reduce((sum, item) => sum + item.quantity, 0);
+    const collectionSize = paperCards.length;
+    const totalCards = paperCards.reduce((sum, item) => sum + item.quantity, 0);
 
     return NextResponse.json({
       collectionSize,
       totalCards,
       detectedFormat: latestUpload?.detectedFormat || 'Unknown',
-      collectionCards,
+      collectionCards: paperCards,
       rawText: latestUpload?.rawText || '',
       savedAt: latestUpload?.createdAt || new Date().toISOString(),
     });
@@ -101,7 +102,7 @@ export async function DELETE(req: NextRequest) {
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { run } = await import('@/lib/db');
-  await run(`DELETE FROM collection_uploads WHERE userId = ?`, [userId]);
-  await run(`DELETE FROM inventory_items WHERE userId = ? AND itemType = 'cards'`, [userId]);
+  await run(`DELETE FROM collection_uploads WHERE "userId" = ?`, [userId]);
+  await run(`DELETE FROM inventory_items WHERE "userId" = ? AND "itemType" = 'cards'`, [userId]);
   return NextResponse.json({ success: true });
 }

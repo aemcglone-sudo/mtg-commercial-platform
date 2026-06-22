@@ -15,7 +15,7 @@ export async function GET(req: NextRequest): Promise<Response> {
     }
 
     const location = await findOne<LocationPreference>(
-      'SELECT address, savedAt as saved_at FROM user_location_preferences WHERE userId = ?',
+      'SELECT address, "savedAt" as saved_at FROM user_location_preferences WHERE "userId" = ?',
       [userId]
     );
 
@@ -49,9 +49,9 @@ export async function POST(req: NextRequest): Promise<Response> {
     const now = new Date().toISOString();
 
     // Upsert: delete old and insert new (works with older SQLite)
-    await run('DELETE FROM user_location_preferences WHERE userId = ?', [userId]);
+    await run('DELETE FROM user_location_preferences WHERE "userId" = ?', [userId]);
     await run(
-      'INSERT INTO user_location_preferences (id, userId, address, savedAt) VALUES (?, ?, ?, ?)',
+      'INSERT INTO user_location_preferences (id, "userId", address, "savedAt") VALUES (?, ?, ?, ?)',
       [crypto.randomUUID(), userId, cleanAddress, now]
     );
 

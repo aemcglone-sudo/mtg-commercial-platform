@@ -263,7 +263,7 @@ POST /api/deck/validate-legality
   → {format: 'commander', legality: 'legal'|'banned', violations: []}
 ```
 
-### Shahrazad Context
+### Quan Context
 ```
 GET /api/collection-chat/context
   → {collection: {...}, meta: {...}, prices: {...}, trends: {...}}
@@ -292,7 +292,7 @@ GET /api/collection-chat/context
 - Identify card pairs that appear together >20% of time
 - Score by frequency + combo value
 - Update card_synergies table
-- Flag new combos for Shahrazad context
+- Flag new combos for Quan context
 ```
 
 ### Meta Update (Daily 6 AM UTC)
@@ -356,7 +356,7 @@ GET /api/collection-chat/context
          ┌─────────────┼─────────────┐
          │             │             │
          ▼             ▼             ▼
-    Dashboard    Shahrazad      Alerts
+    Dashboard    Quan      Alerts
 ```
 
 ---
@@ -388,7 +388,7 @@ GET /api/collection-chat/context
 - [ ] "Build from collection" filter
 - [ ] Deck analysis API
 
-**Sprint 5 (Week 5)**: Shahrazad Integration
+**Sprint 5 (Week 5)**: Quan Integration
 - [ ] Enhanced system prompt with all context
 - [ ] Price context in recommendations
 - [ ] Meta awareness in responses

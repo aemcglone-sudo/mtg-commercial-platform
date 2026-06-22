@@ -6,7 +6,7 @@ export async function GET() {
     database: false,
     apiKeys: {
       tavily: !!process.env.TAVILY_API_KEY,
-      anthropic: !!process.env.ANTHROPIC_API_KEY,
+      google: !!process.env.GOOGLE_API_KEY,
       nextauth: !!process.env.NEXTAUTH_SECRET,
     },
     timestamp: new Date().toISOString(),

@@ -2,8 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import QuickAddCard from './QuickAddCard';
-import CardPreviewModal, { type DeckSummary } from './CardPreviewModal';
-import EditCardModal from './EditCardModal';
+import CardDetailModal, { type DeckSummary } from './CardDetailModal';
 import { getRulesHint } from '@/lib/rules-hints';
 
 
@@ -37,7 +36,6 @@ type ViewMode = 'grid' | 'table';
 type SortKey = 'name' | 'quantity' | 'price' | 'cmc' | 'rarity' | 'type' | 'colors';
 type PriceTier = 'all' | 'under1' | '1to10' | '10to50' | 'over50';
 type QtyFilter = 'all' | 'singles' | 'multiples';
-type CollectionTypeFilter = 'all' | 'paper' | 'arena';
 
 // MTG colors in canonical order
 const COLORS = [
@@ -132,12 +130,11 @@ export default function CollectionBrowser({ cards, totalCards, detectedFormat, d
   const [priceTier, setPriceTier] = useState<PriceTier>('all');
   const [qtyFilter, setQtyFilter] = useState<QtyFilter>('all');
   const [selectedSet, setSelectedSet] = useState<string>('');
-  const [collectionTypeFilter, setCollectionTypeFilter] = useState<CollectionTypeFilter>('all');
+  const [legendaryOnly, setLegendaryOnly] = useState(false);
   const [hoveredCard, setHoveredCard] = useState<CollectionCardData | null>(null);
   const [hoveredRulesHint, setHoveredRulesHint] = useState<string | null>(null);
   const [removingName, setRemovingName] = useState<string | null>(null);
   const [previewCard, setPreviewCard] = useState<CollectionCardData | null>(null);
-  const [editingCard, setEditingCard] = useState<CollectionCardData | null>(null);
   const [localCards, setLocalCards] = useState<CollectionCardData[]>(cards);
 
   // Keep local cards in sync with prop
@@ -164,49 +161,16 @@ export default function CollectionBrowser({ cards, totalCards, detectedFormat, d
     const res = await fetch('/api/collection/card', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, quantity }),
+      body: JSON.stringify({ name, quantity, collectionType: 'paper' }),
     });
-    if (res.ok) onCollectionChange?.(await res.json());
+    if (res.ok) {
+      onCollectionChange?.(await res.json());
+    } else {
+      const data = await res.json().catch(() => ({}));
+      alert(data.error || `Failed to add "${name}"`);
+    }
   }, [onCollectionChange]);
 
-  const handleEditCard = useCallback(async (collectionType: 'paper' | 'arena') => {
-    if (!editingCard) return;
-    try {
-      const res = await fetch('/api/card/update-collection', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: editingCard.name, collectionType }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: 'Save failed' }));
-        console.error('Save failed:', err);
-        alert(`Failed to save: ${err.error || 'Unknown error'}`);
-        return;
-      }
-      // Update the card in the local array
-      const updatedCards = localCards.map((c) =>
-        c.name === editingCard.name ? { ...c, collectionType } : c
-      );
-      // Update the editing card to show the change immediately
-      const updatedEditingCard = { ...editingCard, collectionType };
-      setEditingCard(updatedEditingCard);
-      // Update local cards
-      setLocalCards(updatedCards);
-      // Notify parent of change
-      onCollectionChange?.({
-        collectionCards: updatedCards,
-        collectionSize: updatedCards.length,
-        totalCards,
-        detectedFormat: detectedFormat ?? '',
-      });
-      // Close modal after delay so user sees the update
-      setTimeout(() => setEditingCard(null), 1000);
-    } catch (err) {
-      console.error('Save error:', err);
-      alert('Failed to save card');
-      setEditingCard(null);
-    }
-  }, [editingCard, onCollectionChange, cards, totalCards, detectedFormat]);
 
   const setOptions = useMemo(() => {
     const counts = new Map<string, number>();
@@ -222,14 +186,11 @@ export default function CollectionBrowser({ cards, totalCards, detectedFormat, d
       if (qtyFilter === 'singles'   && c.quantity !== 1) return false;
       if (qtyFilter === 'multiples' && c.quantity <= 1)  return false;
       if (selectedSet && c.setName !== selectedSet) return false;
-      if (collectionTypeFilter !== 'all') {
-        const type = c.collectionType ?? 'paper';
-        if (type !== collectionTypeFilter) return false;
-      }
       if (selectedColors.length) {
         const grp = getColorGroup(c.colors);
         if (!selectedColors.includes(grp)) return false;
       }
+      if (legendaryOnly && !c.typeLine?.includes('Legendary')) return false;
       if (selectedTypes.length) {
         const t = getCardType(c.typeLine);
         if (!t || !selectedTypes.includes(t as CardType)) return false;
@@ -250,20 +211,19 @@ export default function CollectionBrowser({ cards, totalCards, detectedFormat, d
       return sortAsc ? cmp : -cmp;
     });
     return list;
-  }, [localCards, search, sortKey, sortAsc, priceTier, qtyFilter, selectedSet, collectionTypeFilter,
-      selectedColors, selectedTypes, selectedRarities, selectedCmc]);
+  }, [localCards, search, sortKey, sortAsc, priceTier, qtyFilter, selectedSet,
+      selectedColors, selectedTypes, selectedRarities, selectedCmc, legendaryOnly]);
 
   const activeFilterCount = [
     selectedColors.length > 0, selectedTypes.length > 0,
     selectedRarities.length > 0, selectedCmc.length > 0,
-    priceTier !== 'all', qtyFilter !== 'all', !!selectedSet,
-    collectionTypeFilter !== 'all',
+    priceTier !== 'all', qtyFilter !== 'all', !!selectedSet, legendaryOnly,
   ].filter(Boolean).length;
 
   function clearAllFilters() {
     setSelectedColors([]); setSelectedTypes([]); setSelectedRarities([]);
     setSelectedCmc([]); setPriceTier('all'); setQtyFilter('all'); setSelectedSet('');
-    setCollectionTypeFilter('all');
+    setLegendaryOnly(false);
   }
 
   const totalValue = localCards.reduce((s, c) => s + c.quantity * (c.priceUsd ?? 0), 0);
@@ -350,7 +310,7 @@ export default function CollectionBrowser({ cards, totalCards, detectedFormat, d
         </div>
 
         {/* Add card quick search */}
-        <QuickAddCard onAdd={handleAdd} />
+        <QuickAddCard onAdd={handleAdd} onCollectionChange={() => onCollectionChange?.({ collectionCards: localCards, collectionSize: localCards.length, totalCards, detectedFormat: detectedFormat ?? '' })} />
       </div>
 
       {/* Search */}
@@ -387,6 +347,9 @@ export default function CollectionBrowser({ cards, totalCards, detectedFormat, d
             <Pill key={t} active={selectedTypes.includes(t)}
               onClick={() => setSelectedTypes(toggleItem(selectedTypes, t))}>{t}</Pill>
           ))}
+          <Pill active={legendaryOnly} onClick={() => setLegendaryOnly((v) => !v)}>
+            👑 Legendary Creatures
+          </Pill>
         </FilterRow>
 
         {/* Rarity */}
@@ -427,12 +390,6 @@ export default function CollectionBrowser({ cards, totalCards, detectedFormat, d
             ))}
           </FilterRow>
 
-          <FilterRow label="Type">
-            {([['all','All'],['paper','📄 Paper'],['arena','⚡ Arena']] as [CollectionTypeFilter,string][]).map(([id, label]) => (
-              <Pill key={id} active={collectionTypeFilter === id} onClick={() => setCollectionTypeFilter(id)}>{label}</Pill>
-            ))}
-          </FilterRow>
-
           <div className="flex items-center gap-1.5 ml-auto">
             <span className="text-xs text-zinc-500">Set</span>
             <select value={selectedSet} onChange={(e) => setSelectedSet(e.target.value)}
@@ -469,7 +426,7 @@ export default function CollectionBrowser({ cards, totalCards, detectedFormat, d
         }`}>
           {filtered.map((card) => (
             <div
-              key={`${card.name}-${card.collectionType || 'paper'}`}
+              key={card.name}
               className="group relative block text-left hover:cursor-pointer"
               onClick={() => setPreviewCard(card)}
               onMouseEnter={() => setHoveredCard(card)}
@@ -490,16 +447,6 @@ export default function CollectionBrowser({ cards, totalCards, detectedFormat, d
               <span className="absolute top-1 right-1 bg-black/80 text-white text-xs font-bold px-1.5 py-0.5 rounded" title="Quantity owned">
                 ×{card.quantity}
               </span>
-              {/* Collection type badge */}
-              {card.collectionType && (
-                <span className={`absolute top-1 left-1 text-xs font-medium px-1.5 py-0.5 rounded ${
-                  card.collectionType === 'paper'
-                    ? 'bg-blue-900/90 text-blue-300'
-                    : 'bg-purple-900/90 text-purple-300'
-                }`} title={`${card.collectionType === 'paper' ? 'Paper' : 'Arena'} collection`}>
-                  {card.collectionType === 'paper' ? '📄' : '⚡'}
-                </span>
-              )}
               {/* Price badge */}
               {card.priceUsd !== null && card.priceUsd > 0 && (
                 <span className="absolute bottom-1 left-1 bg-black/80 text-amber-400 text-xs font-medium px-1.5 py-0.5 rounded" title="Price per card">
@@ -519,15 +466,6 @@ export default function CollectionBrowser({ cards, totalCards, detectedFormat, d
                   ⚡
                 </button>
               )}
-              {/* Edit button — appears on hover */}
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); setEditingCard(card); }}
-                title="Edit collection type"
-                className="absolute top-1 right-8 w-5 h-5 rounded-full bg-blue-600/80 text-white text-xs flex items-center justify-center hover:bg-blue-500 transition-colors opacity-0 group-hover:opacity-100"
-              >
-                ✎
-              </button>
               {/* Remove button — appears on hover */}
               <button
                 type="button"
@@ -583,7 +521,7 @@ export default function CollectionBrowser({ cards, totalCards, detectedFormat, d
             <tbody>
               {filtered.map((card, i) => (
                 <tr
-                  key={`${card.name}-${card.collectionType || 'paper'}`}
+                  key={card.name}
                   className="border-b border-zinc-800/50 last:border-0 hover:bg-zinc-800/40 transition-colors"
                   onMouseEnter={() => setHoveredCard(card)}
                   onMouseLeave={() => setHoveredCard(null)}
@@ -625,15 +563,7 @@ export default function CollectionBrowser({ cards, totalCards, detectedFormat, d
                       : <span className="text-zinc-600">—</span>
                     }
                   </td>
-                  <td className="px-2 py-2.5 text-right flex justify-end gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setEditingCard(card)}
-                      title="Edit collection type"
-                      className="text-zinc-700 hover:text-blue-400 transition-colors text-sm"
-                    >
-                      ✎
-                    </button>
+                  <td className="px-2 py-2.5 text-right">
                     <button
                       type="button"
                       onClick={() => handleRemove(card.name)}
@@ -685,19 +615,26 @@ export default function CollectionBrowser({ cards, totalCards, detectedFormat, d
         </div>
       )}
 
-      {/* Card Preview Modal */}
+      {/* Card Detail Modal */}
       {previewCard && (
-        <CardPreviewModal card={previewCard} onClose={() => setPreviewCard(null)} decks={decks} />
-      )}
-
-      {/* Edit Card Modal */}
-      {editingCard && (
-        <EditCardModal
-          card={{ ...editingCard, collectionType: editingCard.collectionType ?? 'paper' }}
-          onSave={handleEditCard}
-          onClose={() => setEditingCard(null)}
+        <CardDetailModal
+          cardName={previewCard.name}
+          collectionCard={previewCard}
+          onClose={() => setPreviewCard(null)}
+          decks={decks}
+          onCollectionChange={() => {
+            // Re-fetch collection from server to reflect any changes
+            fetch('/api/collection/card', { method: 'GET' }).catch(() => {});
+            onCollectionChange?.({
+              collectionCards: localCards,
+              collectionSize: localCards.length,
+              totalCards,
+              detectedFormat: detectedFormat ?? '',
+            });
+          }}
         />
       )}
+
     </div>
   );
 }

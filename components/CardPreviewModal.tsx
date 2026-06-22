@@ -12,6 +12,7 @@ interface Props {
   card: CollectionCardData;
   onClose: () => void;
   decks?: DeckSummary[];
+  onSave?: (updates: { quantity?: number }) => void;
 }
 
 function getCardUsageExplanation(card: CollectionCardData): string {
@@ -69,15 +70,16 @@ function getCardUsageExplanation(card: CollectionCardData): string {
   return 'Fits your deck strategy. Why it\'s cool: Synergizes with the rest of your cards for a cohesive plan.';
 }
 
-export default function CardPreviewModal({ card, onClose, decks = [] }: Props) {
+export default function CardPreviewModal({ card, onClose, decks = [], onSave }: Props) {
   const [selectedDeckId, setSelectedDeckId] = useState<string>('');
   const [quantity, setQuantity] = useState(1);
   const [adding, setAdding] = useState(false);
   const [addSuccess, setAddSuccess] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editQuantity, setEditQuantity] = useState(card.quantity);
-  const [editCollectionType, setEditCollectionType] = useState<'paper' | 'arena'>(card.collectionType ?? 'paper');
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [displayQuantity, setDisplayQuantity] = useState(card.quantity);
 
   const handleAddCardToDeck = async () => {
     if (!selectedDeckId) return;
@@ -107,18 +109,8 @@ export default function CardPreviewModal({ card, onClose, decks = [] }: Props) {
 
   const handleSaveCollectionChanges = async () => {
     setSaving(true);
+    await new Promise(r => setTimeout(r, 50));
     try {
-      // Update collection type if changed
-      if (editCollectionType !== (card.collectionType ?? 'paper')) {
-        const res = await fetch('/api/card/update-collection', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: card.name, collectionType: editCollectionType }),
-        });
-        if (!res.ok) throw new Error('Failed to update collection type');
-      }
-
-      // Update quantity if changed
       if (editQuantity !== card.quantity) {
         const res = await fetch('/api/card/update-quantity', {
           method: 'PATCH',
@@ -128,7 +120,13 @@ export default function CardPreviewModal({ card, onClose, decks = [] }: Props) {
         if (!res.ok) throw new Error('Failed to update quantity');
       }
 
-      setIsEditing(false);
+      setDisplayQuantity(editQuantity);
+      onSave?.({ quantity: editQuantity });
+      setSaved(true);
+      setTimeout(() => {
+        setIsEditing(false);
+        setSaved(false);
+      }, 800);
     } catch (err) {
       console.error('Error saving changes:', err);
       alert(err instanceof Error ? err.message : 'Failed to save changes');
@@ -286,22 +284,14 @@ export default function CardPreviewModal({ card, onClose, decks = [] }: Props) {
                   <div className="flex items-center gap-4">
                     <div>
                       <p className="text-xs text-zinc-500">Quantity Owned</p>
-                      <p className="text-xl font-bold text-zinc-100">×{card.quantity}</p>
+                      <p className="text-xl font-bold text-zinc-100">×{displayQuantity}</p>
                     </div>
                     <div>
                       <p className="text-xs text-zinc-500">Total Value</p>
                       <p className="text-xl font-bold text-amber-400">
-                        ${(card.quantity * (card.priceUsd ?? 0)).toFixed(2)}
+                        ${(displayQuantity * (card.priceUsd ?? 0)).toFixed(2)}
                       </p>
                     </div>
-                    {card.collectionType && (
-                      <div className="ml-auto">
-                        <p className="text-xs text-zinc-500">Type</p>
-                        <p className="text-sm font-semibold">
-                          {card.collectionType === 'paper' ? '📄 Paper' : '⚡ Arena'}
-                        </p>
-                      </div>
-                    )}
                   </div>
                 </>
               ) : (
@@ -318,40 +308,12 @@ export default function CardPreviewModal({ card, onClose, decks = [] }: Props) {
                       className="w-full mt-1 bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-100"
                     />
                   </div>
-                  <div>
-                    <label className="text-xs text-zinc-500">Collection Type</label>
-                    <div className="flex gap-2 mt-1">
-                      <button
-                        type="button"
-                        onClick={() => setEditCollectionType('paper')}
-                        className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                          editCollectionType === 'paper'
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200'
-                        }`}
-                      >
-                        📄 Paper
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setEditCollectionType('arena')}
-                        className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                          editCollectionType === 'arena'
-                            ? 'bg-purple-600 text-white'
-                            : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200'
-                        }`}
-                      >
-                        ⚡ Arena
-                      </button>
-                    </div>
-                  </div>
                   <div className="flex gap-2">
                     <button
                       type="button"
                       onClick={() => {
                         setIsEditing(false);
                         setEditQuantity(card.quantity);
-                        setEditCollectionType(card.collectionType ?? 'paper');
                       }}
                       disabled={saving}
                       className="flex-1 px-3 py-2 rounded-lg border border-zinc-700 text-zinc-300 hover:border-zinc-600 text-sm transition-colors disabled:opacity-50"
@@ -361,10 +323,15 @@ export default function CardPreviewModal({ card, onClose, decks = [] }: Props) {
                     <button
                       type="button"
                       onClick={handleSaveCollectionChanges}
-                      disabled={saving}
-                      className="flex-1 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium text-sm transition-colors disabled:opacity-50"
+                      disabled={saving || saved}
+                      className={`flex-1 px-3 py-2 rounded-lg font-medium text-sm transition-colors disabled:opacity-50 ${saved ? 'bg-emerald-500 text-white' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}
                     >
-                      {saving ? 'Saving…' : 'Save'}
+                      {saving ? (
+                        <span className="inline-flex items-center gap-1">
+                          <span className="inline-block w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></span>
+                          Saving…
+                        </span>
+                      ) : saved ? '✓ Saved!' : 'Save'}
                     </button>
                   </div>
                 </div>

@@ -41,18 +41,18 @@ export interface CommanderPlayerState {
   manaPool: number;
 }
 
-export type GameStatus = 'deck-select' | 'deck-building' | 'mulligan' | 'playing' | 'playerWon' | 'shahrazadWon' | 'draw';
+export type GameStatus = 'deck-select' | 'deck-building' | 'mulligan' | 'playing' | 'playerWon' | 'khoaWon' | 'draw';
 
 export interface CommanderGameState {
   playerState: CommanderPlayerState;
-  shahrazadState: CommanderPlayerState;
+  khoaState: CommanderPlayerState;
   currentPhase: GamePhase;
-  currentPlayer: 'player' | 'shahrazad';
+  currentPlayer: 'player' | 'khoa';
   turn: number;
   status: GameStatus;
   log: string[];
   stack: GameCard[]; // Cards/abilities on the stack
-  mulligans: { player: number; shahrazad: number }; // Track mulligans taken
+  mulligans: { player: number; khoa: number }; // Track mulligans taken
 }
 
 export type GameAction =

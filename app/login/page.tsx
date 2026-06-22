@@ -40,7 +40,7 @@ export default function LoginPage() {
 
         <div className="text-center">
           <h1 className="text-2xl font-black">
-            <span className="text-amber-400">MTG</span> Deck Finder
+            <span className="text-amber-400">Grimoire</span>
           </h1>
           <p className="text-zinc-500 text-sm mt-1">Enter passcode</p>
         </div>

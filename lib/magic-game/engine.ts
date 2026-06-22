@@ -31,20 +31,20 @@ function createPlayerState(deck: Card[]): PlayerState {
  */
 export function initializeGame(): GameState {
   const playerDeck = generateStarterDeck();
-  const shahrazadDeck = generateStarterDeck();
+  const khoaDeck = generateStarterDeck();
 
   const playerState = createPlayerState(playerDeck);
-  const shahrazadState = createPlayerState(shahrazadDeck);
+  const khoaState = createPlayerState(khoaDeck);
 
   // Draw opening hands (7 cards)
   for (let i = 0; i < 7; i++) {
     drawCard(playerState);
-    drawCard(shahrazadState);
+    drawCard(khoaState);
   }
 
   const game: GameState = {
     playerState,
-    shahrazadState,
+    khoaState,
     currentPhase: 'draw',
     currentPlayer: 'player',
     turn: 1,
@@ -93,7 +93,7 @@ export function refreshMana(player: PlayerState): void {
  * Play a land from hand
  */
 export function playLand(game: GameState, instanceId: string): boolean {
-  const player = game.currentPlayer === 'player' ? game.playerState : game.shahrazadState;
+  const player = game.currentPlayer === 'player' ? game.playerState : game.khoaState;
   const cardIndex = player.hand.findIndex((c) => c.instanceId === instanceId);
 
   if (cardIndex === -1 || player.hand[cardIndex].type !== 'land') {
@@ -118,7 +118,7 @@ export function playLand(game: GameState, instanceId: string): boolean {
  * Play a creature from hand
  */
 export function playCreature(game: GameState, instanceId: string): boolean {
-  const player = game.currentPlayer === 'player' ? game.playerState : game.shahrazadState;
+  const player = game.currentPlayer === 'player' ? game.playerState : game.khoaState;
   const cardIndex = player.hand.findIndex((c) => c.instanceId === instanceId);
 
   if (cardIndex === -1) {
@@ -147,8 +147,8 @@ export function playCreature(game: GameState, instanceId: string): boolean {
  * Cast a spell (damage, draw, removal, etc)
  */
 export function castSpell(game: GameState, instanceId: string, targetId?: string): boolean {
-  const player = game.currentPlayer === 'player' ? game.playerState : game.shahrazadState;
-  const opponent = game.currentPlayer === 'player' ? game.shahrazadState : game.playerState;
+  const player = game.currentPlayer === 'player' ? game.playerState : game.khoaState;
+  const opponent = game.currentPlayer === 'player' ? game.khoaState : game.playerState;
   const cardIndex = player.hand.findIndex((c) => c.instanceId === instanceId);
 
   if (cardIndex === -1) {
@@ -219,7 +219,7 @@ export function declareAttackers(game: GameState, creatureInstanceIds: string[])
     return false;
   }
 
-  const player = game.currentPlayer === 'player' ? game.playerState : game.shahrazadState;
+  const player = game.currentPlayer === 'player' ? game.playerState : game.khoaState;
 
   // Validate all creatures are on board and are creatures
   for (const id of creatureInstanceIds) {
@@ -238,7 +238,7 @@ export function declareAttackers(game: GameState, creatureInstanceIds: string[])
  * Declare a blocker for an attacker
  */
 export function declareBlocker(game: GameState, attackerId: string, blockerId: string): boolean {
-  const opponent = game.currentPlayer === 'player' ? game.shahrazadState : game.playerState;
+  const opponent = game.currentPlayer === 'player' ? game.khoaState : game.playerState;
 
   const blocker = opponent.board.find((c) => c.instanceId === blockerId && c.type === 'creature');
   if (!blocker) {
@@ -253,8 +253,8 @@ export function declareBlocker(game: GameState, attackerId: string, blockerId: s
  * Resolve combat
  */
 export function resolveCombat(game: GameState): void {
-  const attacker = game.currentPlayer === 'player' ? game.playerState : game.shahrazadState;
-  const defender = game.currentPlayer === 'player' ? game.shahrazadState : game.playerState;
+  const attacker = game.currentPlayer === 'player' ? game.playerState : game.khoaState;
+  const defender = game.currentPlayer === 'player' ? game.khoaState : game.playerState;
 
   for (const attackerId of game.selectedAttackers) {
     const attackerCard = attacker.board.find((c) => c.instanceId === attackerId);
@@ -303,9 +303,9 @@ export function endPhase(game: GameState): void {
   if (game.currentPhase === 'draw') {
     // Next turn
     game.turn += 1;
-    game.currentPlayer = game.currentPlayer === 'player' ? 'shahrazad' : 'player';
+    game.currentPlayer = game.currentPlayer === 'player' ? 'khoa' : 'player';
 
-    const player = game.currentPlayer === 'player' ? game.playerState : game.shahrazadState;
+    const player = game.currentPlayer === 'player' ? game.playerState : game.khoaState;
     drawCard(player);
     refreshMana(player);
     player.landsPlayedThisTurn = 0;
@@ -319,9 +319,9 @@ export function endPhase(game: GameState): void {
  */
 export function checkWinConditions(game: GameState): void {
   if (game.playerState.life <= 0) {
-    game.status = 'shahrazadWon';
-    game.log.push('Shahrazad wins!');
-  } else if (game.shahrazadState.life <= 0) {
+    game.status = 'khoaWon';
+    game.log.push('Khoa wins!');
+  } else if (game.khoaState.life <= 0) {
     game.status = 'playerWon';
     game.log.push('You win!');
   }

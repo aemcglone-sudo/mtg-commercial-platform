@@ -2,7 +2,7 @@
  * Magic Agent - Database Query Helpers
  *
  * Type-safe database functions for all agent tables.
- * Wraps the libsql client with convenience methods for common operations.
+ * Wraps the Prisma client with convenience methods for common operations.
  */
 
 import { findOne, findMany, run } from '@/lib/db';
@@ -21,9 +21,6 @@ import {
 // PRICE HISTORY QUERIES
 // ============================================================================
 
-/**
- * Store a price snapshot for a card
- */
 export async function recordPriceSnapshot(
   cardName: string,
   source: 'scryfall' | 'tcgplayer' | 'cardmarket',
@@ -32,15 +29,12 @@ export async function recordPriceSnapshot(
 ): Promise<void> {
   const id = crypto.randomUUID();
   await run(
-    `INSERT INTO price_history (id, cardName, source, priceUsd, priceFoilUsd, capturedAt)
-     VALUES (?, ?, ?, ?, ?, datetime('now'))`,
+    `INSERT INTO price_history (id, "cardName", source, "priceUsd", "priceFoilUsd", "capturedAt")
+     VALUES (?, ?, ?, ?, ?, NOW())`,
     [id, cardName, source, priceUsd, priceFoilUsd]
   );
 }
 
-/**
- * Get price history for a card (last N days)
- */
 export async function getPriceHistory(
   cardName: string,
   days: number = 30,
@@ -50,10 +44,10 @@ export async function getPriceHistory(
   const args = source ? [cardName, days, source] : [cardName, days];
 
   const rows = await findMany<any>(
-    `SELECT cardName, priceUsd as price, priceFoilUsd as foilPrice, capturedAt as date
+    `SELECT "cardName", "priceUsd" as price, "priceFoilUsd" as "foilPrice", "capturedAt" as date
      FROM price_history
-     WHERE cardName = ? AND capturedAt > datetime('now', '-' || ? || ' days')${sourceFilter}
-     ORDER BY capturedAt DESC`,
+     WHERE "cardName" = ? AND "capturedAt" > NOW() - (? * INTERVAL '1 day')${sourceFilter}
+     ORDER BY "capturedAt" DESC`,
     args
   );
 
@@ -65,18 +59,15 @@ export async function getPriceHistory(
   }));
 }
 
-/**
- * Get latest price for a card
- */
 export async function getLatestPrice(
   cardName: string,
   source: string = 'scryfall'
 ): Promise<PricePoint | null> {
   const row = await findOne<any>(
-    `SELECT cardName, priceUsd as price, priceFoilUsd as foilPrice, capturedAt as date
+    `SELECT "cardName", "priceUsd" as price, "priceFoilUsd" as "foilPrice", "capturedAt" as date
      FROM price_history
-     WHERE cardName = ? AND source = ?
-     ORDER BY capturedAt DESC
+     WHERE "cardName" = ? AND source = ?
+     ORDER BY "capturedAt" DESC
      LIMIT 1`,
     [cardName, source]
   );
@@ -94,9 +85,6 @@ export async function getLatestPrice(
 // DECK ANALYSIS QUERIES
 // ============================================================================
 
-/**
- * Save deck analysis
- */
 export async function saveDeckAnalysis(
   userId: string,
   deckId: string,
@@ -105,9 +93,9 @@ export async function saveDeckAnalysis(
   const id = crypto.randomUUID();
   await run(
     `INSERT INTO deck_analysis (
-      id, userId, deckId, avgManaCost, colorIdentity, creatureCount,
-      spellCount, landCount, synergiesDetected, metaScore, tourneyAppearances,
-      successRate, playedDate, notes
+      id, "userId", "deckId", "avgManaCost", "colorIdentity", "creatureCount",
+      "spellCount", "landCount", "synergiesDetected", "metaScore", "tourneyAppearances",
+      "successRate", "playedDate", notes
      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       id,
@@ -128,12 +116,9 @@ export async function saveDeckAnalysis(
   );
 }
 
-/**
- * Get deck analysis
- */
 export async function getDeckAnalysis(deckId: string): Promise<DeckAnalysis | null> {
   const row = await findOne<any>(
-    `SELECT * FROM deck_analysis WHERE deckId = ? ORDER BY analyzedAt DESC LIMIT 1`,
+    `SELECT * FROM deck_analysis WHERE "deckId" = ? ORDER BY "analyzedAt" DESC LIMIT 1`,
     [deckId]
   );
 
@@ -147,12 +132,9 @@ export async function getDeckAnalysis(deckId: string): Promise<DeckAnalysis | nu
   };
 }
 
-/**
- * Get all analyses for a user
- */
 export async function getUserDeckAnalyses(userId: string): Promise<DeckAnalysis[]> {
   const rows = await findMany<any>(
-    `SELECT * FROM deck_analysis WHERE userId = ? ORDER BY analyzedAt DESC`,
+    `SELECT * FROM deck_analysis WHERE "userId" = ? ORDER BY "analyzedAt" DESC`,
     [userId]
   );
 
@@ -169,19 +151,13 @@ export async function getUserDeckAnalyses(userId: string): Promise<DeckAnalysis[
 // CARD SYNERGY QUERIES
 // ============================================================================
 
-/**
- * Get synergies for a card
- */
 export async function getCardSynergies(cardName: string): Promise<CardSynergy[]> {
   return findMany<CardSynergy>(
-    `SELECT * FROM card_synergies WHERE cardName = ? ORDER BY strength DESC`,
+    `SELECT * FROM card_synergies WHERE "cardName" = ? ORDER BY strength DESC`,
     [cardName]
   );
 }
 
-/**
- * Add card synergy (used for pre-computing from EDHREC, tournaments, etc.)
- */
 export async function addCardSynergy(
   cardName: string,
   synergyPartner: string,
@@ -191,23 +167,20 @@ export async function addCardSynergy(
 ): Promise<void> {
   const id = crypto.randomUUID();
   await run(
-    `INSERT INTO card_synergies (id, cardName, synergyPartner, synergyType, strength, note)
+    `INSERT INTO card_synergies (id, "cardName", "synergyPartner", "synergyType", strength, note)
      VALUES (?, ?, ?, ?, ?, ?)`,
     [id, cardName, synergyPartner, synergyType, strength, note || null]
   );
 }
 
-/**
- * Find mutual synergies between cards in a deck
- */
 export async function findDeckSynergies(deckCards: string[]): Promise<CardSynergy[]> {
   if (deckCards.length === 0) return [];
 
   const placeholders = deckCards.map(() => '?').join(',');
   return findMany<CardSynergy>(
     `SELECT * FROM card_synergies
-     WHERE cardName IN (${placeholders})
-     AND synergyPartner IN (${placeholders})
+     WHERE "cardName" IN (${placeholders})
+     AND "synergyPartner" IN (${placeholders})
      ORDER BY strength DESC`,
     [...deckCards, ...deckCards]
   );
@@ -217,12 +190,9 @@ export async function findDeckSynergies(deckCards: string[]): Promise<CardSynerg
 // USER PREFERENCES QUERIES
 // ============================================================================
 
-/**
- * Get or create user preferences
- */
 export async function getUserPreferences(userId: string): Promise<UserPreferences | null> {
   const row = await findOne<any>(
-    `SELECT * FROM user_preferences WHERE userId = ?`,
+    `SELECT * FROM user_preferences WHERE "userId" = ?`,
     [userId]
   );
 
@@ -235,9 +205,6 @@ export async function getUserPreferences(userId: string): Promise<UserPreference
   };
 }
 
-/**
- * Update user preferences
- */
 export async function updateUserPreferences(
   userId: string,
   preferences: Partial<UserPreferences>
@@ -245,13 +212,12 @@ export async function updateUserPreferences(
   const existing = await getUserPreferences(userId);
 
   if (!existing) {
-    // Create new
     const id = crypto.randomUUID();
     await run(
       `INSERT INTO user_preferences (
-        id, userId, favoriteFormats, playStyle, budgetRange, collectorOrPlayer,
-        acceptanceRate, averageDeckTurnaround, colorPreferences, updatedAt
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+        id, "userId", "favoriteFormats", "playStyle", "budgetRange", "collectorOrPlayer",
+        "acceptanceRate", "averageDeckTurnaround", "colorPreferences", "updatedAt"
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
       [
         id,
         userId,
@@ -265,37 +231,36 @@ export async function updateUserPreferences(
       ]
     );
   } else {
-    // Update existing
     const updates: string[] = [];
     const values: any[] = [];
 
     if (preferences.favoriteFormats !== undefined) {
-      updates.push('favoriteFormats = ?');
+      updates.push('"favoriteFormats" = ?');
       values.push(preferences.favoriteFormats ? JSON.stringify(preferences.favoriteFormats) : null);
     }
     if (preferences.playStyle !== undefined) {
-      updates.push('playStyle = ?');
+      updates.push('"playStyle" = ?');
       values.push(preferences.playStyle);
     }
     if (preferences.budgetRange !== undefined) {
-      updates.push('budgetRange = ?');
+      updates.push('"budgetRange" = ?');
       values.push(preferences.budgetRange);
     }
     if (preferences.acceptanceRate !== undefined) {
-      updates.push('acceptanceRate = ?');
+      updates.push('"acceptanceRate" = ?');
       values.push(preferences.acceptanceRate);
     }
     if (preferences.colorPreferences !== undefined) {
-      updates.push('colorPreferences = ?');
+      updates.push('"colorPreferences" = ?');
       values.push(preferences.colorPreferences ? JSON.stringify(preferences.colorPreferences) : null);
     }
 
     if (updates.length > 0) {
-      updates.push('updatedAt = datetime("now")');
+      updates.push('"updatedAt" = NOW()');
       values.push(userId);
 
       await run(
-        `UPDATE user_preferences SET ${updates.join(', ')} WHERE userId = ?`,
+        `UPDATE user_preferences SET ${updates.join(', ')} WHERE "userId" = ?`,
         values
       );
     }
@@ -306,9 +271,6 @@ export async function updateUserPreferences(
 // SUGGESTION QUERIES
 // ============================================================================
 
-/**
- * Record a suggestion for a user
- */
 export async function recordSuggestion(
   userId: string,
   suggestionType: Suggestion['suggestionType'],
@@ -318,57 +280,48 @@ export async function recordSuggestion(
 ): Promise<string> {
   const id = crypto.randomUUID();
   await run(
-    `INSERT INTO suggestions (id, userId, deckId, cardName, suggestionType, reason, suggestedAt)
-     VALUES (?, ?, ?, ?, ?, ?, datetime('now'))`,
+    `INSERT INTO suggestions (id, "userId", "deckId", "cardName", "suggestionType", reason, "suggestedAt")
+     VALUES (?, ?, ?, ?, ?, ?, NOW())`,
     [id, userId, deckId || null, cardName || null, suggestionType, reason]
   );
   return id;
 }
 
-/**
- * Mark suggestion as adopted
- */
 export async function markSuggestionAdopted(
   suggestionId: string,
   feedback?: string
 ): Promise<void> {
   await run(
     `UPDATE suggestions
-     SET adopted = 1, adoptedAt = datetime('now'), userFeedback = ?
+     SET adopted = TRUE, "adoptedAt" = NOW(), "userFeedback" = ?
      WHERE id = ?`,
     [feedback || null, suggestionId]
   );
 }
 
-/**
- * Get user's suggestion history
- */
 export async function getUserSuggestions(
   userId: string,
   limit: number = 50
 ): Promise<Suggestion[]> {
   return findMany<Suggestion>(
-    `SELECT * FROM suggestions WHERE userId = ? ORDER BY suggestedAt DESC LIMIT ?`,
+    `SELECT * FROM suggestions WHERE "userId" = ? ORDER BY "suggestedAt" DESC LIMIT ?`,
     [userId, limit]
   );
 }
 
-/**
- * Get adoption rate for a suggestion type
- */
 export async function getSuggestionAdoptionRate(
   userId: string,
   suggestionType?: string
 ): Promise<number> {
-  const typeFilter = suggestionType ? ` AND suggestionType = ?` : '';
+  const typeFilter = suggestionType ? ` AND "suggestionType" = ?` : '';
   const args = suggestionType ? [userId, suggestionType] : [userId];
 
   const row = await findOne<any>(
     `SELECT
-      COUNT(CASE WHEN adopted = 1 THEN 1 END) as adopted,
+      COUNT(CASE WHEN adopted = TRUE THEN 1 END) as adopted,
       COUNT(*) as total
      FROM suggestions
-     WHERE userId = ?${typeFilter}`,
+     WHERE "userId" = ?${typeFilter}`,
     args
   );
 
@@ -380,14 +333,11 @@ export async function getSuggestionAdoptionRate(
 // BANNED LIST QUERIES
 // ============================================================================
 
-/**
- * Get current banned/restricted cards for a format
- */
 export async function getBannedList(
   format: string
 ): Promise<BannedListSnapshot | null> {
   const row = await findOne<any>(
-    `SELECT * FROM banned_list_snapshots WHERE format = ? ORDER BY snapshotDate DESC LIMIT 1`,
+    `SELECT * FROM banned_list_snapshots WHERE format = ? ORDER BY "snapshotDate" DESC LIMIT 1`,
     [format]
   );
 
@@ -400,9 +350,6 @@ export async function getBannedList(
   };
 }
 
-/**
- * Update banned list for a format
- */
 export async function updateBannedList(
   format: string,
   bannedCards: string[],
@@ -410,8 +357,8 @@ export async function updateBannedList(
 ): Promise<void> {
   const id = crypto.randomUUID();
   await run(
-    `INSERT INTO banned_list_snapshots (id, format, bannedCards, restrictedCards, snapshotDate)
-     VALUES (?, ?, ?, ?, datetime('now'))`,
+    `INSERT INTO banned_list_snapshots (id, format, "bannedCards", "restrictedCards", "snapshotDate")
+     VALUES (?, ?, ?, ?, NOW())`,
     [
       id,
       format,
@@ -421,9 +368,6 @@ export async function updateBannedList(
   );
 }
 
-/**
- * Check if a card is banned in a format
- */
 export async function isCardBanned(
   cardName: string,
   format: string
@@ -437,24 +381,19 @@ export async function isCardBanned(
 // COMMUNITY VENUE QUERIES
 // ============================================================================
 
-/**
- * Find venues near a location
- */
 export async function findNearbyVenues(
   latitude: number,
   longitude: number,
   radiusMiles: number = 25
 ): Promise<CommunityVenue[]> {
-  // Simple bounding box search (not true distance, but fast)
-  // Real implementation would use proper geo queries
-  const latDelta = radiusMiles / 69; // Roughly 69 miles per degree latitude
+  const latDelta = radiusMiles / 69;
   const lonDelta = radiusMiles / (69 * Math.cos(latitude * Math.PI / 180));
 
   return findMany<any>(
     `SELECT * FROM community_venues
      WHERE latitude BETWEEN ? AND ?
      AND longitude BETWEEN ? AND ?
-     ORDER BY userRating DESC NULLS LAST`,
+     ORDER BY "userRating" DESC NULLS LAST`,
     [
       latitude - latDelta,
       latitude + latDelta,
@@ -464,9 +403,6 @@ export async function findNearbyVenues(
   );
 }
 
-/**
- * Find venues in a city
- */
 export async function findVenuesInCity(
   city: string,
   state: string
@@ -474,28 +410,22 @@ export async function findVenuesInCity(
   return findMany<any>(
     `SELECT * FROM community_venues
      WHERE LOWER(city) = LOWER(?) AND LOWER(state) = LOWER(?)
-     ORDER BY userRating DESC NULLS LAST`,
+     ORDER BY "userRating" DESC NULLS LAST`,
     [city, state]
   );
 }
 
-/**
- * Find venues by format
- */
 export async function findVenuesByFormat(
   format: string
 ): Promise<CommunityVenue[]> {
   return findMany<any>(
     `SELECT * FROM community_venues
      WHERE formats LIKE ?
-     ORDER BY userRating DESC NULLS LAST`,
-    ['%' + format + '%'] // Simple JSON array search
+     ORDER BY "userRating" DESC NULLS LAST`,
+    ['%' + format + '%']
   );
 }
 
-/**
- * Add or update a venue
- */
 export async function upsertVenue(venue: Partial<CommunityVenue>): Promise<string> {
   const id = venue.id || crypto.randomUUID();
 
@@ -505,7 +435,6 @@ export async function upsertVenue(venue: Partial<CommunityVenue>): Promise<strin
   );
 
   if (existing) {
-    // Update
     const updates: string[] = [];
     const values: any[] = [];
 
@@ -514,11 +443,11 @@ export async function upsertVenue(venue: Partial<CommunityVenue>): Promise<strin
       values.push(venue.name);
     }
     if (venue.userRating !== undefined) {
-      updates.push('userRating = ?');
+      updates.push('"userRating" = ?');
       values.push(venue.userRating);
     }
     if (venue.reviewCount !== undefined) {
-      updates.push('reviewCount = ?');
+      updates.push('"reviewCount" = ?');
       values.push(venue.reviewCount);
     }
     if (venue.formats) {
@@ -534,11 +463,10 @@ export async function upsertVenue(venue: Partial<CommunityVenue>): Promise<strin
       );
     }
   } else {
-    // Insert
     await run(
       `INSERT INTO community_venues (
-        id, name, address, city, state, zipCode, latitude, longitude,
-        formats, eventTypes, website, phone
+        id, name, address, city, state, "zipCode", latitude, longitude,
+        formats, "eventTypes", website, phone
        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,

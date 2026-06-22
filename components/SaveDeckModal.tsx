@@ -5,15 +5,16 @@ import { useState } from 'react';
 interface SaveDeckModalProps {
   isOpen: boolean;
   cards: Record<string, number>;
-  onSave: (name: string, format: string) => Promise<void>;
+  onSave: (name: string, format: string, deckType: 'paper' | 'arena') => Promise<void>;
   onClose: () => void;
 }
 
-const FORMATS = ['Standard', 'Pioneer', 'Modern', 'Legacy', 'Commander', 'Casual'];
+const FORMATS = ['Standard', 'Pioneer', 'Modern', 'Legacy', 'Commander', 'Brawl', 'Casual'];
 
 export default function SaveDeckModal({ isOpen, cards, onSave, onClose }: SaveDeckModalProps) {
   const [name, setName] = useState('');
   const [format, setFormat] = useState('Commander');
+  const [deckType, setDeckType] = useState<'paper' | 'arena'>('paper');
   const [saving, setSaving] = useState(false);
 
   if (!isOpen) return null;
@@ -24,7 +25,7 @@ export default function SaveDeckModal({ isOpen, cards, onSave, onClose }: SaveDe
     if (!name.trim()) return;
     setSaving(true);
     try {
-      await onSave(name, format);
+      await onSave(name, format, deckType);
       setName('');
       onClose();
     } finally {
@@ -65,6 +66,28 @@ export default function SaveDeckModal({ isOpen, cards, onSave, onClose }: SaveDe
               <option key={f} value={f}>{f}</option>
             ))}
           </select>
+        </div>
+
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-zinc-300">Deck Type</label>
+          <div className="flex bg-zinc-800 border border-zinc-700 rounded-lg overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setDeckType('paper')}
+              disabled={saving}
+              className={`flex-1 py-2 text-sm font-medium transition-colors ${deckType === 'paper' ? 'bg-amber-400 text-black' : 'text-zinc-400 hover:text-zinc-200'}`}
+            >
+              📄 Paper
+            </button>
+            <button
+              type="button"
+              onClick={() => setDeckType('arena')}
+              disabled={saving}
+              className={`flex-1 py-2 text-sm font-medium transition-colors ${deckType === 'arena' ? 'bg-purple-500 text-white' : 'text-zinc-400 hover:text-zinc-200'}`}
+            >
+              ⚡ Arena
+            </button>
+          </div>
         </div>
 
         <div className="text-sm text-zinc-400">

@@ -1,5 +1,5 @@
 /**
- * Shahrazad AI
+ * Khoa AI
  * Decision-making for the opponent
  */
 
@@ -20,11 +20,11 @@ function calculateBoardValue(creatures: CardInstance[]): number {
  * Decide which lands to play
  */
 export function aiPlayLands(game: GameState): string[] {
-  const shahrazad = game.shahrazadState;
-  const landCards = shahrazad.hand.filter((c) => c.type === 'land');
+  const khoa = game.khoaState;
+  const landCards = khoa.hand.filter((c) => c.type === 'land');
 
   // Play lands if we have played fewer than 1 land this turn
-  if (shahrazad.landsPlayedThisTurn < 1 && landCards.length > 0) {
+  if (khoa.landsPlayedThisTurn < 1 && landCards.length > 0) {
     return [landCards[0].instanceId];
   }
 
@@ -35,16 +35,16 @@ export function aiPlayLands(game: GameState): string[] {
  * Decide which creatures to play
  */
 export function aiPlayCreatures(game: GameState): string[] {
-  const shahrazad = game.shahrazadState;
-  const playable = shahrazad.hand
-    .filter((c) => c.type === 'creature' && shahrazad.manaPool >= c.manaCost)
+  const khoa = game.khoaState;
+  const playable = khoa.hand
+    .filter((c) => c.type === 'creature' && khoa.manaPool >= c.manaCost)
     .sort((a, b) => (a.manaCost || 0) - (b.manaCost || 0)); // Play cheapest first
 
   const toPlay: string[] = [];
   for (const creature of playable) {
-    if (shahrazad.manaPool >= creature.manaCost) {
+    if (khoa.manaPool >= creature.manaCost) {
       toPlay.push(creature.instanceId);
-      shahrazad.manaPool -= creature.manaCost;
+      khoa.manaPool -= creature.manaCost;
     }
   }
 
@@ -55,32 +55,32 @@ export function aiPlayCreatures(game: GameState): string[] {
  * Decide which spells to play
  */
 export function aiPlaySpells(game: GameState): string[] {
-  const shahrazad = game.shahrazadState;
+  const khoa = game.khoaState;
   const player = game.playerState;
 
-  const spells = shahrazad.hand
-    .filter((c) => (c.type === 'sorcery' || c.type === 'instant') && shahrazad.manaPool >= c.manaCost)
+  const spells = khoa.hand
+    .filter((c) => (c.type === 'sorcery' || c.type === 'instant') && khoa.manaPool >= c.manaCost)
     .sort((a, b) => (b.manaCost || 0) - (a.manaCost || 0)); // Play expensive first (high impact)
 
   const toPlay: string[] = [];
 
   for (const spell of spells) {
-    if (shahrazad.manaPool < spell.manaCost) continue;
+    if (khoa.manaPool < spell.manaCost) continue;
 
     // Prioritize damage spells if opponent is low
     if (player.life <= 8 && ['Shock', 'Lightning Bolt', 'Fireball'].includes(spell.name)) {
       toPlay.push(spell.instanceId);
-      shahrazad.manaPool -= spell.manaCost;
+      khoa.manaPool -= spell.manaCost;
     }
     // Play draw spells if we're running low on cards
-    else if (shahrazad.hand.length <= 3 && ['Ponder', 'Divination'].includes(spell.name)) {
+    else if (khoa.hand.length <= 3 && ['Ponder', 'Divination'].includes(spell.name)) {
       toPlay.push(spell.instanceId);
-      shahrazad.manaPool -= spell.manaCost;
+      khoa.manaPool -= spell.manaCost;
     }
     // Play removal if opponent has strong creatures
     else if (['Destroy', 'Bounce'].includes(spell.name) && player.board.length > 2) {
       toPlay.push(spell.instanceId);
-      shahrazad.manaPool -= spell.manaCost;
+      khoa.manaPool -= spell.manaCost;
     }
   }
 
@@ -91,10 +91,10 @@ export function aiPlaySpells(game: GameState): string[] {
  * Decide which creatures to attack with
  */
 export function aiSelectAttackers(game: GameState): string[] {
-  const shahrazad = game.shahrazadState;
+  const khoa = game.khoaState;
   const player = game.playerState;
 
-  const creatures = shahrazad.board.filter((c) => c.type === 'creature');
+  const creatures = khoa.board.filter((c) => c.type === 'creature');
 
   // Simple AI: attack if we have board advantage
   const ourPower = calculateBoardValue(creatures);
@@ -118,14 +118,14 @@ export function aiSelectBlockers(
   game: GameState,
   attackerIds: string[]
 ): Map<string, string> {
-  const shahrazad = game.shahrazadState;
+  const khoa = game.khoaState;
   const player = game.playerState;
 
   const blockers = new Map<string, string>();
   const availableBlockers = [...player.board.filter((c) => c.type === 'creature')];
 
   for (const attackerId of attackerIds) {
-    const attacker = shahrazad.board.find((c) => c.instanceId === attackerId);
+    const attacker = khoa.board.find((c) => c.instanceId === attackerId);
     if (!attacker) continue;
 
     // Find a blocker
@@ -143,14 +143,14 @@ export function aiSelectBlockers(
 }
 
 /**
- * Execute Shahrazad's turn
+ * Execute Khoa's turn
  */
 export function executeShaharazadTurn(game: GameState): void {
-  if (game.currentPlayer !== 'shahrazad' || game.status !== 'playing') {
+  if (game.currentPlayer !== 'khoa' || game.status !== 'playing') {
     return;
   }
 
-  game.log.push('Shahrazad is thinking...');
+  game.log.push('Khoa is thinking...');
 
   // Main phase
   if (game.currentPhase === 'main1') {

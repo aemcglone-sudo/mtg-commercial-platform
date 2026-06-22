@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import DeckCard from './DeckCard';
 import FormatTabs from './FormatTabs';
+import CardDetailModal from './CardDetailModal';
 import type { MatchedDeck } from '@/lib/deck-matcher';
 
 type DeckWithoutCards = Omit<MatchedDeck, 'cards'>;
@@ -20,13 +21,13 @@ interface Props {
 export default function DeckFinderTab({ decks, analyzing, error, onAnalyze, onDeckSelected, collection = [] }: Props) {
   const [formatFilter, setFormatFilter] = useState<FormatFilter>('All');
   const [selectedDeck, setSelectedDeck] = useState<DeckWithoutCards | null>(null);
+  const [selectedCard, setSelectedCard] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [deckName, setDeckName] = useState('');
   const [strategy, setStrategy] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [saveSuccess, setSaveSuccess] = useState('');
-  const [collectionType, setCollectionType] = useState<'paper' | 'arena'>('paper');
 
   const filterByFormat = (list: DeckWithoutCards[]) =>
     formatFilter === 'All' ? list : list.filter((d) => d.format === formatFilter);
@@ -90,12 +91,19 @@ export default function DeckFinderTab({ decks, analyzing, error, onAnalyze, onDe
   // ── Analyzing ──────────────────────────────────────────────────────────────
   if (analyzing) {
     return (
-      <div className="text-center py-32 space-y-4">
+      <div className="text-center py-24 space-y-6">
         <div className="text-5xl animate-pulse">🔍</div>
-        <p className="text-zinc-300 font-medium">Fetching the latest metagame…</p>
-        <p className="text-zinc-600 text-sm">
-          Pulling deck lists from MTGTop8 and EDHREC, matching against your collection.
-        </p>
+        <div className="space-y-2">
+          <p className="text-zinc-100 font-semibold text-lg">Fetching the latest metagame…</p>
+          <p className="text-zinc-500 text-sm">
+            Pulling deck lists from MTGTop8 and EDHREC, matching against your collection.
+          </p>
+        </div>
+        <div className="flex items-center justify-center gap-1.5 pt-2">
+          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-bounce [animation-delay:0ms]" />
+          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-bounce [animation-delay:150ms]" />
+          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-bounce [animation-delay:300ms]" />
+        </div>
       </div>
     );
   }
@@ -104,40 +112,21 @@ export default function DeckFinderTab({ decks, analyzing, error, onAnalyze, onDe
   return (
     <div className="space-y-6">
 
-      {/* Format filter + Collection type toggle */}
+      {/* Format filter */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <FormatTabs
           tabs={formatTabs}
           active={formatFilter}
           onChange={(id) => setFormatFilter(id as FormatFilter)}
         />
-        <div className="flex items-center gap-3">
-          {/* Collection type toggle */}
-          <div className="flex bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden text-sm">
-            <button
-              type="button"
-              onClick={() => setCollectionType('paper')}
-              className={`px-3 py-1.5 transition-colors ${collectionType === 'paper' ? 'bg-amber-400 text-black font-medium' : 'text-zinc-400 hover:text-zinc-200'}`}
-            >
-              📄 Paper
-            </button>
-            <button
-              type="button"
-              onClick={() => setCollectionType('arena')}
-              className={`px-3 py-1.5 transition-colors ${collectionType === 'arena' ? 'bg-amber-400 text-black font-medium' : 'text-zinc-400 hover:text-zinc-200'}`}
-            >
-              ⚡ Arena
-            </button>
-          </div>
-          <button
-            type="button"
-            onClick={onAnalyze}
-            className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
-            title="Refresh with latest metagame data"
-          >
-            ↺ Re-run analysis
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={onAnalyze}
+          className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
+          title="Refresh with latest metagame data"
+        >
+          ↺ Re-run analysis
+        </button>
       </div>
 
       {/* Best Decks */}
@@ -161,8 +150,8 @@ export default function DeckFinderTab({ decks, analyzing, error, onAnalyze, onDe
                 key={deck.id}
                 deck={deck}
                 rank={i}
-                collectionType={collectionType}
                 collection={collection}
+                onCardClick={setSelectedCard}
                 onSave={() => {
                   setSelectedDeck(deck);
                   setDeckName(deck.name);
@@ -285,6 +274,14 @@ export default function DeckFinderTab({ decks, analyzing, error, onAnalyze, onDe
             </div>
           </div>
         </div>
+      )}
+
+      {selectedCard && (
+        <CardDetailModal
+          cardName={selectedCard}
+          onClose={() => setSelectedCard(null)}
+          collectionCard={null}
+        />
       )}
     </div>
   );

@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
 
     await run(
       `INSERT INTO users (id, username, email, "passwordHash", "createdAt", "updatedAt")
-       VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))`,
+       VALUES (?, ?, ?, ?, NOW(), NOW())`,
       [id, username.toLowerCase(), email.toLowerCase(), passwordHash]
     );
 

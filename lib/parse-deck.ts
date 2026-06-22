@@ -56,6 +56,11 @@ export function parseDeckFromText(text: string): DeckSuggestion | null {
         cardName = cardName.split('(')[0].trim();
       }
 
+      // Remove bracket annotations: "Card [OWNED]", "Card [NEW]" -> "Card"
+      if (cardName.includes('[')) {
+        cardName = cardName.split('[')[0].trim();
+      }
+
       // Skip invalid entries
       if (cardName && !/^\d+$/.test(cardName) && cardName.length > 1 && !cardName.includes(':')) {
         cards[cardName] = (cards[cardName] || 0) + qty;

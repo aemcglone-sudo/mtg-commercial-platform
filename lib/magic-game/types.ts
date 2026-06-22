@@ -32,7 +32,7 @@ export interface CardInstance extends Card {
 // ============================================================================
 
 export type GamePhase = 'draw' | 'main1' | 'combat' | 'main2' | 'end';
-export type GameStatus = 'playing' | 'playerWon' | 'shahrazadWon';
+export type GameStatus = 'playing' | 'playerWon' | 'khoaWon';
 
 export interface PlayerState {
   life: number;
@@ -46,9 +46,9 @@ export interface PlayerState {
 
 export interface GameState {
   playerState: PlayerState;
-  shahrazadState: PlayerState;
+  khoaState: PlayerState;
   currentPhase: GamePhase;
-  currentPlayer: 'player' | 'shahrazad';
+  currentPlayer: 'player' | 'khoa';
   turn: number;
   status: GameStatus;
   log: string[]; // Game log for UI

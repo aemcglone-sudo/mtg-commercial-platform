@@ -10,11 +10,12 @@ import MyDecksTab from '@/components/MyDecksTab';
 import { CopilotSidebar } from '@/components/CopilotSidebar';
 import CardDetailModal from '@/components/CardDetailModal';
 import CollectionInsightsTab from '@/components/CollectionInsightsTab';
+import MTGNewsTab from '@/components/MTGNewsTab';
 import type { MatchedDeck } from '@/lib/deck-matcher';
-import type { DeckSummary } from '@/components/CardPreviewModal';
+import type { DeckSummary } from '@/components/CardDetailModal';
 
 type DeckWithoutCards = Omit<MatchedDeck, 'cards'>;
-type PortalTab = 'collection' | 'insights' | 'decks' | 'chat' | 'mydecks';
+type PortalTab = 'collection' | 'insights' | 'decks' | 'chat' | 'mydecks' | 'news';
 
 export interface CollectionResult {
   collectionSize: number;
@@ -34,7 +35,8 @@ const TABS: { id: PortalTab; label: string; icon: string }[] = [
   { id: 'insights',   label: 'Insights',      icon: '📊' },
   { id: 'mydecks',    label: 'My Decks & Lists', icon: '🎯' },
   { id: 'decks',      label: 'Top Decks',     icon: '⭐' },
-  { id: 'chat',       label: 'Ask Shahrazad', icon: '💬' },
+  { id: 'news',       label: 'News',          icon: '📰' },
+  { id: 'chat',       label: 'Ask Khoa',      icon: '💬' },
 ];
 
 export default function Home() {
@@ -78,7 +80,7 @@ export default function Home() {
   // Load saved collection and active tab on mount
   useEffect(() => {
     const savedTab = localStorage.getItem('activeTab') as PortalTab | null;
-    if (savedTab && ['collection', 'insights', 'decks', 'chat', 'mydecks'].includes(savedTab)) {
+    if (savedTab && ['collection', 'insights', 'decks', 'chat', 'mydecks', 'news'].includes(savedTab)) {
       setActiveTab(savedTab);
     }
 
@@ -115,6 +117,16 @@ export default function Home() {
     setChatMessage(question);
     setActiveTab('chat');
   }
+
+  useEffect(() => {
+    function handleKhoaPrompt(e: Event) {
+      const prompt = (e as CustomEvent<string>).detail;
+      setChatMessage(prompt);
+      setActiveTab('chat');
+    }
+    window.addEventListener('khoa-prompt', handleKhoaPrompt);
+    return () => window.removeEventListener('khoa-prompt', handleKhoaPrompt);
+  }, []);
 
   // Auto-analyze decks when collection loads
   useEffect(() => {
@@ -156,7 +168,7 @@ export default function Home() {
           {/* Brand + collection badge */}
           <div className="flex items-center gap-2 sm:gap-3">
             <span className="text-lg sm:text-xl font-black tracking-tight">
-              <span className="text-amber-400">MTG</span><span className="hidden sm:inline"> Deck Finder</span>
+              <span className="text-amber-400">Grimoire</span>
             </span>
             {collection && (
               <span className="text-xs text-zinc-500 hidden sm:flex items-center gap-1.5">
@@ -177,7 +189,7 @@ export default function Home() {
                 type="button"
                 onClick={() => setCopilotOpen((v) => !v)}
                 className="hidden sm:block p-2 rounded-lg hover:bg-zinc-800 transition-colors text-zinc-400 hover:text-amber-400"
-                title="Open Shahrazad copilot"
+                title="Open Khoa copilot"
               >
                 🧙
               </button>
@@ -192,7 +204,7 @@ export default function Home() {
                 <span className="w-7 h-7 rounded-full bg-amber-400 text-black flex items-center justify-center font-bold text-xs">
                   M
                 </span>
-                <span className="hidden sm:block">MTG</span>
+                <span className="hidden sm:block">Grimoire</span>
                 <span className="text-xs text-zinc-600">{userMenuOpen ? '▲' : '▼'}</span>
               </button>
 
@@ -314,6 +326,7 @@ export default function Home() {
                 collection={collection?.collectionCards || []}
               />
             )}
+            {activeTab === 'news' && <MTGNewsTab />}
             {activeTab === 'chat' && collection && (
               <CollectionChatTab collection={collection} prefillMessage={chatMessage} onMessageSent={() => setChatMessage('')} />
             )}
@@ -323,7 +336,7 @@ export default function Home() {
                 <div className="space-y-2">
                   <h2 className="text-2xl font-bold">Upload a collection first</h2>
                   <p className="text-zinc-500 max-w-sm mx-auto">
-                    Shahrazad needs your collection to provide personalized advice.
+                    Khoa needs your collection to provide personalized advice.
                   </p>
                 </div>
                 <Link
@@ -357,6 +370,13 @@ export default function Home() {
           cardName={selectedCard}
           onClose={() => setSelectedCard(null)}
           collectionCard={collection?.collectionCards.find((c) => c.name === selectedCard)}
+          decks={userDecks}
+          onCollectionChange={() => {
+            fetch('/api/collection/saved')
+              .then(r => r.json())
+              .then(data => { if (data) setCollection(data); })
+              .catch(() => {});
+          }}
         />
       )}
     </main>

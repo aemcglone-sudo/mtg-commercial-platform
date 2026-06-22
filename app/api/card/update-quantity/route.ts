@@ -23,14 +23,14 @@ export async function PATCH(req: NextRequest) {
     if (quantity === 0) {
       // Delete the card if quantity is 0
       await run(
-        `DELETE FROM inventory_items WHERE userId = ? AND name = ? AND itemType = 'cards'`,
+        `DELETE FROM inventory_items WHERE "userId" = ? AND name = ? AND "itemType" = 'cards'`,
         [userId, name]
       );
     } else {
       // Update the quantity
       await run(
-        `UPDATE inventory_items SET quantity = ?, updatedAt = datetime('now')
-         WHERE userId = ? AND name = ? AND itemType = 'cards'`,
+        `UPDATE inventory_items SET quantity = ?, "updatedAt" = NOW()
+         WHERE "userId" = ? AND name = ? AND "itemType" = 'cards'`,
         [quantity, userId, name]
       );
     }

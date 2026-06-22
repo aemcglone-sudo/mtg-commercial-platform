@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const chats = await findMany<any>(
-      `SELECT id, title, createdAt, updatedAt FROM shahrazad_chats WHERE userId = ? ORDER BY updatedAt DESC LIMIT 50`,
+      `SELECT id, title, "createdAt", "updatedAt" FROM khoa_chats WHERE "userId" = ? ORDER BY "updatedAt" DESC LIMIT 50`,
       [userId]
     );
 
@@ -54,13 +54,14 @@ export async function POST(req: NextRequest) {
     const now = new Date().toISOString();
     const messagesJson = JSON.stringify(messages);
 
-    // Try update first, then insert if not found
-    const result = await run(
-      `INSERT OR REPLACE INTO shahrazad_chats (id, userId, title, messages, createdAt, updatedAt)
-       VALUES (?, ?, ?, ?,
-         COALESCE((SELECT createdAt FROM shahrazad_chats WHERE id = ?), ?),
-         ?)`,
-      [id, userId, title, messagesJson, id, now, now]
+    await run(
+      `INSERT INTO khoa_chats (id, "userId", title, messages, "createdAt", "updatedAt")
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT (id) DO UPDATE SET
+         title = EXCLUDED.title,
+         messages = EXCLUDED.messages,
+         "updatedAt" = EXCLUDED."updatedAt"`,
+      [id, userId, title, messagesJson, now, now]
     );
 
     return NextResponse.json({ id, title });

@@ -19,7 +19,6 @@ export default function SettingsPage() {
   const [dragOver, setDragOver] = useState(false);
   const [text, setText] = useState('');
   const [fileName, setFileName] = useState('');
-  const [collectionType, setCollectionType] = useState<'paper' | 'arena'>('paper');
   const [mergeMode, setMergeMode] = useState<'replace' | 'add'>('replace');
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -55,24 +54,16 @@ export default function SettingsPage() {
     setUploadError('');
     setUploadSuccess('');
 
-    // Simulate progress with realistic timing (spread over ~60 seconds to reach 99%)
-    let elapsedTime = 0;
+    const startTime = Date.now();
     const progressInterval = setInterval(() => {
-      elapsedTime += 500;
-      setUploadProgress(prev => {
-        // Logarithmic progression: slow at start, faster in middle, slowing near 99%
-        const timeBasedProgress = Math.min(99, (Math.log(elapsedTime / 100 + 1) / Math.log(8)) * 99);
-        // Add small random variance for natural feel
-        const variance = (Math.random() - 0.5) * 2;
-        return Math.max(prev, Math.min(timeBasedProgress + variance, 99));
-      });
+      setUploadProgress(Math.round((Date.now() - startTime) / 1000));
     }, 500);
 
     try {
       const res = await fetch('/api/collection', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, collectionType, mergeMode }),
+        body: JSON.stringify({ text, collectionType: 'paper', mergeMode }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Upload failed');
@@ -84,7 +75,7 @@ export default function SettingsPage() {
         detectedFormat: data.detectedFormat,
         savedAt: new Date().toISOString(),
       });
-      setUploadSuccess(`Saved! ${data.collectionSize.toLocaleString()} unique cards detected (${collectionType}).`);
+      setUploadSuccess(`Saved! ${data.collectionSize.toLocaleString()} unique cards detected.`);
       setText('');
       setFileName('');
     } catch (err) {
@@ -163,35 +154,6 @@ export default function SettingsPage() {
 
           {/* Upload form */}
           <div className="space-y-3">
-            {/* Collection type selector */}
-            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
-              <label className="block text-sm text-zinc-400 mb-3">Collection Type</label>
-              <div className="flex gap-4">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="collectionType"
-                    value="paper"
-                    checked={collectionType === 'paper'}
-                    onChange={(e) => setCollectionType(e.target.value as 'paper' | 'arena')}
-                    className="w-4 h-4"
-                  />
-                  <span className="text-sm text-zinc-200">📄 Paper (physical cards)</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="collectionType"
-                    value="arena"
-                    checked={collectionType === 'arena'}
-                    onChange={(e) => setCollectionType(e.target.value as 'paper' | 'arena')}
-                    className="w-4 h-4"
-                  />
-                  <span className="text-sm text-zinc-200">⚡ Arena (online collection)</span>
-                </label>
-              </div>
-            </div>
-
             {/* Merge mode selector */}
             <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
               <label className="block text-sm text-zinc-400 mb-3">When uploading:</label>
@@ -257,18 +219,20 @@ export default function SettingsPage() {
             {uploadSuccess && <p className="text-emerald-400 text-sm">{uploadSuccess}</p>}
 
             {uploading && (
-              <div className="space-y-2">
-                <div className="space-y-1">
-                  <div className="flex justify-between items-center">
-                    <p className="text-xs text-zinc-500">Analyzing format & saving collection…</p>
-                    <p className="text-xs font-medium text-amber-400">{Math.min(Math.round(uploadProgress), 100)}%</p>
-                  </div>
-                  <div className="w-full bg-zinc-800 rounded-full h-2.5 overflow-hidden">
-                    <div
-                      className="h-full bg-amber-400 rounded-full transition-all duration-300"
-                      style={{ width: `${Math.min(uploadProgress, 100)}%` }}
-                    />
-                  </div>
+              <div className="flex items-center gap-3 px-4 py-3 bg-zinc-900 border border-zinc-800 rounded-xl">
+                <svg className="animate-spin h-4 w-4 shrink-0 text-amber-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                <div className="min-w-0">
+                  <p className="text-sm text-zinc-200">
+                    {uploadProgress < 3 ? 'Parsing your collection…' :
+                     uploadProgress < 10 ? 'Looking up cards on Scryfall…' :
+                     'Enriching card data on Scryfall…'}
+                  </p>
+                  <p className="text-xs text-zinc-500">
+                    {uploadProgress}s elapsed · large collections take 60–90s
+                  </p>
                 </div>
               </div>
             )}

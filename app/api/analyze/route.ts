@@ -1,27 +1,60 @@
 import { NextRequest, NextResponse } from 'next/server';
-import Anthropic from '@anthropic-ai/sdk';
 import { parseCollection } from '@/lib/parse-collection';
-import { parseCollectionWithClaude } from '@/lib/parse-with-claude';
+import { parseCollectionWithGemini } from '@/lib/parse-with-gemini';
 import { fetchTopDecks } from '@/lib/mtgtop8';
 import { fetchCommanderDeck, getPopularCommanders } from '@/lib/edhrec';
 import { getCards, cardPrice } from '@/lib/scryfall';
 import { matchDeckToCollection, rankDecks, type DeckSource } from '@/lib/deck-matcher';
 
-const anthropic = new Anthropic();
-
 export const maxDuration = 60;
+
+async function generateDeckSuggestions(cardList: string, collectionSize: number, totalCards: number): Promise<string> {
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${process.env.GOOGLE_API_KEY}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        systemInstruction: {
+          parts: [{ text: 'You are an expert Magic: The Gathering deck builder. Return only deck lists in the exact format requested — no explanations.' }]
+        },
+        contents: [{
+          role: 'user',
+          parts: [{ text: `Analyze this collection and suggest 2-3 creative deck ideas that leverage the cards the player owns.
+
+COLLECTION (${collectionSize} unique cards, ${totalCards} total):
+${cardList}
+
+For each deck idea:
+1. Identify a clear strategy/theme from their cards (e.g., "Sultai Control", "Mono-Red Burn", "Orzhov Lifegain")
+2. List 60 cards for a complete deck, heavily favoring cards from their collection
+3. Try to reach ~70%+ coverage with their owned cards
+4. Include basic lands (estimate what they need)
+5. Format as: DECK NAME | STRATEGY
+   Then list each card as: QTY CARDNAME
+
+Keep decks practical and focused. Prioritize synergy over completing meta archetypes.
+Return only the deck lists, no explanation.` }]
+        }],
+        generationConfig: { maxOutputTokens: 2000 },
+      }),
+    }
+  );
+
+  if (!res.ok) throw new Error(`Gemini error ${res.status}`);
+  const data = await res.json() as any;
+  return data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+}
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
   const text: string = body.text ?? '';
-  // Pre-parsed cards can be sent directly from the collection tab to skip re-parsing
   const preParseCards: Array<{ name: string; quantity: number }> | undefined = body.cards;
 
   if (!text.trim() && !preParseCards?.length) {
     return NextResponse.json({ error: 'Empty collection' }, { status: 400 });
   }
 
-  // Build collection map — prefer pre-parsed data, then Claude, then regex
   let collection: Map<string, number>;
   if (preParseCards?.length) {
     collection = new Map(preParseCards.map(({ name, quantity }) => [name, quantity]));
@@ -29,7 +62,7 @@ export async function POST(req: NextRequest) {
     collection = parseCollection(text);
     if (collection.size === 0) {
       try {
-        const result = await parseCollectionWithClaude(text);
+        const result = await parseCollectionWithGemini(text);
         collection = result.collection;
       } catch { /* fall through */ }
     }
@@ -46,7 +79,6 @@ export async function POST(req: NextRequest) {
     Promise.all(commanders.slice(0, 25).map((c) => fetchCommanderDeck(c.slug, c.name))),
   ]);
 
-  // Collect deck card names for price lookup
   const deckCardNames = new Set<string>();
   for (const d of [...standardDecks, ...pioneerDecks]) {
     for (const name of d.cards.keys()) deckCardNames.add(name);
@@ -74,6 +106,7 @@ export async function POST(req: NextRequest) {
         name: `${d.commanderName} Commander`,
         format: 'Commander',
         commanderName: d.commanderName,
+        strategy: commanders.find(c => c.slug === d.commanderSlug)?.strategy,
         cards: d.cards,
       })),
   ];
@@ -86,7 +119,6 @@ export async function POST(req: NextRequest) {
 
   const { buildable, aspirational } = rankDecks(matched.map((m) => ({ ...m, cards: new Map() })));
 
-  // Generate AI-suggested custom decks based on collection
   let suggested: any[] = [];
   try {
     const cardList = Array.from(collection.entries())
@@ -97,46 +129,14 @@ export async function POST(req: NextRequest) {
       .sort()
       .join('\n');
 
-    const response = await anthropic.messages.create({
-      model: 'claude-opus-4-8',
-      max_tokens: 2000,
-      messages: [
-        {
-          role: 'user',
-          content: `You are an expert Magic: The Gathering deck builder. Analyze this collection and suggest 2-3 creative deck ideas that leverage the cards they own.
-
-COLLECTION (${collection.size} unique cards, ${Array.from(collection.values()).reduce((a, b) => a + b, 0)} total):
-${cardList}
-
-For each deck idea:
-1. Identify a clear strategy/theme from their cards (e.g., "Sultai Control", "Mono-Red Burn", "Orzhov Lifegain")
-2. List 60 cards for a complete deck, heavily favoring cards from their collection
-3. Try to reach ~70%+ coverage with their owned cards
-4. Include basic lands (estimate what they need)
-5. Format as: DECK NAME | STRATEGY
-   Then list each card as: QTY CARDNAME
-
-Keep decks practical and focused. Prioritize synergy over completing meta archetypes.
-Return only the deck lists, no explanation.`,
-        },
-      ],
-    });
-
-    const text = response.content.find(b => b.type === 'text')?.text ?? '';
-    const suggestedDecks = parseDeckSuggestions(text);
+    const responseText = await generateDeckSuggestions(cardList, collection.size, Array.from(collection.values()).reduce((a, b) => a + b, 0));
+    const suggestedDecks = parseDeckSuggestions(responseText);
 
     suggested = suggestedDecks
       .map((deck, idx) =>
         matchDeckToCollection(
-          {
-            id: `custom-${idx}`,
-            name: deck.name,
-            format: 'Custom',
-            cards: deck.cards,
-          },
-          collection,
-          prices,
-          typeLines
+          { id: `custom-${idx}`, name: deck.name, format: 'Custom', cards: deck.cards },
+          collection, prices, typeLines
         )
       )
       .sort((a, b) => b.coveragePct - a.coveragePct)
@@ -146,7 +146,6 @@ Return only the deck lists, no explanation.`,
       });
   } catch (err) {
     console.error('Failed to generate suggestions:', err);
-    // Continue without suggestions if Claude fails
   }
 
   return NextResponse.json({ buildable, aspirational, suggested });
@@ -179,15 +178,11 @@ function parseDeckSuggestions(text: string): DeckSuggestion[] {
       if (match) {
         const qty = parseInt(match[1], 10);
         const cardName = match[2].trim();
-        if (qty > 0 && cardName) {
-          cards.set(cardName, qty);
-        }
+        if (qty > 0 && cardName) cards.set(cardName, qty);
       }
     }
 
-    if (cards.size > 0) {
-      decks.push({ name: deckName, cards });
-    }
+    if (cards.size > 0) decks.push({ name: deckName, cards });
   }
 
   return decks;

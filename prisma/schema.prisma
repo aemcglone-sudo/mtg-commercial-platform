@@ -3,88 +3,93 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
 }
 
 model User {
-  id           String   @id @default(cuid())
-  username     String   @unique
-  email        String   @unique
-  passwordHash String?  // null when using OAuth only
-  googleId     String?  @unique  // reserved for Google OAuth
-  appleId      String?  @unique  // reserved for Apple OAuth
-  avatarUrl    String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                   String   @id @default(cuid())
+  username             String   @unique
+  email                String   @unique
+  passwordHash         String?
+  googleId             String?  @unique
+  appleId              String?  @unique
+  avatarUrl            String?
+  magicPreferencesJson String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
+  userPreferences UserPreference?
 
   @@map("users")
 }
 
-// Stores uploaded collection snapshots per user
 model CollectionUpload {
   id             String   @id @default(cuid())
-  userId         String   // references NextAuth user ID (not enforced as FK since auth uses separate tables)
-  rawText        String   // original upload text
+  userId         String
+  rawText        String
   detectedFormat String?
-  parsedData     String?  // JSON: {collectionSize, totalCards, collectionCards}
+  parsedData     String?
   createdAt      DateTime @default(now())
 
   @@map("collection_uploads")
 }
 
-// Collectibles inventory — sports cards, Funko Pops, etc.
 model InventoryItem {
-  id             String   @id @default(cuid())
-  userId         String   // references NextAuth user ID (not enforced as FK since auth uses separate tables)
-  name           String
-  itemType       String   // cards | figures | digital | other
-  collectionType String?  // paper | arena (for MTG cards)
-  statusLocation String   @default("storage") // in_binder | on_display | storage | out_for_grading | for_sale
-  brandSet       String?
-  estimatedValue Float?
+  id              String   @id @default(cuid())
+  userId          String
+  name            String
+  itemType        String
+  collectionType  String?
+  statusLocation  String   @default("storage")
+  brandSet        String?
+  estimatedValue  Float?
   primaryImageUrl String?
-  isBase         Boolean  @default(false)
-  isParallel     Boolean  @default(false)
-  isAutograph    Boolean  @default(false)
-  isRookie       Boolean  @default(false)
-  gradingCompany String?  // PSA | BGS | SGC
-  gradeScore     Float?
-  productLine    String?  // Funko Pop! Sports, Animation, etc.
-  packaging      String?  // in_box | out_of_box
-  quantity       Int      @default(1)
-  notes          String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  isBase          Boolean  @default(false)
+  isParallel      Boolean  @default(false)
+  isAutograph     Boolean  @default(false)
+  isRookie        Boolean  @default(false)
+  gradingCompany  String?
+  gradeScore      Float?
+  productLine     String?
+  packaging       String?
+  quantity        Int      @default(1)
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   deckItems DeckItem[]
 
   @@map("inventory_items")
 }
 
-// Decks / binders
 model Deck {
-  id           String    @id @default(cuid())
-  userId       String    // references NextAuth user ID (not enforced as FK since auth uses separate tables)
-  name         String
-  format       String?   // Standard, Pioneer, Commander, Modern, Legacy
-  strategy     String?   // deck strategy description
-  cards        String?   // JSON: {cardName: quantity}
-  personaType  String?   // speculator | curator | completionist
-  coreGoal     String?
-  lastAnalyzed DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id             String    @id @default(cuid())
+  userId         String
+  name           String
+  format         String?
+  strategy       String?
+  cards          String?
+  deckType       String    @default("paper")
+  personaType    String?
+  coreGoal       String?
+  lastAnalyzed   DateTime?
+  gamesPlayed    Int       @default(0)
+  gamesWon       Int       @default(0)
+  lastPlayedDate DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
-  items DeckItem[]
+  items       DeckItem[]
+  analyses    DeckAnalysis[]
+  suggestions Suggestion[]
 
   @@map("decks")
 }
 
 model DeckItem {
-  id     String @id @default(cuid())
+  id     String        @id @default(cuid())
   deckId String
-  deck   Deck   @relation(fields: [deckId], references: [id], onDelete: Cascade)
+  deck   Deck          @relation(fields: [deckId], references: [id], onDelete: Cascade)
   itemId String
   item   InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
 
@@ -92,30 +97,24 @@ model DeckItem {
   @@map("deck_items")
 }
 
-// User location preference for venue discovery
 model UserLocationPreference {
-  id        String   @id @default(cuid())
-  userId    String   @unique // references NextAuth user ID
-  address   String   // user's location (city, ZIP, or full address)
-  savedAt   DateTime @default(now()) @updatedAt
+  id      String   @id @default(cuid())
+  userId  String   @unique
+  address String
+  savedAt DateTime @default(now()) @updatedAt
 
   @@map("user_location_preferences")
 }
 
-// ──── SPRINT 1: PRICE TRACKING ────
-
-// Current card prices
 model CardPrice {
-  id              String   @id @default(cuid())
-  cardName        String
-  cardSetCode     String?
-
-  priceUsd        Float?
-  priceFoilUsd    Float?
-  priceEur        Float?
-
-  source          String   @default("scryfall") // scryfall, tcgplayer
-  lastUpdated     DateTime @default(now())
+  id           String   @id @default(cuid())
+  cardName     String
+  cardSetCode  String?
+  priceUsd     Float?
+  priceFoilUsd Float?
+  priceEur     Float?
+  source       String   @default("scryfall")
+  lastUpdated  DateTime @default(now())
 
   @@unique([cardName, cardSetCode, source])
   @@index([cardName])
@@ -123,57 +122,161 @@ model CardPrice {
   @@map("card_prices")
 }
 
-// Historical prices for trend analysis
 model PriceHistory {
-  id              String   @id @default(cuid())
-  cardName        String
-  cardSetCode     String?
+  id           String   @id @default(cuid())
+  cardName     String
+  cardSetCode  String?
+  source       String   @default("scryfall")
+  priceUsd     Float?
+  priceFoilUsd Float?
+  capturedAt   DateTime @default(now())
 
-  priceUsd        Float?
-  priceFoilUsd    Float?
-
-  recordedAt      DateTime @default(now())
-
-  @@unique([cardName, cardSetCode, recordedAt])
-  @@index([cardName, recordedAt])
+  @@unique([cardName, source, capturedAt])
+  @@index([cardName, capturedAt])
   @@map("price_history")
 }
 
-// Collection value analytics
 model CollectionStats {
   id              String   @id @default(cuid())
   userId          String   @unique
-
-  // Value tracking
   totalValueUsd   Float    @default(0)
-  valueChange7d   Float?   // % change in last 7 days
-
-  // Composition
+  valueChange7d   Float?
   uniqueCardCount Int      @default(0)
   totalCardCount  Int      @default(0)
   duplicateCount  Int      @default(0)
-
   lastUpdated     DateTime @default(now()) @updatedAt
 
   @@map("collection_stats")
 }
 
-// Price spike alerts
 model PriceAlert {
-  id              String   @id @default(cuid())
-  userId          String
-  cardName        String
-
-  alertType       String   // 'spike' | 'crash'
-  previousPrice   Float
-  currentPrice    Float
-  changePercent   Float
-
-  triggered       Boolean  @default(false)
-  triggeredAt     DateTime?
-
-  createdAt       DateTime @default(now())
+  id            String    @id @default(cuid())
+  userId        String
+  cardName      String
+  alertType     String
+  previousPrice Float
+  currentPrice  Float
+  changePercent Float
+  triggered     Boolean   @default(false)
+  triggeredAt   DateTime?
+  createdAt     DateTime  @default(now())
 
   @@index([userId])
   @@map("price_alerts")
+}
+
+model KhoaChat {
+  id        String @id
+  userId    String
+  title     String
+  messages  String @default("[]")
+  createdAt String
+  updatedAt String
+
+  @@index([userId])
+  @@map("khoa_chats")
+}
+
+model DeckAnalysis {
+  id                 String    @id @default(cuid())
+  userId             String
+  deckId             String
+  deck               Deck      @relation(fields: [deckId], references: [id], onDelete: Cascade)
+  analyzedAt         DateTime  @default(now())
+  avgManaCost        Float?
+  colorIdentity      String?
+  creatureCount      Int?
+  spellCount         Int?
+  landCount          Int?
+  synergiesDetected  String?
+  metaScore          Float?
+  tourneyAppearances Int?
+  successRate        Float?
+  playedDate         DateTime?
+  notes              String?
+
+  @@index([userId, analyzedAt(sort: Desc)])
+  @@map("deck_analysis")
+}
+
+model CardSynergy {
+  id             String  @id @default(cuid())
+  cardName       String
+  synergyPartner String
+  synergyType    String
+  strength       Float
+  note           String?
+
+  @@unique([cardName, synergyPartner])
+  @@index([cardName])
+  @@index([synergyPartner])
+  @@map("card_synergies")
+}
+
+model UserPreference {
+  id                    String   @id @default(cuid())
+  userId                String   @unique
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  favoriteFormats       String?
+  playStyle             String?
+  budgetRange           String?
+  collectorOrPlayer     String?
+  acceptanceRate        Float?
+  averageDeckTurnaround String?
+  colorPreferences      String?
+  updatedAt             DateTime @updatedAt
+
+  @@map("user_preferences")
+}
+
+model Suggestion {
+  id             String    @id @default(cuid())
+  userId         String
+  deckId         String?
+  deck           Deck?     @relation(fields: [deckId], references: [id], onDelete: SetNull)
+  cardName       String?
+  suggestionType String
+  reason         String?
+  suggestedAt    DateTime  @default(now())
+  adopted        Boolean?
+  adoptedAt      DateTime?
+  userFeedback   String?
+
+  @@index([userId, suggestedAt(sort: Desc)])
+  @@index([userId, adopted])
+  @@map("suggestions")
+}
+
+model BannedListSnapshot {
+  id              String   @id @default(cuid())
+  format          String
+  bannedCards     String?
+  restrictedCards String?
+  snapshotDate    DateTime @default(now())
+
+  @@unique([format, snapshotDate])
+  @@index([format, snapshotDate(sort: Desc)])
+  @@map("banned_list_snapshots")
+}
+
+model CommunityVenue {
+  id          String    @id
+  name        String
+  address     String?
+  city        String?
+  state       String?
+  zipCode     String?
+  latitude    Float?
+  longitude   Float?
+  formats     String?
+  eventTypes  String?
+  website     String?
+  phone       String?
+  verifiedAt  DateTime?
+  userRating  Float?
+  reviewCount Int?
+  createdAt   DateTime  @default(now())
+
+  @@index([city, state])
+  @@map("community_venues")
 }

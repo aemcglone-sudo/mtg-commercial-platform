@@ -34,27 +34,16 @@ export default function CollectionInsights({
 }: Props) {
   const [showExpensiveInfo, setShowExpensiveInfo] = useState(false);
   const [showTrendingInfo, setShowTrendingInfo] = useState(false);
-  const [formatFilter, setFormatFilter] = useState<'all' | 'paper' | 'arena'>('all');
-
-  // Filter cards based on format selection
-  const filteredCards = useMemo(() => {
-    if (formatFilter === 'all') return cards;
-    return cards.filter(card => {
-      if (formatFilter === 'paper') return card.collectionType !== 'arena';
-      if (formatFilter === 'arena') return card.collectionType === 'arena';
-      return true;
-    });
-  }, [cards, formatFilter]);
 
   const insights = useMemo(() => {
-    const totalUnique = filteredCards.length;
-    const totalCards = filteredCards.reduce((s, c) => s + c.quantity, 0);
-    const totalValue = filteredCards.reduce((s, c) => s + (c.priceUsd ?? 0) * c.quantity, 0);
+    const totalUnique = cards.length;
+    const totalCards = cards.reduce((s, c) => s + c.quantity, 0);
+    const totalValue = cards.reduce((s, c) => s + (c.priceUsd ?? 0) * c.quantity, 0);
     const avgValue = totalCards > 0 ? totalValue / totalCards : 0;
 
     // Color distribution
     const colorCounts = new Map<string, number>();
-    for (const card of filteredCards) {
+    for (const card of cards) {
       let colorKey: string;
       if (!card.colors || card.colors.length === 0) {
         colorKey = 'C';
@@ -68,17 +57,17 @@ export default function CollectionInsights({
 
     // Rarity distribution
     const rarityCounts = new Map<string, number>();
-    for (const card of filteredCards) {
+    for (const card of cards) {
       const rarity = card.rarity || 'unknown';
       rarityCounts.set(rarity, (rarityCounts.get(rarity) ?? 0) + card.quantity);
     }
 
     // All cards sorted by monetary value
-    const topValueCards = [...filteredCards]
+    const topValueCards = [...cards]
       .sort((a, b) => (b.priceUsd ?? 0) - (a.priceUsd ?? 0));
 
     // Price statistics for histogram visualization
-    const prices = filteredCards.map(c => c.priceUsd ?? 0).filter(p => p > 0);
+    const prices = cards.map(c => c.priceUsd ?? 0).filter(p => p > 0);
     const minPrice = Math.min(...prices);
     const maxPrice = Math.max(...prices);
     const meanPrice = prices.length > 0 ? prices.reduce((a, b) => a + b, 0) / prices.length : 0;
@@ -160,7 +149,7 @@ export default function CollectionInsights({
       bucketCounts,
       maxBucketCount,
     };
-  }, [filteredCards]);
+  }, [cards]);
 
   const COLORS = [
     { id: 'W', label: 'White', bg: 'bg-yellow-400', text: 'text-yellow-400' },
@@ -183,27 +172,6 @@ export default function CollectionInsights({
 
   return (
     <div className="space-y-6">
-      {/* Format Filter */}
-      <div className="flex gap-2 items-center">
-        <span className="text-xs text-zinc-500 font-medium">Filter:</span>
-        <div className="flex gap-2">
-          {(['all', 'paper', 'arena'] as const).map(format => (
-            <button
-              key={format}
-              type="button"
-              onClick={() => setFormatFilter(format)}
-              className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
-                formatFilter === format
-                  ? 'bg-amber-500 text-black'
-                  : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200'
-              }`}
-            >
-              {format === 'all' ? 'All' : format === 'paper' ? 'Paper' : 'Arena'}
-            </button>
-          ))}
-        </div>
-      </div>
-
       {/* Header with Key Metrics */}
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
         <div>

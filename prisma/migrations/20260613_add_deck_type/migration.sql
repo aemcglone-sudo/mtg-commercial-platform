@@ -1,0 +1,1 @@
+ALTER TABLE "decks" ADD COLUMN "deckType" TEXT NOT NULL DEFAULT 'paper';

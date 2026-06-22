@@ -180,7 +180,7 @@ export function CopilotSidebar({ collection, isOpen, onToggle, currentTab = 'col
         <div className="border-b border-zinc-800 px-4 py-3 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-2">
             <span className="text-lg">🧙</span>
-            <h2 className="text-sm font-semibold text-zinc-200">Shahrazad</h2>
+            <h2 className="text-sm font-semibold text-zinc-200">Khoa</h2>
           </div>
           <button
             type="button"
@@ -313,7 +313,7 @@ export function CopilotSidebar({ collection, isOpen, onToggle, currentTab = 'col
                 send(input);
               }
             }}
-            placeholder="Ask Shahrazad…"
+            placeholder="Ask Khoa…"
             disabled={loading}
             className="flex-1 bg-zinc-900 border border-zinc-700 rounded px-2 py-1.5 text-xs text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-amber-500 disabled:opacity-50"
           />
@@ -344,7 +344,7 @@ export function CopilotSidebar({ collection, isOpen, onToggle, currentTab = 'col
           type="button"
           onClick={onToggle}
           className="fixed right-4 bottom-4 w-12 h-12 rounded-full bg-amber-400 hover:bg-amber-300 text-black font-bold shadow-lg transition-all hover:scale-110 z-30 flex items-center justify-center text-lg"
-          title="Open Shahrazad"
+          title="Open Khoa"
         >
           🧙
         </button>

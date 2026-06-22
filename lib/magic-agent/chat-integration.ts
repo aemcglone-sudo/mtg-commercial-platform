@@ -1,7 +1,7 @@
 /**
  * Magic Agent - Chat Integration
  *
- * Bridges agent modules with Shahrazad chat interface.
+ * Bridges agent modules with Khoa chat interface.
  * Runs agents async, formats results for expandable UI cards.
  */
 

@@ -6,12 +6,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthenticatedUserId } from '@/lib/auth';
 import { findOne, run } from '@/lib/db';
-import { getCards, cardPrice, cardImageUrl } from '@/lib/scryfall';
+import { getCards, cardPrice, cardImageUrl, ScryfallCard } from '@/lib/scryfall';
 
 interface Row { id: string; parsedData: string; rawText: string }
 interface CardEntry {
   name: string; quantity: number; priceUsd: number | null;
   imageUrl: string | null; scryfallUri: string | null; setName: string | null;
+  collectionType?: 'paper' | 'arena';
 }
 interface ParsedData {
   collectionSize: number; totalCards: number; detectedFormat: string;
@@ -20,7 +21,7 @@ interface ParsedData {
 
 async function getRow(userId: string): Promise<Row | null> {
   return findOne<Row>(
-    `SELECT id, parsedData, rawText FROM collection_uploads WHERE userId = ? ORDER BY createdAt DESC LIMIT 1`,
+    `SELECT id, "parsedData", "rawText" FROM collection_uploads WHERE "userId" = ? ORDER BY "createdAt" DESC LIMIT 1`,
     [userId]
   );
 }
@@ -34,7 +35,7 @@ async function saveRow(id: string, data: ParsedData, rawText: string) {
     detectedFormat: data.detectedFormat,
   };
   await run(
-    `UPDATE collection_uploads SET parsedData = ?, createdAt = datetime('now') WHERE id = ?`,
+    `UPDATE collection_uploads SET "parsedData" = ?, "createdAt" = NOW() WHERE id = ?`,
     [JSON.stringify(updated), id]
   );
   return updated;
@@ -44,7 +45,7 @@ export async function PATCH(req: NextRequest) {
   const userId = await getAuthenticatedUserId(req);
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { name, quantity = 1 } = await req.json();
+  const { name, quantity = 1, collectionType = 'paper' } = await req.json();
   if (!name?.trim()) return NextResponse.json({ error: 'name required' }, { status: 400 });
 
   const row = await getRow(userId);
@@ -57,19 +58,33 @@ export async function PATCH(req: NextRequest) {
   if (existing) {
     existing.quantity = Math.max(1, existing.quantity + quantity);
   } else {
-    // Validate against Scryfall before adding
+    // Validate against Scryfall — try batch lookup first, fall back to fuzzy
+    let card: ScryfallCard | null = null;
     const cardMap = await getCards([name]);
-    const card = cardMap.get(name);
+    card = cardMap.get(name) ?? null;
+
     if (!card) {
-      return NextResponse.json({ error: `"${name}" is not a recognised Magic card` }, { status: 422 });
+      // Batch lookup may miss new cards; try fuzzy search as fallback
+      try {
+        const fuzzyRes = await fetch(
+          `https://api.scryfall.com/cards/named?fuzzy=${encodeURIComponent(name)}`,
+          { headers: { 'User-Agent': 'MTGDeckBuilder/1.0' } }
+        );
+        if (fuzzyRes.ok) card = (await fuzzyRes.json()) as ScryfallCard;
+      } catch { /* network error, card stays null */ }
+    }
+
+    if (!card) {
+      return NextResponse.json({ error: `"${name}" not found on Scryfall` }, { status: 422 });
     }
     cards.push({
-      name: card.name, // use Scryfall's canonical name, not whatever the user typed
+      name: card.name,
       quantity,
       priceUsd: cardPrice(card),
       imageUrl: cardImageUrl(card, 'small'),
       scryfallUri: card.scryfall_uri ?? null,
       setName: card.set_name ?? null,
+      collectionType,
     });
     cards.sort((a, b) => a.name.localeCompare(b.name));
   }

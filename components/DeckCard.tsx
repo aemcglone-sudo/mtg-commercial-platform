@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import type { MatchedDeck, HaveCard, GapCard } from '@/lib/deck-matcher';
+import BuyOnTCGPlayer from './BuyOnTCGPlayer';
 
 const FORMAT_COLORS: Record<string, string> = {
   Standard: 'bg-blue-900/60 text-blue-300',
@@ -18,8 +19,9 @@ function CoverageBar({ pct }: { pct: number }) {
   );
 }
 
-function CardRow({ name, qty, label, price, variant }: {
+function CardRow({ name, qty, label, price, variant, onCardClick }: {
   name: string; qty: string; label?: string; price: number | null; variant: 'have' | 'need';
+  onCardClick?: (name: string) => void;
 }) {
   return (
     <div className={`flex items-center justify-between gap-3 text-sm py-1.5 border-b border-zinc-800/50 last:border-0`}>
@@ -28,14 +30,13 @@ function CardRow({ name, qty, label, price, variant }: {
           {variant === 'have' ? '✓' : '✕'}
         </span>
         <span className="font-mono text-xs text-zinc-500 shrink-0 w-6">{qty}</span>
-        <a
-          href={`https://scryfall.com/search?q=!"${encodeURIComponent(name)}"&as=grid`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-zinc-200 hover:text-amber-400 truncate transition-colors"
+        <button
+          type="button"
+          onClick={() => onCardClick?.(name)}
+          className="text-zinc-200 hover:text-amber-400 truncate transition-colors text-left"
         >
           {name}
-        </a>
+        </button>
         {label && <span className="text-zinc-600 text-xs shrink-0">{label}</span>}
       </div>
       {price !== null && price > 0 ? (
@@ -53,9 +54,10 @@ interface Props {
   onSave?: () => void;
   collectionType?: 'paper' | 'arena';
   collection?: Array<{ name: string; collectionType?: 'paper' | 'arena' }>;
+  onCardClick?: (name: string) => void;
 }
 
-export default function DeckCard({ deck, rank, onSave, collectionType = 'paper', collection = [] }: Props) {
+export default function DeckCard({ deck, rank, onSave, collectionType = 'paper', collection = [], onCardClick }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [tab, setTab] = useState<'all' | 'have' | 'need'>('all');
 
@@ -233,6 +235,7 @@ export default function DeckCard({ deck, rank, onSave, collectionType = 'paper',
                         label={c.owned > c.needed ? `(own ${c.owned})` : undefined}
                         price={c.priceUsd}
                         variant="have"
+                        onCardClick={onCardClick}
                       />
                     ))}
                   </>
@@ -264,6 +267,7 @@ export default function DeckCard({ deck, rank, onSave, collectionType = 'paper',
                             label={c.owned > 0 ? `(own ${c.owned})` : undefined}
                             price={c.priceUsd ? c.priceUsd * c.shortage : null}
                             variant="need"
+                            onCardClick={onCardClick}
                           />
                         ))}
                         {filteredGapCards.some((c) => !c.isLand) && (
@@ -283,6 +287,7 @@ export default function DeckCard({ deck, rank, onSave, collectionType = 'paper',
                         label={c.owned > 0 ? `(own ${c.owned})` : undefined}
                         price={c.priceUsd ? c.priceUsd * c.shortage : null}
                         variant="need"
+                        onCardClick={onCardClick}
                       />
                     ))}
 
@@ -293,6 +298,29 @@ export default function DeckCard({ deck, rank, onSave, collectionType = 'paper',
                     )}
                   </>
                 )}
+              </div>
+
+              {/* Strategy description */}
+              {deck.strategy && (
+                <div className="mt-4 px-3 py-2.5 rounded-lg bg-zinc-800/60 border border-zinc-700/50">
+                  <p className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider mb-1">Strategy</p>
+                  <p className="text-xs text-zinc-400 leading-relaxed">{deck.strategy}</p>
+                </div>
+              )}
+
+              {/* TCGPlayer buy buttons */}
+              <div className="mt-4 space-y-2">
+                {filteredGapCards.length > 0 && (
+                  <BuyOnTCGPlayer
+                    cards={filteredGapCards.map(c => ({ name: c.name, quantity: c.shortage }))}
+                    label={`🛒 Buy ${filteredGapCards.reduce((s, c) => s + c.shortage, 0)} Missing Cards on TCGPlayer`}
+                  />
+                )}
+                <BuyOnTCGPlayer
+                  cards={[...filteredHaveCards, ...filteredGapCards].map(c => ({ name: c.name, quantity: c.needed }))}
+                  label="🛒 Buy Full Deck on TCGPlayer"
+                  className="!bg-zinc-700 !text-zinc-100 hover:!bg-zinc-600"
+                />
               </div>
             </>
           )}

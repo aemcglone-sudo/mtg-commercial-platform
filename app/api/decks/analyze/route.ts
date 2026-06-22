@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { db } from '@/lib/db';
+import { getAuthenticatedUserId } from '@/lib/auth';
+import { findOne, findMany } from '@/lib/db';
 
 interface DeckCard {
   name: string;
@@ -9,6 +10,8 @@ interface DeckCard {
 interface Recommendation {
   card: string;
   reason: string;
+  cutCard: string;
+  cutReason: string;
   inCollection: boolean;
   suggestedQuantity: number;
 }
@@ -22,124 +25,137 @@ interface DeckAnalysis {
 
 export async function POST(req: NextRequest) {
   try {
+    const userId = await getAuthenticatedUserId(req);
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const { deckId } = await req.json();
-
     if (!deckId) {
-      return NextResponse.json(
-        { error: 'deckId is required' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'deckId is required' }, { status: 400 });
     }
 
-    // Get deck details
-    const deckResult = await db.execute({
-      sql: 'SELECT * FROM decks WHERE id = ?',
-      args: [deckId],
-    });
-
-    const deck = deckResult.rows[0] as any;
+    const deck = await findOne(
+      'SELECT id, name, format, strategy, cards FROM decks WHERE id = ? AND "userId" = ?',
+      [deckId, userId]
+    );
     if (!deck) {
-      return NextResponse.json(
-        { error: 'Deck not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'Deck not found' }, { status: 404 });
     }
 
-    // Get user's collection
-    const collectionResult = await db.execute({
-      sql: 'SELECT * FROM collection',
-    });
-    const collection = collectionResult.rows as any[];
-    const collectionMap = new Map(collection.map(c => [c.name, c]));
-
-    const deckCards: DeckCard[] = Object.entries(deck.cards || {}).map(([name, qty]: [string, any]) => ({
+    // cards column is stored as JSON string
+    const cardsJson = (deck as any).cards;
+    const cardsObj: Record<string, number> = cardsJson ? JSON.parse(cardsJson) : {};
+    const deckCards: DeckCard[] = Object.entries(cardsObj).map(([name, qty]) => ({
       name,
-      quantity: qty,
+      quantity: qty as number,
     }));
 
-    // Format deck info for Gemini
+    // Get user's collection from inventory_items
+    const collectionRows = await findMany(
+      `SELECT name, quantity FROM inventory_items WHERE "userId" = ? AND "itemType" = 'cards'`,
+      [userId]
+    );
+    const collectionMap = new Map<string, number>(
+      collectionRows.map((r: any) => [r.name as string, r.quantity as number])
+    );
+
+    const d = deck as any;
     const deckInfo = `
-Deck: ${deck.name}
-Format: ${deck.format}
-${deck.commander ? `Commander: ${deck.commander}` : ''}
-Strategy: ${deck.strategy || 'Not specified'}
+Deck: ${d.name}
+Format: ${d.format || 'Unknown'}
+Strategy: ${d.strategy || 'Not specified'}
 
 Cards in deck (${deckCards.length} unique):
 ${deckCards.map(c => `- ${c.quantity}x ${c.name}`).join('\n')}
 
-User's collection has ${collection.length} cards including:
-${deckCards.filter(c => collectionMap.has(c.name)).map(c => `- ${c.name}`).join('\n') || '- (no deck cards in collection)'}
-    `;
+Cards from this deck in your collection:
+${deckCards.filter(c => collectionMap.has(c.name)).map(c => `- ${c.name} (have ${collectionMap.get(c.name)})`).join('\n') || '(none)'}
+    `.trim();
 
     const apiKey = process.env.GOOGLE_API_KEY;
     if (!apiKey) {
-      return NextResponse.json(
-        { error: 'Google API key not configured' },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: 'Google API key not configured' }, { status: 500 });
     }
 
-    const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': apiKey,
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+    const geminiBody = JSON.stringify({
+      systemInstruction: {
+        parts: [{ text: 'You are a Magic: The Gathering expert deck analyst. Every recommendation must include both a card to ADD and a specific card to CUT from the deck. Commander is exactly 100 cards — adding a card always means cutting a card. Return only valid JSON, no markdown or prose.' }]
       },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              {
-                text: `You are a Magic: The Gathering expert deck analyst. Analyze decks for strengths, weaknesses, and card recommendations.
+      contents: [{
+        role: 'user',
+        parts: [{ text: `Analyze this ${d.format || ''} deck and return JSON.
 
-Analyze this ${deck.format} deck:
 ${deckInfo}
 
-Format your response as JSON with these fields:
+CRITICAL RULE: For each recommendation, you must name a specific card to CUT from the deck listed above. Choose the weakest or least synergistic card in the deck for that slot.
+
+Return this exact JSON structure:
 {
-  "strengths": ["strength1", "strength2", ...],
-  "weaknesses": ["weakness1", "weakness2", ...],
+  "strengths": ["strength1", "strength2", "strength3"],
+  "weaknesses": ["weakness1", "weakness2", "weakness3"],
   "recommendations": [
     {
-      "card": "Card Name",
-      "reason": "Why this card helps",
-      "inCollection": true/false,
-      "suggestedQuantity": 1-4
+      "card": "Card to Add",
+      "reason": "One sentence why this card belongs in the deck",
+      "cutCard": "Specific card from the deck list above to remove",
+      "cutReason": "One sentence why that card is the weakest in its slot",
+      "inCollection": false,
+      "suggestedQuantity": 1
     }
   ],
   "summary": "Brief paragraph about the deck"
 }
 
-Provide 3-5 strengths, 3-5 weaknesses, and 5-7 recommendations. Consider the format, strategy, and mana curve.`,
+Provide 3-5 strengths, 3-5 weaknesses, and 5-7 swap recommendations. Every recommendation needs both a card to add AND a card to cut from the deck.` }]
+      }],
+      generationConfig: {
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: 'object',
+          properties: {
+            strengths: { type: 'array', items: { type: 'string' } },
+            weaknesses: { type: 'array', items: { type: 'string' } },
+            recommendations: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  card: { type: 'string' },
+                  reason: { type: 'string' },
+                  cutCard: { type: 'string' },
+                  cutReason: { type: 'string' },
+                  inCollection: { type: 'boolean' },
+                  suggestedQuantity: { type: 'integer' },
+                },
+                required: ['card', 'reason', 'cutCard', 'cutReason', 'inCollection', 'suggestedQuantity'],
               },
-            ],
+            },
+            summary: { type: 'string' },
           },
-        ],
-        generationConfig: {
-          temperature: 0.7,
-          maxOutputTokens: 1000,
+          required: ['strengths', 'weaknesses', 'recommendations', 'summary'],
         },
-      }),
+        maxOutputTokens: 8192,
+      },
     });
+    const geminiOpts = { method: 'POST' as const, headers: { 'Content-Type': 'application/json' }, body: geminiBody };
+
+    const response = await fetch(geminiUrl, geminiOpts);
 
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(`Gemini API error: ${error.error?.message || 'Unknown error'}`);
+      const errBody = await response.text();
+      console.error('Gemini API error:', errBody);
+      return NextResponse.json({ error: `AI service error: ${response.status}` }, { status: 502 });
     }
 
     const data = await response.json();
-    const analysisText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-
-    // Parse the JSON response
-    const jsonMatch = analysisText.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      return NextResponse.json(
-        { error: 'Failed to parse analysis' },
-        { status: 500 }
-      );
+    const analysisText = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+    if (!analysisText) {
+      return NextResponse.json({ error: 'Empty response from AI' }, { status: 502 });
     }
 
-    const analysis: DeckAnalysis = JSON.parse(jsonMatch[0]);
+    const analysis: DeckAnalysis = JSON.parse(analysisText);
 
     // Cross-reference recommendations with user's collection
     const finalRecommendations = analysis.recommendations.map(rec => ({

@@ -45,26 +45,26 @@ async function createPlayerState(userId: string, commanderName: string): Promise
  */
 export async function initializeCommanderGame(playerCommander: string): Promise<CommanderGameState | null> {
   const playerState = await createPlayerState('player', playerCommander);
-  const shahrazadState = await createPlayerState('shahrazad', 'Omnath, Locus of Creation'); // Default AI commander
+  const khoaState = await createPlayerState('khoa', 'Omnath, Locus of Creation'); // Default AI commander
 
-  if (!playerState || !shahrazadState) return null;
+  if (!playerState || !khoaState) return null;
 
   // Draw opening hands (7 cards)
   for (let i = 0; i < 7; i++) {
     drawCard(playerState);
-    drawCard(shahrazadState);
+    drawCard(khoaState);
   }
 
   const game: CommanderGameState = {
     playerState,
-    shahrazadState,
+    khoaState,
     currentPhase: 'untap',
     currentPlayer: 'player',
     turn: 1,
     status: 'mulligan',
     log: ['Choose to keep or mulligan your opening hand.'],
     stack: [],
-    mulligans: { player: 0, shahrazad: 0 },
+    mulligans: { player: 0, khoa: 0 },
   };
 
   return game;
@@ -115,7 +115,7 @@ export function refreshMana(player: CommanderPlayerState): void {
  * Play a land
  */
 export function playLand(game: CommanderGameState, instanceId: string): boolean {
-  const player = game.currentPlayer === 'player' ? game.playerState : game.shahrazadState;
+  const player = game.currentPlayer === 'player' ? game.playerState : game.khoaState;
   const cardIndex = player.hand.findIndex((c) => c.instanceId === instanceId);
 
   if (cardIndex === -1) return false;
@@ -141,8 +141,8 @@ export function playLand(game: CommanderGameState, instanceId: string): boolean 
  * Cast a spell
  */
 export function castSpell(game: CommanderGameState, instanceId: string): boolean {
-  const player = game.currentPlayer === 'player' ? game.playerState : game.shahrazadState;
-  const opponent = game.currentPlayer === 'player' ? game.shahrazadState : game.playerState;
+  const player = game.currentPlayer === 'player' ? game.playerState : game.khoaState;
+  const opponent = game.currentPlayer === 'player' ? game.khoaState : game.playerState;
   const cardIndex = player.hand.findIndex((c) => c.instanceId === instanceId);
 
   if (cardIndex === -1) return false;
@@ -179,7 +179,7 @@ export function castSpell(game: CommanderGameState, instanceId: string): boolean
  * Declare attackers
  */
 export function declareAttackers(game: CommanderGameState, creatureInstanceIds: string[]): boolean {
-  const player = game.currentPlayer === 'player' ? game.playerState : game.shahrazadState;
+  const player = game.currentPlayer === 'player' ? game.playerState : game.khoaState;
 
   for (const id of creatureInstanceIds) {
     const creature = player.battlefield.find((c) => c.instanceId === id && c.type_line?.toLowerCase().includes('creature'));
@@ -199,8 +199,8 @@ export function declareAttackers(game: CommanderGameState, creatureInstanceIds: 
  * Resolve combat (simplified)
  */
 export function resolveCombat(game: CommanderGameState): void {
-  const attacker = game.currentPlayer === 'player' ? game.playerState : game.shahrazadState;
-  const defender = game.currentPlayer === 'player' ? game.shahrazadState : game.playerState;
+  const attacker = game.currentPlayer === 'player' ? game.playerState : game.khoaState;
+  const defender = game.currentPlayer === 'player' ? game.khoaState : game.playerState;
 
   let totalDamage = 0;
 
@@ -231,17 +231,17 @@ export function endPhase(game: CommanderGameState): void {
   // Transition to next turn
   if (game.currentPhase === 'untap') {
     game.turn += 1;
-    game.currentPlayer = game.currentPlayer === 'player' ? 'shahrazad' : 'player';
+    game.currentPlayer = game.currentPlayer === 'player' ? 'khoa' : 'player';
 
-    const player = game.currentPlayer === 'player' ? game.playerState : game.shahrazadState;
+    const player = game.currentPlayer === 'player' ? game.playerState : game.khoaState;
 
     // Untap phase
     untapAll(player);
 
     // Draw phase
     if (!drawCard(player)) {
-      game.status = game.currentPlayer === 'player' ? 'shahrazadWon' : 'playerWon';
-      game.log.push(`${game.currentPlayer === 'player' ? 'You' : 'Shahrazad'} ran out of cards!`);
+      game.status = game.currentPlayer === 'player' ? 'khoaWon' : 'playerWon';
+      game.log.push(`${game.currentPlayer === 'player' ? 'You' : 'Khoa'} ran out of cards!`);
       return;
     }
 
@@ -251,9 +251,9 @@ export function endPhase(game: CommanderGameState): void {
 
   // Check win conditions
   if (game.playerState.life <= 0) {
-    game.status = 'shahrazadWon';
-    game.log.push('Shahrazad wins!');
-  } else if (game.shahrazadState.life <= 0) {
+    game.status = 'khoaWon';
+    game.log.push('Khoa wins!');
+  } else if (game.khoaState.life <= 0) {
     game.status = 'playerWon';
     game.log.push('You win!');
   }
@@ -262,8 +262,8 @@ export function endPhase(game: CommanderGameState): void {
 /**
  * Mulligan: Draw 7 cards and put back one
  */
-export function mulligan(game: CommanderGameState, playerSide: 'player' | 'shahrazad'): void {
-  const player = playerSide === 'player' ? game.playerState : game.shahrazadState;
+export function mulligan(game: CommanderGameState, playerSide: 'player' | 'khoa'): void {
+  const player = playerSide === 'player' ? game.playerState : game.khoaState;
 
   // Clear hand (cards go back to library)
   player.hand = [];

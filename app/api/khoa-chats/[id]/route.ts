@@ -11,7 +11,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   try {
     const { id } = await params;
     const chat = await findOne<any>(
-      `SELECT * FROM shahrazad_chats WHERE id = ? AND userId = ?`,
+      `SELECT * FROM khoa_chats WHERE id = ? AND "userId" = ?`,
       [id, userId]
     );
 
@@ -38,7 +38,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   try {
     const { id } = await params;
     await run(
-      `DELETE FROM shahrazad_chats WHERE id = ? AND userId = ?`,
+      `DELETE FROM khoa_chats WHERE id = ? AND "userId" = ?`,
       [id, userId]
     );
 

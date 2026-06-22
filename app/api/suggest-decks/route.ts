@@ -1,17 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server';
-import Anthropic from '@anthropic-ai/sdk';
-import { matchDeckToCollection, rankDecks, type DeckSource, type MatchedDeck } from '@/lib/deck-matcher';
+import { matchDeckToCollection, type DeckSource, type MatchedDeck } from '@/lib/deck-matcher';
 import { getCards, cardPrice } from '@/lib/scryfall';
 
 export const maxDuration = 60;
-
-const client = new Anthropic();
 
 interface CollectionCard {
   name: string;
   qty: number;
   typeLine?: string;
   colors?: string[];
+}
+
+async function generateDeckList(prompt: string): Promise<string> {
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${process.env.GOOGLE_API_KEY}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: { maxOutputTokens: 2000 },
+      }),
+    }
+  );
+
+  if (!res.ok) throw new Error(`Gemini error ${res.status}`);
+  const data = await res.json() as any;
+  return data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
 }
 
 export async function POST(req: NextRequest) {
@@ -23,7 +38,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Empty collection' }, { status: 400 });
   }
 
-  // Get type/color data for all cards
   const cardData = await getCards(cards.map(c => c.name));
   const typeLines = new Map<string, string>();
   const colors = new Map<string, string[]>();
@@ -36,7 +50,6 @@ export async function POST(req: NextRequest) {
     if (p > 0) prices.set(name, p);
   }
 
-  // Build card list for Claude with context
   const cardList = cards
     .map(c => {
       const type = typeLines.get(c.name) || '';
@@ -63,41 +76,14 @@ Keep decks practical and focused. Prioritize synergy over completing meta archet
 Return only the deck lists, no explanation.`;
 
   try {
-    const response = await client.messages.create({
-      model: 'claude-opus-4-8',
-      max_tokens: 2000,
-      messages: [
-        {
-          role: 'user',
-          content: prompt,
-        },
-      ],
-    });
-
-    const text = response.content.find(b => b.type === 'text')?.text ?? '';
-
-    // Parse deck suggestions from Claude
+    const text = await generateDeckList(prompt);
     const decks = parseDeckSuggestions(text);
-
-    // Match each suggested deck against collection
-    const prices2 = new Map<string, number>();
-    for (const [name, card] of cardData) {
-      const p = cardPrice(card);
-      if (p > 0) prices2.set(name, p);
-    }
 
     const matched = decks
       .map((deck, idx) =>
         matchDeckToCollection(
-          {
-            id: `custom-${idx}`,
-            name: deck.name,
-            format: 'Custom',
-            cards: deck.cards,
-          },
-          collection,
-          prices2,
-          typeLines
+          { id: `custom-${idx}`, name: deck.name, format: 'Custom', cards: deck.cards },
+          collection, prices, typeLines
         )
       )
       .sort((a, b) => b.coveragePct - a.coveragePct);
@@ -119,22 +105,18 @@ interface DeckSuggestion {
 
 function parseDeckSuggestions(text: string): DeckSuggestion[] {
   const decks: DeckSuggestion[] = [];
-
-  // Split by deck (look for lines with "DECK NAME | STRATEGY" pattern)
   const sections = text.split(/\n(?=[A-Z].*\|)/);
 
   for (const section of sections) {
     const lines = section.trim().split('\n');
     if (lines.length < 2) continue;
 
-    // First line is deck name and strategy
     const headerMatch = lines[0].match(/^([^|]+)\s*\|\s*(.+)$/);
     if (!headerMatch) continue;
 
     const deckName = `${headerMatch[1].trim()} (${headerMatch[2].trim()})`;
     const cards = new Map<string, number>();
 
-    // Parse remaining lines as "QTY CARDNAME"
     for (let i = 1; i < lines.length; i++) {
       const line = lines[i].trim();
       if (!line) continue;
@@ -143,15 +125,11 @@ function parseDeckSuggestions(text: string): DeckSuggestion[] {
       if (match) {
         const qty = parseInt(match[1], 10);
         const cardName = match[2].trim();
-        if (qty > 0 && cardName) {
-          cards.set(cardName, qty);
-        }
+        if (qty > 0 && cardName) cards.set(cardName, qty);
       }
     }
 
-    if (cards.size > 0) {
-      decks.push({ name: deckName, cards });
-    }
+    if (cards.size > 0) decks.push({ name: deckName, cards });
   }
 
   return decks;

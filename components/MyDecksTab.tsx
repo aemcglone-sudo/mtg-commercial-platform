@@ -1,14 +1,16 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import type { CollectionCardData } from './CollectionBrowser';
 import CardDetailModal from './CardDetailModal';
+import BuyOnTCGPlayer from './BuyOnTCGPlayer';
 
 interface Deck {
   id: string;
   name: string;
   format: string;
   strategy: string;
+  deckType?: 'paper' | 'arena';
   cards: Record<string, number>;
   commander?: string;
   createdAt: string;
@@ -22,8 +24,8 @@ export default function MyDecksTab({ collection }: Props) {
   const [decks, setDecks] = useState<Deck[]>([]);
   const [selectedDeck, setSelectedDeck] = useState<Deck | null>(null);
   const [showNew, setShowNew] = useState(false);
+  const [showNewList, setShowNewList] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [collectionType, setCollectionType] = useState<'paper' | 'arena'>('paper');
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
 
   useEffect(() => {
@@ -39,7 +41,10 @@ export default function MyDecksTab({ collection }: Props) {
         const data = await res.json();
         console.log('Decks loaded:', data);
         // API returns array directly, not wrapped in object
-        setDecks(Array.isArray(data) ? data : (data.decks || []));
+        const freshDecks = Array.isArray(data) ? data : (data.decks || []);
+        setDecks(freshDecks);
+        // Keep selectedDeck in sync so edits appear without a page refresh
+        setSelectedDeck(prev => prev ? (freshDecks.find((d: Deck) => d.id === prev.id) ?? prev) : null);
       } else {
         const errorData = await res.json().catch(() => ({ error: 'Unknown error' }));
         console.error('Failed to fetch decks:', res.status, errorData);
@@ -51,9 +56,7 @@ export default function MyDecksTab({ collection }: Props) {
     }
   }
 
-  // Filter collection by type
-  const filteredCollection = collection.filter(c => (c.collectionType ?? 'paper') === collectionType);
-  const collectionMap = new Map(filteredCollection.map(c => [c.name, c]));
+  const collectionMap = new Map(collection.map(c => [c.name, c]));
 
   if (loading) {
     return (
@@ -72,13 +75,22 @@ export default function MyDecksTab({ collection }: Props) {
         <p className="text-zinc-400 max-w-md mx-auto">
           Build and manage your custom Magic decks. Add cards from your collection or import from suggested decks.
         </p>
-        <button
-          type="button"
-          onClick={() => setShowNew(true)}
-          className="px-8 py-3 rounded-xl font-semibold text-black bg-amber-400 hover:bg-amber-300 transition-colors"
-        >
-          Create New Deck
-        </button>
+        <div className="flex gap-3 justify-center">
+          <button
+            type="button"
+            onClick={() => setShowNewList(true)}
+            className="px-6 py-3 rounded-xl font-semibold text-zinc-100 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 transition-colors"
+          >
+            + New List
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowNew(true)}
+            className="px-6 py-3 rounded-xl font-semibold text-black bg-amber-400 hover:bg-amber-300 transition-colors"
+          >
+            + New Deck
+          </button>
+        </div>
       </div>
     );
   }
@@ -89,6 +101,18 @@ export default function MyDecksTab({ collection }: Props) {
         onCancel={() => setShowNew(false)}
         onSave={() => {
           setShowNew(false);
+          loadDecks();
+        }}
+      />
+    );
+  }
+
+  if (showNewList) {
+    return (
+      <NewListForm
+        onCancel={() => setShowNewList(false)}
+        onSave={() => {
+          setShowNewList(false);
           loadDecks();
         }}
       />
@@ -128,24 +152,14 @@ export default function MyDecksTab({ collection }: Props) {
     <div className="space-y-4">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-xl font-semibold text-zinc-100">My Decks & Lists ({decks.length})</h2>
-        <div className="flex items-center gap-3">
-          {/* Collection type toggle */}
-          <div className="flex bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden text-sm">
-            <button
-              type="button"
-              onClick={() => setCollectionType('paper')}
-              className={`px-3 py-1.5 transition-colors ${collectionType === 'paper' ? 'bg-amber-400 text-black font-medium' : 'text-zinc-400 hover:text-zinc-200'}`}
-            >
-              📄 Paper
-            </button>
-            <button
-              type="button"
-              onClick={() => setCollectionType('arena')}
-              className={`px-3 py-1.5 transition-colors ${collectionType === 'arena' ? 'bg-amber-400 text-black font-medium' : 'text-zinc-400 hover:text-zinc-200'}`}
-            >
-              ⚡ Arena
-            </button>
-          </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowNewList(true)}
+            className="px-4 py-2 rounded-lg text-sm font-semibold text-zinc-100 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 transition-colors"
+          >
+            + New List
+          </button>
           <button
             type="button"
             onClick={() => setShowNew(true)}
@@ -167,8 +181,15 @@ export default function MyDecksTab({ collection }: Props) {
             ) : (
               deckList.map(deck => {
                 const deckCards = Object.entries(deck.cards || {});
-                const ownedCount = deckCards.filter(([name]) => collectionMap.has(name)).length;
-                const coveragePct = deckCards.length > 0 ? (ownedCount / deckCards.length) * 100 : 0;
+                const isArena = deck.deckType === 'arena';
+                const relevantCount = deckCards.filter(([name]) => {
+                  const card = collectionMap.get(name);
+                  if (!card) return false;
+                  return isArena
+                    ? card.collectionType === 'arena'
+                    : (card.collectionType ?? 'paper') === 'paper';
+                }).length;
+                const coveragePct = deckCards.length > 0 ? (relevantCount / deckCards.length) * 100 : 0;
 
                 return (
                   <div
@@ -187,7 +208,12 @@ export default function MyDecksTab({ collection }: Props) {
                     <div className="flex items-start justify-between gap-4 mb-2">
                       <div className="flex-1 min-w-0">
                         <h3 className="font-semibold text-zinc-100 truncate">{deck.name}</h3>
-                        <p className="text-xs text-zinc-500">{deck.format}</p>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <p className="text-xs text-zinc-500">{deck.format}</p>
+                          <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${deck.deckType === 'arena' ? 'bg-purple-900/50 text-purple-300' : 'bg-zinc-800 text-zinc-400'}`}>
+                            {deck.deckType === 'arena' ? '⚡ Arena' : '📄 Paper'}
+                          </span>
+                        </div>
                       </div>
                       <div className="flex items-center gap-3 shrink-0">
                         <div className="text-right">
@@ -217,23 +243,18 @@ export default function MyDecksTab({ collection }: Props) {
                     </div>
 
                     {deckCards.length > 0 && (
-                      <div className="space-y-1.5">
+                      <div className="space-y-1">
                         <div className="flex justify-between text-xs">
-                          <span className="text-emerald-400 font-medium">{ownedCount} owned</span>
-                          <span className={`font-semibold ${coveragePct >= 90 ? 'text-emerald-400' : coveragePct >= 70 ? 'text-amber-400' : 'text-red-400'}`}>
-                            {coveragePct.toFixed(0)}%
+                          <span className="text-zinc-400">{isArena ? '⚡ Arena owned' : '📄 Paper owned'}</span>
+                          <span className={`font-medium ${coveragePct >= 90 ? 'text-emerald-400' : coveragePct >= 70 ? (isArena ? 'text-purple-400' : 'text-amber-400') : 'text-zinc-400'}`}>
+                            {relevantCount}/{deckCards.length}
                           </span>
                         </div>
                         <div className="w-full bg-zinc-800 rounded-full h-1.5">
                           <div
-                            className={`h-1.5 rounded-full transition-all ${
-                              coveragePct >= 90 ? 'bg-emerald-500' : coveragePct >= 70 ? 'bg-amber-500' : 'bg-red-500'
-                            }`}
+                            className={`h-1.5 rounded-full transition-all ${coveragePct >= 90 ? 'bg-emerald-500' : coveragePct >= 70 ? (isArena ? 'bg-purple-500' : 'bg-amber-500') : 'bg-zinc-600'}`}
                             style={{ width: `${Math.min(coveragePct, 100)}%` }}
                           />
-                        </div>
-                        <div className="text-xs text-zinc-600">
-                          {deckCards.length - ownedCount} card{deckCards.length - ownedCount !== 1 ? 's' : ''} needed
                         </div>
                       </div>
                     )}
@@ -249,12 +270,21 @@ export default function MyDecksTab({ collection }: Props) {
           <h3 className="text-lg font-semibold text-zinc-100">📋 Lists ({listsList.length})</h3>
           <div className="grid gap-3">
             {listsList.length === 0 ? (
-              <p className="text-sm text-zinc-500 py-4">No lists yet. Ask Shahrazad to create one!</p>
+              <p className="text-sm text-zinc-500 py-2">No lists yet.</p>
             ) : (
               listsList.map(deck => {
           const deckCards = Object.entries(deck.cards || {});
+          const isArena = deck.deckType === 'arena';
+          const relevantCount = deckCards.filter(([name]) => {
+            const card = collectionMap.get(name);
+            if (!card) return false;
+            return isArena
+              ? card.collectionType === 'arena'
+              : (card.collectionType ?? 'paper') === 'paper';
+          }).length;
           const ownedCount = deckCards.filter(([name]) => collectionMap.has(name)).length;
-          const coveragePct = deckCards.length > 0 ? (ownedCount / deckCards.length) * 100 : 0;
+          const coveragePct = deckCards.length > 0 ? (relevantCount / deckCards.length) * 100 : 0;
+          const listOwnedPct = deckCards.length > 0 ? (ownedCount / deckCards.length) * 100 : 0;
 
           return (
             <div
@@ -276,7 +306,14 @@ export default function MyDecksTab({ collection }: Props) {
                 <div className="flex items-start justify-between gap-4 mb-2">
                   <div className="flex-1 min-w-0">
                     <h3 className="font-semibold text-zinc-100 truncate">{deck.name}</h3>
-                    <p className="text-xs text-zinc-500">{deck.format}</p>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <p className="text-xs text-zinc-500">{deck.format}</p>
+                      {deck.format !== 'List' && (
+                        <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${deck.deckType === 'arena' ? 'bg-purple-900/50 text-purple-300' : 'bg-zinc-800 text-zinc-400'}`}>
+                          {deck.deckType === 'arena' ? '⚡ Arena' : '📄 Paper'}
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <div className="flex items-center gap-3 shrink-0">
                     {deck.format !== 'List' && (
@@ -305,25 +342,35 @@ export default function MyDecksTab({ collection }: Props) {
                   </div>
                 </div>
 
-                {/* List stats - only show for decks, not lists */}
                 {deckCards.length > 0 && deck.format !== 'List' && (
-                  <div className="space-y-1.5">
+                  <div className="space-y-1">
                     <div className="flex justify-between text-xs">
-                      <span className="text-emerald-400 font-medium">{ownedCount} owned</span>
-                      <span className={`font-semibold ${coveragePct >= 90 ? 'text-emerald-400' : coveragePct >= 70 ? 'text-amber-400' : 'text-red-400'}`}>
-                        {coveragePct.toFixed(0)}%
+                      <span className="text-zinc-400">{isArena ? '⚡ Arena owned' : '📄 Paper owned'}</span>
+                      <span className={`font-medium ${coveragePct >= 90 ? 'text-emerald-400' : coveragePct >= 70 ? (isArena ? 'text-purple-400' : 'text-amber-400') : 'text-zinc-400'}`}>
+                        {relevantCount}/{deckCards.length}
                       </span>
                     </div>
                     <div className="w-full bg-zinc-800 rounded-full h-1.5">
                       <div
-                        className={`h-1.5 rounded-full transition-all ${
-                          coveragePct >= 90 ? 'bg-emerald-500' : coveragePct >= 70 ? 'bg-amber-500' : 'bg-red-500'
-                        }`}
+                        className={`h-1.5 rounded-full transition-all ${coveragePct >= 90 ? 'bg-emerald-500' : coveragePct >= 70 ? (isArena ? 'bg-purple-500' : 'bg-amber-500') : 'bg-zinc-600'}`}
                         style={{ width: `${Math.min(coveragePct, 100)}%` }}
                       />
                     </div>
-                    <div className="text-xs text-zinc-600">
-                      {deckCards.length - ownedCount} card{deckCards.length - ownedCount !== 1 ? 's' : ''} needed
+                  </div>
+                )}
+                {deckCards.length > 0 && deck.format === 'List' && (
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-xs">
+                      <span className="text-zinc-400">Owned</span>
+                      <span className={`font-medium ${listOwnedPct >= 90 ? 'text-emerald-400' : listOwnedPct >= 70 ? 'text-amber-400' : 'text-zinc-400'}`}>
+                        {ownedCount}/{deckCards.length}
+                      </span>
+                    </div>
+                    <div className="w-full bg-zinc-800 rounded-full h-1.5">
+                      <div
+                        className={`h-1.5 rounded-full transition-all ${listOwnedPct >= 90 ? 'bg-emerald-500' : listOwnedPct >= 70 ? 'bg-amber-500' : 'bg-zinc-600'}`}
+                        style={{ width: `${Math.min(listOwnedPct, 100)}%` }}
+                      />
                     </div>
                   </div>
                 )}
@@ -339,9 +386,216 @@ export default function MyDecksTab({ collection }: Props) {
   );
 }
 
+interface PasteReviewItem {
+  inputName: string;
+  qty: number;
+  canonicalName: string;
+  imageUrl: string | null;
+  accepted: boolean | null; // null = undecided (treated as accepted)
+}
+interface PasteReview {
+  autoAdded: { name: string; qty: number }[];
+  suggestions: PasteReviewItem[];
+  notFound: { name: string; qty: number }[];
+}
+
+function NewListForm({ onCancel, onSave }: { onCancel: () => void; onSave: () => void }) {
+  const [name, setName] = useState('');
+  const [pasteInput, setPasteInput] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [searchResults, setSearchResults] = useState<Array<{ name: string }>>([]);
+  const [cards, setCards] = useState<Record<string, number>>({});
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  function parseAndImport(text: string) {
+    const added: Record<string, number> = {};
+    for (const line of text.split('\n')) {
+      const trimmed = line.trim().replace(/^[•\-\*]\s*/, '');
+      if (!trimmed) continue;
+      const match = trimmed.match(/^(\d+)x?\s+(.+)$/);
+      if (match) {
+        let cardName = match[2].trim().split(' — ')[0].split('(')[0].split('[')[0].trim();
+        if (cardName && cardName.length > 1 && !/^\d+$/.test(cardName)) {
+          added[cardName] = (added[cardName] || 0) + parseInt(match[1], 10);
+        }
+      } else if (/^[A-Z]/.test(trimmed) && !trimmed.includes(':')) {
+        // bare card name with no quantity — assume 1
+        const cardName = trimmed.split(' — ')[0].split('(')[0].split('[')[0].trim();
+        if (cardName.length > 1) added[cardName] = (added[cardName] || 0) + 1;
+      }
+    }
+    setCards(prev => {
+      const updated = { ...prev };
+      for (const [n, q] of Object.entries(added)) updated[n] = (updated[n] || 0) + q;
+      return updated;
+    });
+    setPasteInput('');
+  }
+
+  async function handleSearchCards(query: string) {
+    setSearchInput(query);
+    if (!query.trim()) { setSearchResults([]); return; }
+    try {
+      const res = await fetch(`https://api.scryfall.com/cards/search?q=${encodeURIComponent(query)}&unique=cards`);
+      if (res.ok) {
+        const data = await res.json();
+        setSearchResults((data.data || []).slice(0, 10).map((c: any) => ({ name: c.name })));
+      }
+    } catch { /* ignore */ }
+  }
+
+  async function handleSave() {
+    if (!name.trim()) { setError('List name is required'); return; }
+
+    // Auto-import paste textarea if user didn't click "Add to List" manually
+    let finalCards = { ...cards };
+    if (pasteInput.trim()) {
+      for (const line of pasteInput.split('\n')) {
+        const trimmed = line.trim().replace(/^[•\-\*]\s*/, '');
+        if (!trimmed) continue;
+        const match = trimmed.match(/^(\d+)x?\s+(.+)$/);
+        if (match) {
+          let cardName = match[2].trim().split(' — ')[0].split('(')[0].split('[')[0].trim();
+          if (cardName && cardName.length > 1 && !/^\d+$/.test(cardName)) {
+            finalCards[cardName] = (finalCards[cardName] || 0) + parseInt(match[1], 10);
+          }
+        } else if (/^[A-Z]/.test(trimmed) && !trimmed.includes(':')) {
+          const cardName = trimmed.split(' — ')[0].split('(')[0].split('[')[0].trim();
+          if (cardName.length > 1) finalCards[cardName] = (finalCards[cardName] || 0) + 1;
+        }
+      }
+    }
+
+    if (Object.keys(finalCards).length === 0) { setError('Add at least one card'); return; }
+    setSaving(true);
+    setError('');
+    try {
+      const res = await fetch('/api/decks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name.trim(), format: 'List', cards: finalCards, isList: true }),
+      });
+      if (res.ok) { onSave(); } else { setError('Failed to save list'); }
+    } catch { setError('Failed to save list'); }
+    finally { setSaving(false); }
+  }
+
+  const totalCards = Object.values(cards).reduce((a, b) => a + b, 0);
+
+  return (
+    <div className="space-y-6 max-w-2xl">
+      <div className="flex items-center gap-3">
+        <button type="button" onClick={onCancel} className="text-zinc-400 hover:text-zinc-200 transition-colors">← Back</button>
+        <h2 className="text-xl font-bold text-zinc-100">New List</h2>
+      </div>
+
+      {error && <p className="text-red-400 text-sm">{error}</p>}
+
+      {/* Name */}
+      <div>
+        <label className="block text-sm text-zinc-400 mb-1">List Name</label>
+        <input
+          type="text"
+          value={name}
+          onChange={e => setName(e.target.value)}
+          placeholder="e.g. Cards to Acquire, Trade Binder..."
+          className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-amber-500"
+        />
+      </div>
+
+      {/* Import by paste */}
+      <div>
+        <label className="block text-sm text-zinc-400 mb-1">Import Card List</label>
+        <p className="text-xs text-zinc-600 mb-2">Paste any format: <span className="text-zinc-500">1x Lightning Bolt · Lightning Bolt · 4 Counterspell</span></p>
+        <textarea
+          value={pasteInput}
+          onChange={e => setPasteInput(e.target.value)}
+          placeholder={"1x Sol Ring\n4x Lightning Bolt\nCounterspell"}
+          rows={6}
+          className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-amber-500 font-mono text-sm resize-none"
+        />
+        <button
+          type="button"
+          onClick={() => parseAndImport(pasteInput)}
+          disabled={!pasteInput.trim()}
+          className="mt-2 px-4 py-2 rounded-lg text-sm font-semibold text-black bg-amber-400 hover:bg-amber-300 disabled:opacity-40 transition-colors"
+        >
+          Add to List
+        </button>
+      </div>
+
+      {/* Search to add individual cards */}
+      <div>
+        <label className="block text-sm text-zinc-400 mb-1">Add Individual Cards</label>
+        <input
+          type="text"
+          value={searchInput}
+          onChange={e => handleSearchCards(e.target.value)}
+          placeholder="Search for a card..."
+          className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-amber-500"
+        />
+        {searchResults.length > 0 && (
+          <div className="mt-1 bg-zinc-800 border border-zinc-700 rounded-lg overflow-hidden">
+            {searchResults.map(c => (
+              <button
+                key={c.name}
+                type="button"
+                onClick={() => {
+                  setCards(prev => ({ ...prev, [c.name]: (prev[c.name] || 0) + 1 }));
+                  setSearchInput('');
+                  setSearchResults([]);
+                }}
+                className="w-full text-left px-4 py-2 hover:bg-zinc-700 text-sm text-zinc-200 border-b border-zinc-700 last:border-b-0 transition-colors"
+              >
+                {c.name}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Card preview */}
+      {totalCards > 0 && (
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-2">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-zinc-300">Cards in List ({totalCards} total, {Object.keys(cards).length} unique)</h3>
+            <button type="button" onClick={() => setCards({})} className="text-xs text-zinc-600 hover:text-red-400 transition-colors">Clear all</button>
+          </div>
+          <div className="max-h-48 overflow-y-auto space-y-1">
+            {Object.entries(cards).sort(([a], [b]) => a.localeCompare(b)).map(([cardName, qty]) => (
+              <div key={cardName} className="flex items-center justify-between text-xs py-0.5">
+                <span className="text-zinc-300">{qty}x {cardName}</span>
+                <button
+                  type="button"
+                  onClick={() => setCards(prev => { const u = { ...prev }; delete u[cardName]; return u; })}
+                  className="text-zinc-600 hover:text-red-400 px-1 transition-colors"
+                >✕</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="flex gap-3">
+        <button type="button" onClick={onCancel} className="px-6 py-2 rounded-lg text-sm text-zinc-400 hover:text-zinc-200 border border-zinc-700 transition-colors">Cancel</button>
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={saving || !name.trim() || totalCards === 0}
+          className="flex-1 px-6 py-2 rounded-lg text-sm font-semibold text-black bg-amber-400 hover:bg-amber-300 disabled:opacity-40 transition-colors"
+        >
+          {saving ? 'Saving…' : `Save List (${totalCards} cards)`}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function NewDeckForm({ onCancel, onSave }: { onCancel: () => void; onSave: () => void }) {
   const [name, setName] = useState('');
   const [format, setFormat] = useState('Commander');
+  const [deckType, setDeckType] = useState<'paper' | 'arena'>('paper');
   const [commander, setCommander] = useState('');
   const [commanderResults, setCommanderResults] = useState<Array<{ name: string; imageUrl: string | null }>>([]);
   const [strategy, setStrategy] = useState('');
@@ -354,6 +608,8 @@ function NewDeckForm({ onCancel, onSave }: { onCancel: () => void; onSave: () =>
   const [searching, setSearching] = useState(false);
   const [showPasteDeckList, setShowPasteDeckList] = useState(false);
   const [pasteInput, setPasteInput] = useState('');
+  const [validating, setValidating] = useState(false);
+  const [pasteReview, setPasteReview] = useState<PasteReview | null>(null);
 
   async function handleSearchCards(query: string) {
     if (!query.trim()) {
@@ -423,37 +679,155 @@ function NewDeckForm({ onCancel, onSave }: { onCancel: () => void; onSave: () =>
     }
   }
 
-  function handlePasteDeckList() {
-    const cards: Record<string, number> = {};
-    if (pasteInput.trim()) {
-      const lines = pasteInput.split('\n');
-      for (const line of lines) {
-        const match = line.match(/^(\d+)x?\s+(.+)$/i);
-        if (match) {
-          const qty = parseInt(match[1]);
-          const cardName = match[2].trim();
-          if (cardName && qty > 0) {
-            cards[cardName] = (cards[cardName] || 0) + qty;
+  async function handlePasteDeckList() {
+    if (!pasteInput.trim()) return;
+
+    const parsed: { name: string; qty: number }[] = [];
+    let detectedCommander: string | null = null;
+    let inCommanderSection = false;
+
+    const lines = pasteInput.split('\n');
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+
+      // Track section headers
+      if (/^commander:?$/i.test(trimmed)) { inCommanderSection = true; continue; }
+      if (/^(deck|sideboard|maindeck|companion):?$/i.test(trimmed)) { inCommanderSection = false; continue; }
+      if (/^\/\//.test(trimmed)) continue;
+
+      const match = trimmed.match(/^(\d+)x?\s+(.+)$/i);
+      if (match) {
+        const qty = parseInt(match[1]);
+        // Strip trailing Arena/MTGO set code like "(FDN) 123" or "(BLB)"
+        const cardName = match[2]
+          .replace(/\s+\([A-Z0-9]{2,6}\)(\s+\d+)?$/, '')
+          .trim();
+        if (cardName && qty > 0) {
+          if (inCommanderSection && qty === 1 && !detectedCommander) {
+            detectedCommander = cardName;
           }
+          parsed.push({ name: cardName, qty });
         }
       }
     }
+
+    // Auto-fill commander field if detected and not already set
+    if (detectedCommander && format === 'Commander' && !commander) {
+      setCommander(detectedCommander);
+    }
+    if (parsed.length === 0) return;
+
+    setValidating(true);
+    try {
+      // Batch exact-name lookup (Scryfall /cards/collection supports 75 per request)
+      const identifiers = parsed.map(c => ({ name: c.name }));
+      const collRes = await fetch('https://api.scryfall.com/cards/collection', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifiers }),
+      });
+      const collData = await collRes.json();
+
+      // Map canonical names from found cards
+      const exactFound = new Map<string, string>(); // lowerInputName → canonicalName
+      for (const card of (collData.data ?? [])) {
+        exactFound.set(card.name.toLowerCase(), card.name);
+      }
+      const notFoundSet = new Set<string>(
+        (collData.not_found ?? []).map((nf: { name?: string }) => (nf.name ?? '').toLowerCase())
+      );
+
+      const autoAdded: { name: string; qty: number }[] = [];
+      const toFuzzy: { name: string; qty: number }[] = [];
+
+      for (const p of parsed) {
+        if (notFoundSet.has(p.name.toLowerCase())) {
+          toFuzzy.push(p);
+        } else {
+          autoAdded.push({ name: exactFound.get(p.name.toLowerCase()) ?? p.name, qty: p.qty });
+        }
+      }
+
+      // Fuzzy search for each unresolved card
+      const suggestions: PasteReviewItem[] = [];
+      const notFound: { name: string; qty: number }[] = [];
+
+      for (const card of toFuzzy) {
+        try {
+          const fuzzyRes = await fetch(
+            `https://api.scryfall.com/cards/named?fuzzy=${encodeURIComponent(card.name)}`
+          );
+          if (fuzzyRes.ok) {
+            const fuzzyCard = await fuzzyRes.json();
+            if (fuzzyCard.name.toLowerCase() === card.name.toLowerCase()) {
+              // Exact match via fuzzy (batch lookup quirk) — auto-add silently
+              autoAdded.push({ name: fuzzyCard.name, qty: card.qty });
+            } else {
+              const imageUrl =
+                fuzzyCard.image_uris?.normal ??
+                fuzzyCard.card_faces?.[0]?.image_uris?.normal ??
+                null;
+              suggestions.push({
+                inputName: card.name,
+                qty: card.qty,
+                canonicalName: fuzzyCard.name,
+                imageUrl,
+                accepted: null,
+              });
+            }
+          } else {
+            notFound.push(card);
+          }
+        } catch {
+          notFound.push(card);
+        }
+        // Polite pacing for Scryfall
+        await new Promise(r => setTimeout(r, 80));
+      }
+
+      if (suggestions.length === 0 && notFound.length === 0) {
+        // All resolved exactly — add directly
+        const cards: Record<string, number> = {};
+        for (const c of autoAdded) cards[c.name] = (cards[c.name] || 0) + c.qty;
+        setDeckCards(prev => ({ ...prev, ...cards }));
+        setPasteInput('');
+        setShowPasteDeckList(false);
+      } else {
+        setPasteReview({ autoAdded, suggestions, notFound });
+      }
+    } catch {
+      // On network failure, fall back to adding names as-is
+      const cards: Record<string, number> = {};
+      for (const p of parsed) cards[p.name] = (cards[p.name] || 0) + p.qty;
+      setDeckCards(prev => ({ ...prev, ...cards }));
+      setPasteInput('');
+      setShowPasteDeckList(false);
+    } finally {
+      setValidating(false);
+    }
+  }
+
+  function confirmPasteReview() {
+    if (!pasteReview) return;
+    const cards: Record<string, number> = {};
+    for (const c of pasteReview.autoAdded) cards[c.name] = (cards[c.name] || 0) + c.qty;
+    for (const s of pasteReview.suggestions) {
+      if (s.accepted !== false) cards[s.canonicalName] = (cards[s.canonicalName] || 0) + s.qty;
+    }
     setDeckCards(prev => ({ ...prev, ...cards }));
     setPasteInput('');
+    setPasteReview(null);
     setShowPasteDeckList(false);
   }
 
   async function handleCreate() {
     if (!name.trim()) return;
-    if (format === 'Commander' && !commander.trim()) {
-      setError('Commander is required for Commander format');
-      return;
-    }
     setSaving(true);
     setError('');
     setSuccess('');
     try {
-      const deckData: any = { name, format, strategy, cards: deckCards };
+      const deckData: any = { name, format, strategy, deckType, cards: deckCards };
       if (format === 'Commander') {
         deckData.commander = commander;
       }
@@ -530,9 +904,30 @@ function NewDeckForm({ onCancel, onSave }: { onCancel: () => void; onSave: () =>
               <option>Standard</option>
               <option>Pioneer</option>
               <option>Commander</option>
+              <option>Brawl</option>
               <option>Modern</option>
               <option>Legacy</option>
             </select>
+          </div>
+
+          <div>
+            <label className="block text-sm text-zinc-400 mb-2">Deck Type</label>
+            <div className="flex bg-zinc-800 border border-zinc-700 rounded-lg overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setDeckType('paper')}
+                className={`flex-1 py-2 text-sm font-medium transition-colors ${deckType === 'paper' ? 'bg-amber-400 text-black' : 'text-zinc-400 hover:text-zinc-200'}`}
+              >
+                📄 Paper
+              </button>
+              <button
+                type="button"
+                onClick={() => setDeckType('arena')}
+                className={`flex-1 py-2 text-sm font-medium transition-colors ${deckType === 'arena' ? 'bg-purple-500 text-white' : 'text-zinc-400 hover:text-zinc-200'}`}
+              >
+                ⚡ Arena
+              </button>
+            </div>
           </div>
 
           {format === 'Commander' && (
@@ -616,21 +1011,119 @@ function NewDeckForm({ onCancel, onSave }: { onCancel: () => void; onSave: () =>
           </button>
 
           {showPasteDeckList && (
-            <div className="space-y-2">
-              <textarea
-                value={pasteInput}
-                onChange={e => setPasteInput(e.target.value)}
-                placeholder={`4 Lightning Bolt\n4 Counterspell\n20 Island`}
-                rows={3}
-                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-amber-500 resize-none font-mono text-sm"
-              />
-              <button
-                type="button"
-                onClick={handlePasteDeckList}
-                className="text-xs px-3 py-1 rounded bg-amber-400/20 text-amber-400 hover:bg-amber-400/30 transition-colors"
-              >
-                Add from list
-              </button>
+            <div className="space-y-3">
+              {!pasteReview ? (
+                <>
+                  <textarea
+                    value={pasteInput}
+                    onChange={e => setPasteInput(e.target.value)}
+                    placeholder={`4 Lightning Bolt\n4 Counterspell\n20 Island`}
+                    rows={4}
+                    disabled={validating}
+                    className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-amber-500 resize-none font-mono text-sm disabled:opacity-50"
+                  />
+                  <button
+                    type="button"
+                    onClick={handlePasteDeckList}
+                    disabled={validating || !pasteInput.trim()}
+                    className="flex items-center gap-2 text-xs px-3 py-1.5 rounded bg-amber-400/20 text-amber-400 hover:bg-amber-400/30 transition-colors disabled:opacity-50"
+                  >
+                    {validating ? (
+                      <>
+                        <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                        Checking cards…
+                      </>
+                    ) : 'Validate & Import'}
+                  </button>
+                </>
+              ) : (
+                <div className="space-y-3">
+                  {pasteReview.autoAdded.length > 0 && (
+                    <p className="text-xs text-green-400">
+                      ✓ {pasteReview.autoAdded.length} card{pasteReview.autoAdded.length !== 1 ? 's' : ''} resolved automatically
+                    </p>
+                  )}
+
+                  {pasteReview.suggestions.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold text-amber-400">Did you mean…?</p>
+                      {pasteReview.suggestions.map((s, i) => (
+                        <div key={i} className={`flex items-center gap-3 rounded-lg p-2 transition-colors ${s.accepted === false ? 'bg-zinc-900 opacity-40' : 'bg-zinc-800'}`}>
+                          {s.imageUrl && (
+                            <img
+                              src={s.imageUrl}
+                              alt={s.canonicalName}
+                              className="h-10 w-7 object-cover rounded shrink-0"
+                            />
+                          )}
+                          <div className="flex-1 min-w-0">
+                            {s.inputName.toLowerCase() !== s.canonicalName.toLowerCase() && (
+                              <p className="text-xs text-zinc-500 truncate line-through">{s.inputName}</p>
+                            )}
+                            <p className="text-sm text-zinc-100 font-medium truncate">{s.canonicalName}</p>
+                            <p className="text-xs text-zinc-500">×{s.qty}</p>
+                          </div>
+                          <div className="flex gap-1 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => setPasteReview(prev => prev ? {
+                                ...prev,
+                                suggestions: prev.suggestions.map((item, idx) =>
+                                  idx === i ? { ...item, accepted: true } : item
+                                ),
+                              } : null)}
+                              className={`px-2 py-0.5 text-xs rounded transition-colors ${s.accepted === true ? 'bg-green-500/30 text-green-300 ring-1 ring-green-500' : 'bg-zinc-700 text-zinc-400 hover:bg-green-900/40 hover:text-green-300'}`}
+                            >
+                              Accept
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setPasteReview(prev => prev ? {
+                                ...prev,
+                                suggestions: prev.suggestions.map((item, idx) =>
+                                  idx === i ? { ...item, accepted: false } : item
+                                ),
+                              } : null)}
+                              className={`px-2 py-0.5 text-xs rounded transition-colors ${s.accepted === false ? 'bg-red-500/30 text-red-300 ring-1 ring-red-500' : 'bg-zinc-700 text-zinc-400 hover:bg-red-900/40 hover:text-red-300'}`}
+                            >
+                              Skip
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {pasteReview.notFound.length > 0 && (
+                    <div className="space-y-1">
+                      <p className="text-xs font-semibold text-red-400">Not found on Scryfall:</p>
+                      {pasteReview.notFound.map((c, i) => (
+                        <p key={i} className="text-xs text-zinc-500 pl-2">✗ {c.name} ×{c.qty}</p>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={confirmPasteReview}
+                      className="text-xs px-3 py-1.5 rounded bg-amber-400/20 text-amber-400 hover:bg-amber-400/30 transition-colors"
+                    >
+                      Add {pasteReview.autoAdded.length + pasteReview.suggestions.filter(s => s.accepted !== false).length} cards to deck
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPasteReview(null)}
+                      className="text-xs px-3 py-1.5 rounded bg-zinc-700 text-zinc-400 hover:bg-zinc-600 transition-colors"
+                    >
+                      Back
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -692,42 +1185,23 @@ function NewDeckForm({ onCancel, onSave }: { onCancel: () => void; onSave: () =>
   );
 }
 
-function TCGPlayerButton({ missingCards }: { missingCards: Array<[string, number]> }) {
-  const [loading, setLoading] = useState(false);
 
-  async function handleClick() {
-    setLoading(true);
-    try {
-      const res = await fetch('/api/tcgplayer-cart', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cards: missingCards }),
-      });
+const COLOR_STYLES: Record<string, string> = {
+  W: 'text-yellow-100 bg-zinc-700',
+  U: 'text-blue-400 bg-zinc-700',
+  B: 'text-zinc-300 bg-zinc-700',
+  R: 'text-red-400 bg-zinc-700',
+  G: 'text-green-400 bg-zinc-700',
+};
 
-      if (res.ok) {
-        const { cartUrl } = await res.json();
-        window.open(cartUrl, '_blank');
-      } else {
-        const error = await res.json().catch(() => ({ error: 'Unknown error' }));
-        alert(`Failed to generate cart link: ${error.error || 'Please try again'}`);
-      }
-    } catch (err) {
-      console.error('Failed to generate TCGPlayer cart:', err);
-      alert('Failed to generate cart link. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  }
-
+function ColorPips({ colors }: { colors?: string[] }) {
+  if (!colors || colors.length === 0) return <span className="text-[9px] font-bold px-1 rounded bg-zinc-700 text-zinc-500">C</span>;
   return (
-    <button
-      type="button"
-      onClick={handleClick}
-      disabled={loading}
-      className="w-full px-6 py-3 rounded-xl font-semibold text-black bg-amber-400 hover:bg-amber-300 disabled:opacity-50 transition-colors"
-    >
-      🛒 {loading ? 'Loading…' : `Buy ${missingCards.length} Missing Card${missingCards.length !== 1 ? 's' : ''} on TCGPlayer`}
-    </button>
+    <span className="inline-flex gap-0.5">
+      {colors.map(c => (
+        <span key={c} className={`text-[9px] font-bold px-1 rounded ${COLOR_STYLES[c] ?? 'text-zinc-400 bg-zinc-700'}`}>{c}</span>
+      ))}
+    </span>
   );
 }
 
@@ -750,9 +1224,10 @@ function DeckDetail({
 }) {
   const [sortColumn, setSortColumn] = useState<'name' | 'qty' | 'price' | 'type' | 'cmc' | 'color'>('name');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
-  const [analyzing, setAnalyzing] = useState(false);
-  const [analysis, setAnalysis] = useState<any>(null);
   const [editMode, setEditMode] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [editCards, setEditCards] = useState<Record<string, number>>({});
   const [searchInput, setSearchInput] = useState('');
   const [searchResults, setSearchResults] = useState<Array<{ name: string; imageUrl: string | null }>>([]);
@@ -775,20 +1250,45 @@ function DeckDetail({
     Array.from(collection.entries()).map(([name, data]) => [name.toLowerCase(), { name, data }])
   );
 
-  const deckCards = Object.entries(deck.cards || {});
-  const ownedCards = deckCards.filter(([name]) =>
-    collectionLower.has(name.toLowerCase())
+  // Normalize common MTG name variants (Worm/Wurm, etc.) for fuzzy ownership matching
+  function normalizeCardName(name: string): string {
+    return name.toLowerCase().replace(/\bwurm\b/g, 'worm').replace(/\bworm\b/g, 'worm');
+  }
+  const collectionNormalized = new Map(
+    Array.from(collection.entries()).map(([name, data]) => [normalizeCardName(name), { name, data }])
   );
-  const missingCards = deckCards.filter(([name]) =>
-    !collectionLower.has(name.toLowerCase())
-  );
+
+  function isOwned(name: string): boolean {
+    return collectionLower.has(name.toLowerCase()) || collectionNormalized.has(normalizeCardName(name));
+  }
+
+  const BASIC_LAND_NAMES = new Set([
+    'plains', 'island', 'swamp', 'mountain', 'forest', 'wastes',
+    'snow-covered plains', 'snow-covered island', 'snow-covered swamp',
+    'snow-covered mountain', 'snow-covered forest',
+  ]);
+  const isBasicLand = (name: string) => BASIC_LAND_NAMES.has(name.toLowerCase());
+
+  // Strip AI-appended annotations like [OWNED], [NEW], (budget) from saved card names
+  const deckCards = Object.entries(deck.cards || {}).map(([name, qty]) => {
+    const clean = name.replace(/\s*\[.*?\]/g, '').replace(/\s*\(.*?\)/g, '').trim();
+    return [clean, qty] as [string, number];
+  });
+  const ownedCards = deckCards.filter(([name]) => isOwned(name));
+  const missingCards = deckCards.filter(([name]) => !isOwned(name));
   const coveragePct = deckCards.length > 0 ? (ownedCards.length / deckCards.length) * 100 : 0;
+  const paperOwned = ownedCards.filter(([name]) => (collectionLower.get(name.toLowerCase())?.data?.collectionType ?? 'paper') === 'paper').length;
+  const arenaOwned = ownedCards.filter(([name]) => collectionLower.get(name.toLowerCase())?.data?.collectionType === 'arena').length;
+  const paperPct = deckCards.length > 0 ? (paperOwned / deckCards.length) * 100 : 0;
+  const arenaPct = deckCards.length > 0 ? (arenaOwned / deckCards.length) * 100 : 0;
   const ownedValue = ownedCards.reduce((s, [name, qty]) => {
+    if (isBasicLand(name)) return s;
     const match = collectionLower.get(name.toLowerCase());
     const price = match?.data?.priceUsd ?? 0;
     return s + price * qty;
   }, 0);
   const missingValue = missingCards.reduce((s, [name, qty]) => {
+    if (isBasicLand(name)) return s;
     const price = allCollectionCards.find(c => c.name.toLowerCase() === name.toLowerCase())?.priceUsd ?? 0;
     return s + price * qty;
   }, 0);
@@ -894,24 +1394,32 @@ function DeckDetail({
     }
   }
 
-  async function handleSearchCards(query: string) {
-    if (!query.trim()) {
+  function handleSearchCards(query: string) {
+    if (searchDebounce.current) clearTimeout(searchDebounce.current);
+    if (!query.trim() || query.trim().length < 2) {
       setSearchResults([]);
+      setSearching(false);
       return;
     }
-    try {
-      const res = await fetch(`https://api.scryfall.com/cards/search?q=${encodeURIComponent(query)}&unique=cards`);
-      if (res.ok) {
-        const data = await res.json();
-        const results = (data.data || []).slice(0, 10).map((card: any) => ({
-          name: card.name,
-          imageUrl: card.image_uris?.normal || null,
-        }));
-        setSearchResults(results);
+    setSearching(true);
+    searchDebounce.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`https://api.scryfall.com/cards/autocomplete?q=${encodeURIComponent(query)}`);
+        if (res.ok) {
+          const data = await res.json();
+          setSearchResults((data.data || []).slice(0, 10).map((name: string) => ({
+            name,
+            imageUrl: null,
+          })));
+        } else {
+          setSearchResults([]);
+        }
+      } catch {
+        setSearchResults([]);
+      } finally {
+        setSearching(false);
       }
-    } catch (err) {
-      console.error('Card search error:', err);
-    }
+    }, 300);
   }
 
   function handleEditStart() {
@@ -1014,7 +1522,7 @@ function DeckDetail({
           {editMode ? '✕ Cancel Edit' : '← Back'}
         </button>
         <div className="flex gap-2">
-          {!editMode && deck.format !== 'List' && (
+          {!editMode && (
             <button
               type="button"
               onClick={handleEditStart}
@@ -1050,12 +1558,14 @@ function DeckDetail({
       {deck.format !== 'List' && (
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4">
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-2 sm:p-4">
-          <div className="text-xs text-zinc-500 mb-0.5 sm:mb-1">Coverage</div>
-          <div className="text-xl sm:text-2xl font-bold text-amber-400">{coveragePct.toFixed(0)}%</div>
+          <div className="text-xs text-zinc-500 mb-1">📄 Paper</div>
+          <div className={`text-xl sm:text-2xl font-bold ${paperPct >= 90 ? 'text-emerald-400' : paperPct >= 70 ? 'text-amber-400' : 'text-zinc-300'}`}>{paperPct.toFixed(0)}%</div>
+          <div className="text-xs text-zinc-500 mt-0.5">{paperOwned}/{deckCards.length} cards</div>
         </div>
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-2 sm:p-4">
-          <div className="text-xs text-zinc-500 mb-0.5 sm:mb-1">Owned</div>
-          <div className="text-xl sm:text-2xl font-bold text-emerald-400">{ownedCards.length}</div>
+          <div className="text-xs text-zinc-500 mb-1">⚡ Arena</div>
+          <div className={`text-xl sm:text-2xl font-bold ${arenaPct >= 90 ? 'text-emerald-400' : arenaPct >= 70 ? 'text-purple-400' : 'text-zinc-300'}`}>{arenaPct.toFixed(0)}%</div>
+          <div className="text-xs text-zinc-500 mt-0.5">{arenaOwned}/{deckCards.length} cards</div>
         </div>
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-2 sm:p-4">
           <div className="text-xs text-zinc-500 mb-0.5 sm:mb-1">Missing</div>
@@ -1069,46 +1579,42 @@ function DeckDetail({
       )}
 
       {/* Action Buttons */}
-      <div className="space-y-2">
-        {deck.format !== 'List' && missingCards.length > 0 && (
-          <TCGPlayerButton missingCards={missingCards} />
-        )}
-        {deck.format !== 'List' && (
+      {deck.format !== 'List' && (
+        <div className="flex gap-2">
+          {missingCards.length > 0 && (
+            <BuyOnTCGPlayer
+              cards={missingCards.map(([name, quantity]) => ({ name, quantity }))}
+              label={`🛒 ${missingCards.length} Missing`}
+              size="sm"
+              className="flex-1"
+            />
+          )}
+          <BuyOnTCGPlayer
+            cards={deckCards.map(([name, quantity]) => ({ name, quantity }))}
+            label="🛒 Full Deck"
+            size="sm"
+            className="flex-1 !bg-zinc-700 !text-zinc-100 hover:!bg-zinc-600"
+          />
           <button
             type="button"
-            onClick={async () => {
-              setAnalyzing(true);
-              try {
-                const res = await fetch('/api/decks/analyze', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ deckId: deck.id }),
-                });
-                if (res.ok) {
-                  const data = await res.json();
-                  setAnalysis(data);
-                } else {
-                  alert('Failed to analyze deck');
-                }
-              } catch (err) {
-                console.error('Analysis error:', err);
-                alert('Error analyzing deck');
-              } finally {
-                setAnalyzing(false);
-              }
+            onClick={() => {
+              const cardLines = deckCards
+                .map(([name, qty]) => `${qty}x ${name}`)
+                .join('\n');
+              const prompt = `Here is my ${deck.format || 'Commander'} deck "${deck.name}":\n\n${cardLines}\n\nPlease analyze this deck and suggest the top improvements as swap pairs (cut + add). Then give me an optimized version as a full deck list I can save.`;
+              window.dispatchEvent(new CustomEvent('khoa-prompt', { detail: prompt }));
             }}
-            disabled={analyzing}
-            className="w-full px-6 py-3 rounded-xl font-semibold text-black bg-purple-400 hover:bg-purple-300 disabled:opacity-50 transition-colors"
+            className="flex-1 px-3 py-1.5 rounded-xl text-xs font-semibold text-black bg-purple-400 hover:bg-purple-300 transition-colors"
           >
-            🧙 {analyzing ? 'Analyzing…' : 'Analyze with Shahrazad'}
+            ✨ Ask Khoa
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Edit Mode */}
       {editMode && (
         <div className="space-y-4 bg-zinc-900 border border-zinc-800 rounded-xl p-6">
-          <h3 className="text-lg font-semibold text-zinc-100">✏️ Edit Deck Cards</h3>
+          <h3 className="text-lg font-semibold text-zinc-100">✏️ Edit {deck.format === 'List' ? 'List' : 'Deck'} Cards</h3>
 
           <div>
             <label className="block text-sm text-zinc-400 mb-2">Search and Add Cards</label>
@@ -1119,7 +1625,7 @@ function DeckDetail({
                 setSearchInput(e.target.value);
                 handleSearchCards(e.target.value);
               }}
-              placeholder="Search for a card..."
+              placeholder={searching ? 'Searching...' : 'Search for a card...'}
               className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-2 text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-amber-500"
             />
             {searchResults.length > 0 && (
@@ -1139,7 +1645,7 @@ function DeckDetail({
           </div>
 
           <div>
-            <h4 className="text-sm font-semibold text-zinc-400 mb-3">Cards in Deck ({Object.values(editCards).reduce((a, b) => a + b, 0)})</h4>
+            <h4 className="text-sm font-semibold text-zinc-400 mb-3">Cards ({Object.values(editCards).reduce((a, b) => a + b, 0)} total, {Object.keys(editCards).length} unique)</h4>
             <div className="space-y-3 max-h-96 overflow-y-auto bg-zinc-800 rounded-lg p-4">
               {Object.entries(editCards).length === 0 ? (
                 <p className="text-xs text-zinc-600 text-center py-4">No cards added</p>
@@ -1196,70 +1702,52 @@ function DeckDetail({
         </div>
       )}
 
-      {/* Shahrazad Analysis Results */}
-      {analysis && (
-        <div className="space-y-4 bg-zinc-900 border border-zinc-800 rounded-xl p-6">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-zinc-100">🧙 Shahrazad's Analysis</h3>
-            <button
-              type="button"
-              onClick={() => setAnalysis(null)}
-              className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
-            >
-              Close
-            </button>
-          </div>
-
-          <div>
-            <p className="text-sm text-zinc-300 mb-2">{analysis.summary}</p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <h4 className="text-sm font-semibold text-emerald-400 mb-2">Strengths</h4>
-              <ul className="space-y-1 text-xs text-zinc-300">
-                {analysis.strengths?.map((s: string, i: number) => (
-                  <li key={i}>✓ {s}</li>
-                ))}
-              </ul>
-            </div>
-            <div>
-              <h4 className="text-sm font-semibold text-red-400 mb-2">Weaknesses</h4>
-              <ul className="space-y-1 text-xs text-zinc-300">
-                {analysis.weaknesses?.map((w: string, i: number) => (
-                  <li key={i}>✗ {w}</li>
-                ))}
-              </ul>
-            </div>
-          </div>
-
-          <div>
-            <h4 className="text-sm font-semibold text-amber-400 mb-2">Card Recommendations</h4>
-            <div className="space-y-2">
-              {analysis.recommendations?.map((rec: any, i: number) => (
-                <div key={i} className="bg-zinc-800 rounded-lg p-3 text-xs">
-                  <div className="flex items-start justify-between mb-1">
-                    <span className="font-semibold text-zinc-100">{rec.card}</span>
-                    <span className={`text-xs px-2 py-0.5 rounded ${rec.inCollection ? 'bg-emerald-900 text-emerald-300' : 'bg-amber-900 text-amber-300'}`}>
-                      {rec.inCollection ? 'You own this' : 'Need to acquire'}
-                    </span>
-                  </div>
-                  <p className="text-zinc-400">{rec.reason}</p>
-                  <p className="text-zinc-500 mt-1">Suggested: {rec.suggestedQuantity}x</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* List View - for lists, show sortable table */}
       {deck.format === 'List' ? (
         <div className="space-y-3">
-          <h3 className="font-semibold text-zinc-100">
-            📋 Cards in List ({ownedCards.length})
-          </h3>
-          {ownedCards.length === 0 ? (
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="font-semibold text-zinc-100">📋 Cards in List ({deckCards.length})</h3>
+            {deckCards.length > 0 && (
+              <div className="flex gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const text = deckCards.map(([name, qty]) => `${qty}x ${name}`).join('\n');
+                    navigator.clipboard.writeText(text).then(() => {
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 2000);
+                    });
+                  }}
+                  className="px-2.5 py-1 rounded-lg text-xs font-medium bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100 transition-colors border border-zinc-700"
+                >
+                  {copied ? '✓ Copied' : '⎘ Copy'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const text = deckCards.map(([name, qty]) => `${qty}x ${name}`).join('\n');
+                    const blob = new Blob([text], { type: 'text/plain' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `${deck.name}.txt`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }}
+                  className="px-2.5 py-1 rounded-lg text-xs font-medium bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100 transition-colors border border-zinc-700"
+                >
+                  ↓ Export
+                </button>
+                <BuyOnTCGPlayer
+                  cards={deckCards.map(([name, quantity]) => ({ name, quantity }))}
+                  label="🛒 Buy List"
+                  size="sm"
+                />
+              </div>
+            )}
+          </div>
+          {deckCards.length === 0 ? (
             <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
               <p className="text-sm text-zinc-600">None yet</p>
             </div>
@@ -1347,10 +1835,28 @@ function DeckDetail({
               })()}
             </div>
           )}
+          {deckCards.length > 0 && (
+            <div className="mt-1">
+              <BuyOnTCGPlayer
+                cards={deckCards.map(([name, quantity]) => ({ name, quantity }))}
+                label="🛒 Buy List on TCGPlayer"
+              />
+            </div>
+          )}
         </div>
       ) : (
         /* Deck View - grouped by type */
         <div className={`grid gap-6 grid-cols-1 md:grid-cols-2`}>
+          {/* Color key */}
+          <div className="md:col-span-2 flex flex-wrap items-center gap-2 text-[10px] text-zinc-500">
+            <span className="font-semibold uppercase tracking-wider text-zinc-600 mr-1">Colors:</span>
+            {([['W','White','text-yellow-100'],['U','Blue','text-blue-400'],['B','Black','text-zinc-300'],['R','Red','text-red-400'],['G','Green','text-green-400'],['C','Colorless','text-zinc-500']] as const).map(([letter, label, cls]) => (
+              <span key={letter} className="flex items-center gap-1">
+                <span className={`text-[9px] font-bold px-1 rounded bg-zinc-700 ${cls}`}>{letter}</span>
+                <span>{label}</span>
+              </span>
+            ))}
+          </div>
           {/* Owned Cards */}
           <div className="space-y-3">
             <h3 className="font-semibold text-zinc-100">
@@ -1364,17 +1870,23 @@ function DeckDetail({
                   <div key={type}>
                     <p className="text-xs font-semibold text-amber-400 uppercase mb-2">{type}</p>
                     <div className="space-y-1 ml-2">
-                      {cards.map(([name, qty]) => (
-                        <button
-                          key={name}
-                          type="button"
-                          onClick={() => onCardClick?.(name)}
-                          className="w-full flex justify-between text-xs text-left hover:bg-zinc-800 p-2 -mx-2 rounded transition-colors"
-                        >
-                          <span className="text-zinc-300">{qty}x {name}</span>
-                          <span className="text-amber-400">${((collectionLower.get(name.toLowerCase())?.data?.priceUsd ?? 0) * qty).toFixed(2)}</span>
-                        </button>
-                      ))}
+                      {cards.map(([name, qty]) => {
+                        const cardData = getCardData(name);
+                        return (
+                          <button
+                            key={name}
+                            type="button"
+                            onClick={() => onCardClick?.(name)}
+                            className="w-full flex items-center justify-between text-xs text-left hover:bg-zinc-800 p-2 -mx-2 rounded transition-colors"
+                          >
+                            <span className="flex items-center gap-2 min-w-0">
+                              <ColorPips colors={cardData?.colors} />
+                              <span className="text-zinc-300 truncate">{qty}x {name}</span>
+                            </span>
+                            <span className="text-amber-400 shrink-0 ml-2">{isBasicLand(name) ? '$0.00' : `$${((collectionLower.get(name.toLowerCase())?.data?.priceUsd ?? 0) * qty).toFixed(2)}`}</span>
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 ))
@@ -1390,7 +1902,47 @@ function DeckDetail({
         {/* Missing Cards - only show for decks */}
         {deck.format !== 'List' && (
         <div className="space-y-3">
-          <h3 className="font-semibold text-zinc-100">✗ Cards You Need ({missingCards.length})</h3>
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="font-semibold text-zinc-100">✗ Cards You Need ({missingCards.length})</h3>
+            {missingCards.length > 0 && (
+              <div className="flex gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const text = missingCards.map(([name, qty]) => `${qty}x ${name}`).join('\n');
+                    navigator.clipboard.writeText(text).then(() => {
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 2000);
+                    });
+                  }}
+                  className="px-2.5 py-1 rounded-lg text-xs font-medium bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100 transition-colors border border-zinc-700"
+                >
+                  {copied ? '✓ Copied' : '⎘ Copy'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const text = missingCards.map(([name, qty]) => `${qty}x ${name}`).join('\n');
+                    const blob = new Blob([text], { type: 'text/plain' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `${deck.name} - Missing Cards.txt`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }}
+                  className="px-2.5 py-1 rounded-lg text-xs font-medium bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:text-zinc-100 transition-colors border border-zinc-700"
+                >
+                  ↓ Export
+                </button>
+                <BuyOnTCGPlayer
+                  cards={missingCards.map(([name, quantity]) => ({ name, quantity }))}
+                  label="🛒 Buy Missing"
+                  size="sm"
+                />
+              </div>
+            )}
+          </div>
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-3">
             {missingCards.length === 0 ? (
               <p className="text-sm text-emerald-400">You own all cards! ✓</p>
@@ -1401,17 +1953,21 @@ function DeckDetail({
                   <div className="space-y-1 ml-2">
                     {cards.map(([name, qty]) => {
                       const cardData = getCardData(name);
-                      const price = cardData?.priceUsd ?? 0;
+                      const price = isBasicLand(name) ? 0 : (cardData?.priceUsd ?? 0);
+                      const hasData = isBasicLand(name) || cardData != null;
                       return (
                         <button
                           key={name}
                           type="button"
                           onClick={() => onCardClick?.(name)}
-                          className="w-full flex justify-between text-xs text-left hover:bg-zinc-800 p-2 -mx-2 rounded transition-colors"
+                          className="w-full flex items-center justify-between text-xs text-left hover:bg-zinc-800 p-2 -mx-2 rounded transition-colors"
                         >
-                          <span className="text-zinc-400">{qty}x {name}</span>
-                          <span className={price > 0 ? 'text-amber-400 font-semibold' : 'text-zinc-600'}>
-                            {price > 0 ? `$${(price * qty).toFixed(2)}` : '—'}
+                          <span className="flex items-center gap-2 min-w-0">
+                            <ColorPips colors={cardData?.colors} />
+                            <span className="text-zinc-400 truncate">{qty}x {name}</span>
+                          </span>
+                          <span className={`shrink-0 ml-2 ${price > 0 ? 'text-amber-400 font-semibold' : 'text-zinc-600'}`}>
+                            {isBasicLand(name) ? '$0.00' : price > 0 ? `$${(price * qty).toFixed(2)}` : hasData ? '$0.00' : '—'}
                           </span>
                         </button>
                       );
@@ -1426,6 +1982,14 @@ function DeckDetail({
               </div>
             )}
           </div>
+          {deckCards.length > 0 && (
+            <div className="mt-3">
+              <BuyOnTCGPlayer
+                cards={deckCards.map(([name, quantity]) => ({ name, quantity }))}
+                label="🛒 Buy Full Deck on TCGPlayer"
+              />
+            </div>
+          )}
         </div>
         )}
         </div>

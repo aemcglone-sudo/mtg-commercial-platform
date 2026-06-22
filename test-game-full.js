@@ -77,15 +77,15 @@ const { chromium } = require('playwright');
       const hasLife = await page.locator('text=/\\b40\\b/').isVisible({ timeout: 2000 }).catch(() => false);
       const hasHand = await page.locator('text=Hand').isVisible({ timeout: 2000 }).catch(() => false);
       const hasPass = await page.locator('button:has-text("Pass")').isVisible({ timeout: 2000 }).catch(() => false);
-      const hasShahrazad = await page.locator('text=Shahrazad').isVisible({ timeout: 2000 }).catch(() => false);
+      const hasQuan = await page.locator('text=Quan').isVisible({ timeout: 2000 }).catch(() => false);
       
       console.log('\nGame UI elements:');
       console.log('  Life total (40):', hasLife ? '✅' : '❌');
       console.log('  Hand section:', hasHand ? '✅' : '❌');
       console.log('  Pass button:', hasPass ? '✅' : '❌');
-      console.log('  Shahrazad opponent:', hasShahrazad ? '✅' : '❌');
+      console.log('  Quan opponent:', hasQuan ? '✅' : '❌');
       
-      if (hasLife && hasHand && hasPass && hasShahrazad) {
+      if (hasLife && hasHand && hasPass && hasQuan) {
         console.log('\n✅✅✅ CommanderPlayground fully functional!');
       }
     }

@@ -284,27 +284,27 @@ export default function CommanderPlayground() {
       {/* Game status */}
       {game.status !== 'playing' && (
         <div className="text-center p-2 bg-yellow-900 rounded text-sm font-bold">
-          {game.status === 'playerWon' ? '🎉 You Win!' : '😢 Shahrazad Wins!'}
+          {game.status === 'playerWon' ? '🎉 You Win!' : '😢 Khoa Wins!'}
         </div>
       )}
 
       {/* Opponent */}
       <div className="p-3 bg-black/30 rounded border border-red-700 flex justify-between items-center gap-4">
         <div>
-          <div className="font-semibold text-sm">Shahrazad</div>
+          <div className="font-semibold text-sm">Khoa</div>
           <div className="relative inline-block mt-1">
             <img
-              src={getCardImageUrl(game.shahrazadState.commander)}
-              alt={game.shahrazadState.commander.name}
+              src={getCardImageUrl(game.khoaState.commander)}
+              alt={game.khoaState.commander.name}
               className="w-16 h-24 rounded border-2 border-red-500 cursor-pointer transition-all duration-200 hover:scale-150 hover:z-50 hover:shadow-2xl hover:shadow-red-400"
-              title={game.shahrazadState.commander.name}
+              title={game.khoaState.commander.name}
             />
           </div>
         </div>
         <div className="text-center">
-          <div className="text-3xl font-bold text-red-400">{game.shahrazadState.life}</div>
-          <div className="text-sm text-gray-400">Library: {game.shahrazadState.library.length}</div>
-          <div className="text-sm text-gray-400">Hand: {game.shahrazadState.hand.length}</div>
+          <div className="text-3xl font-bold text-red-400">{game.khoaState.life}</div>
+          <div className="text-sm text-gray-400">Library: {game.khoaState.library.length}</div>
+          <div className="text-sm text-gray-400">Hand: {game.khoaState.hand.length}</div>
         </div>
       </div>
 
@@ -327,7 +327,7 @@ export default function CommanderPlayground() {
                 </div>
               </div>
             ))}
-          {game.shahrazadState.battlefield
+          {game.khoaState.battlefield
             .filter((c) => c.type_line?.toLowerCase().includes('creature'))
             .map((card) => (
               <div key={card.instanceId} className="relative opacity-70">

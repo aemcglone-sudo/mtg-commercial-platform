@@ -33,7 +33,7 @@ export default function ChatHistorySidebar({
 
   async function loadChats() {
     try {
-      const res = await fetch('/api/shahrazad-chats');
+      const res = await fetch('/api/khoa-chats');
       if (res.ok) {
         const data = await res.json();
         setChats(Array.isArray(data) ? data : []);
@@ -47,7 +47,7 @@ export default function ChatHistorySidebar({
     e.stopPropagation();
     if (!confirm('Delete this chat?')) return;
 
-    await fetch(`/api/shahrazad-chats/${chatId}`, { method: 'DELETE' });
+    await fetch(`/api/khoa-chats/${chatId}`, { method: 'DELETE' });
     setChats(chats.filter(c => c.id !== chatId));
   }
 

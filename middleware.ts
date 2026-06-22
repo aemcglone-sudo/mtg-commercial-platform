@@ -7,6 +7,7 @@ export function middleware(request: NextRequest) {
   if (
     pathname === '/login' ||
     pathname === '/register' ||
+    pathname === '/api/auth/register' ||
     pathname.startsWith('/api/auth/verify-passcode') ||
     pathname === '/api/collection/dashboard' ||
     pathname === '/api/expensive-cards' ||

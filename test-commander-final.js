@@ -62,7 +62,7 @@ const { chromium } = require('playwright');
         await page.screenshot({ path: '/tmp/game-board.png' });
         
         // Check game loaded
-        const gameUI = await page.locator('text=/Shahrazad.*You.*Hand.*Pass/').isVisible({ timeout: 2000 }).catch(() => false);
+        const gameUI = await page.locator('text=/Quan.*You.*Hand.*Pass/').isVisible({ timeout: 2000 }).catch(() => false);
         const gameTitle = await page.locator('h1').filter({ hasText: 'Commander' }).isVisible({ timeout: 2000 }).catch(() => false);
         
         console.log('Game board rendered:', gameTitle ? '✅' : '❌');

@@ -3,10 +3,6 @@
  * Fetches legality, prices, availability, and format-specific info
  */
 
-import Anthropic from '@anthropic-ai/sdk';
-
-const client = new Anthropic();
-
 export interface CardLegality {
   format: string;
   status: 'legal' | 'banned' | 'restricted' | 'unknown';
@@ -56,44 +52,6 @@ export async function getEnhancedCardInfo(cardName: string): Promise<EnhancedCar
 }
 
 async function fetchEnhancedCardInfo(cardName: string): Promise<EnhancedCardInfo> {
-  // Use Tavily to search for legality, prices, and availability
-  const searchQuery = `${cardName} magic the gathering legality prices availability`;
-
-  const response = await client.messages.create({
-    model: 'claude-opus-4-8',
-    max_tokens: 1000,
-    tools: [
-      {
-        name: 'tavily_search',
-        description: 'Search the web for information about Magic cards including legality, prices, and availability',
-        input_schema: {
-          type: 'object',
-          properties: {
-            query: {
-              type: 'string',
-              description: 'Search query for card information',
-            },
-          },
-          required: ['query'],
-        },
-      },
-    ],
-    messages: [
-      {
-        role: 'user',
-        content: `Search for current information about the Magic card "${cardName}". Find:
-1. Legality status in Standard, Pioneer, Commander, Modern, and Legacy
-2. Current market prices from retailers
-3. Availability/stock information
-4. Any recent ban announcements
-
-Return the information you find.`,
-      },
-    ],
-  });
-
-  // For now, return basic structure - Tavily integration would go here
-  // In a real implementation, we'd process the tool results
   return {
     name: cardName,
     lastUpdated: new Date().toISOString(),

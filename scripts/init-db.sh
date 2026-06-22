@@ -1,9 +1,6 @@
 #!/bin/sh
 set -e
 
-echo "Initializing database with Prisma migrations..."
-
-# Run Prisma migrations
+echo "Running Prisma migrations..."
 npx prisma migrate deploy
-
 echo "Database initialized successfully"

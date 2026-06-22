@@ -16,11 +16,11 @@ export default function MagicPlayground() {
   }, []);
 
   useEffect(() => {
-    if (!game || game.status !== 'playing' || game.currentPlayer !== 'shahrazad') {
+    if (!game || game.status !== 'playing' || game.currentPlayer !== 'khoa') {
       return;
     }
 
-    // Shahrazad's turn
+    // Khoa's turn
     const timer = setTimeout(() => {
       const updatedGame = { ...game };
       executeShaharazadTurn(updatedGame);
@@ -69,20 +69,20 @@ export default function MagicPlayground() {
       {/* Game status */}
       {game.status !== 'playing' && (
         <div className="text-center mb-4 p-4 bg-yellow-900 rounded-lg text-xl font-bold">
-          {game.status === 'playerWon' ? '🎉 You Win!' : '😢 Shahrazad Wins!'}
+          {game.status === 'playerWon' ? '🎉 You Win!' : '😢 Khoa Wins!'}
         </div>
       )}
 
       {/* Opponent Board */}
       <div className="flex-1 mb-4 p-4 bg-black/30 rounded-lg border border-yellow-700">
         <div className="flex justify-between items-center mb-2">
-          <h2 className="text-lg font-semibold">Shahrazad</h2>
-          <div className="text-2xl font-bold text-red-400">❤️ {game.shahrazadState.life}</div>
+          <h2 className="text-lg font-semibold">Khoa</h2>
+          <div className="text-2xl font-bold text-red-400">❤️ {game.khoaState.life}</div>
         </div>
 
-        {/* Shahrazad's creatures */}
+        {/* Khoa's creatures */}
         <div className="flex gap-2 flex-wrap">
-          {game.shahrazadState.board
+          {game.khoaState.board
             .filter((c) => c.type === 'creature')
             .map((creature) => (
               <div
@@ -125,8 +125,8 @@ export default function MagicPlayground() {
                 <div className="text-xs">Mana: {game.playerState.manaPool}</div>
               </div>
               <div className="bg-red-900 border border-red-500 p-2 rounded text-sm">
-                <div>Shahrazad Lands: {game.shahrazadState.board.filter((c) => c.type === 'land').length}</div>
-                <div className="text-xs">Mana: {game.shahrazadState.manaPool}</div>
+                <div>Khoa Lands: {game.khoaState.board.filter((c) => c.type === 'land').length}</div>
+                <div className="text-xs">Mana: {game.khoaState.manaPool}</div>
               </div>
             </div>
           </div>

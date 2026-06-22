@@ -16,7 +16,7 @@ export async function GET(
 
   try {
     const deck = await findOne<any>(
-      `SELECT * FROM decks WHERE id = ? AND userId = ?`,
+      `SELECT * FROM decks WHERE id = ? AND "userId" = ?`,
       [id, userId]
     );
 
@@ -45,12 +45,12 @@ export async function PATCH(
   }
 
   const body = await req.json();
-  const { name, format, strategy, cards, addCards } = body;
+  const { name, format, strategy, deckType, cards, addCards } = body;
 
   try {
     // Fetch current deck and verify ownership
     const deck = await findOne<any>(
-      `SELECT userId, cards FROM decks WHERE id = ?`,
+      `SELECT "userId", cards FROM decks WHERE id = ?`,
       [id]
     );
 
@@ -87,12 +87,16 @@ export async function PATCH(
       updates.push('strategy = ?');
       values.push(strategy);
     }
+    if (deckType !== undefined) {
+      updates.push('"deckType" = ?');
+      values.push(deckType === 'arena' ? 'arena' : 'paper');
+    }
 
     if (updates.length === 0) {
       return NextResponse.json({ error: 'No updates provided' }, { status: 400 });
     }
 
-    updates.push('updatedAt = ?');
+    updates.push('"updatedAt" = ?');
     values.push(new Date().toISOString());
     values.push(id);
 
@@ -121,7 +125,7 @@ export async function DELETE(
   try {
     // Verify ownership
     const deck = await findOne<any>(
-      `SELECT userId FROM decks WHERE id = ?`,
+      `SELECT "userId" FROM decks WHERE id = ?`,
       [id]
     );
 

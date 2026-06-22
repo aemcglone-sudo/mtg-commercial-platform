@@ -17,8 +17,8 @@ export async function PATCH(req: NextRequest) {
 
   try {
     await run(
-      `UPDATE inventory_items SET collectionType = ?, updatedAt = datetime('now')
-       WHERE userId = ? AND name = ? AND itemType = 'cards'`,
+      `UPDATE inventory_items SET "collectionType" = ?, "updatedAt" = NOW()
+       WHERE "userId" = ? AND name = ? AND "itemType" = 'cards'`,
       [collectionType, userId, name]
     );
 
