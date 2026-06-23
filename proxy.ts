@@ -1,19 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { verifySessionToken } from './lib/session';
 
 const PUBLIC_PATHS = [
   '/login',
-  '/register',
-  '/api/auth/register',
-  '/api/auth/verify-passcode',
-  '/api/collection/dashboard',
-  '/api/expensive-cards',
-  '/api/trending-cards',
+  '/admin/login',
+  '/api/auth/login',
+  '/api/auth/logout',
   '/api/health',
 ];
 
 const PUBLIC_PREFIXES = [
+  '/register',
+  '/api/auth/register',
   '/api/background/',
   '/storefront/',
+  '/api/collection/dashboard',
+  '/api/expensive-cards',
+  '/api/trending-cards',
 ];
 
 export function proxy(request: NextRequest) {
@@ -21,20 +24,38 @@ export function proxy(request: NextRequest) {
 
   if (
     PUBLIC_PATHS.includes(pathname) ||
-    PUBLIC_PREFIXES.some((p) => pathname.startsWith(p))
+    PUBLIC_PREFIXES.some(p => pathname.startsWith(p))
   ) {
     return NextResponse.next();
   }
 
-  const role = request.cookies.get('auth_token')?.value;
+  const token = request.cookies.get('session')?.value;
+  const session = token ? verifySessionToken(token) : null;
 
-  if (!role || (role !== 'enthusiast' && role !== 'shop_owner')) {
+  // Not authenticated → login
+  if (!session) {
+    // Admin routes go to admin login
+    if (pathname.startsWith('/admin')) {
+      return NextResponse.redirect(new URL('/admin/login', request.url));
+    }
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
-  // Shop owner routes — enthusiasts blocked
-  if (pathname.startsWith('/shop') && role !== 'shop_owner') {
-    return NextResponse.redirect(new URL('/', request.url));
+  // Admin routes — only admin role
+  if (pathname.startsWith('/admin') && session.role !== 'admin') {
+    return NextResponse.redirect(new URL('/login', request.url));
+  }
+
+  // Shop routes — only shop_owner role
+  if (pathname.startsWith('/shop') && session.role !== 'shop_owner') {
+    return NextResponse.redirect(new URL('/login', request.url));
+  }
+
+  // Redirect already-authenticated users away from login/register
+  if (pathname === '/login' || pathname.startsWith('/register')) {
+    if (session.role === 'admin') return NextResponse.redirect(new URL('/admin', request.url));
+    if (session.role === 'shop_owner') return NextResponse.redirect(new URL('/shop/dashboard', request.url));
+    return NextResponse.redirect(new URL('/collection', request.url));
   }
 
   return NextResponse.next();
