@@ -1,20 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { findMany, findOne, run } from '@/lib/db';
 import { randomUUID } from 'crypto';
+import { getRole, getAuthenticatedUserId } from '@/lib/auth';
 
-
-async function getShopId(): Promise<string | null> {
-  const shop = await findOne<{ id: string }>('SELECT id FROM shops LIMIT 1');
+async function getShopId(userId: string): Promise<string | null> {
+  const shop = await findOne<{ id: string }>('SELECT id FROM shops WHERE "userId" = ?', [userId]);
   return shop?.id ?? null;
 }
 
 export async function GET(req: NextRequest) {
-  const role = req.cookies.get('auth_token')?.value;
+  const role = getRole(req);
   if (role !== 'shop_owner') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const shopId = await getShopId();
+  const userId = getAuthenticatedUserId(req)!;
+  const shopId = await getShopId(userId);
   if (!shopId) return NextResponse.json({ items: [], total: 0 });
 
   const { searchParams } = req.nextUrl;
@@ -77,12 +78,13 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const role = req.cookies.get('auth_token')?.value;
+  const role = getRole(req);
   if (role !== 'shop_owner') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const shopId = await getShopId();
+  const userId = getAuthenticatedUserId(req)!;
+  const shopId = await getShopId(userId);
   if (!shopId) return NextResponse.json({ error: 'No shop found' }, { status: 404 });
 
   const body = await req.json() as {

@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { findOne, run } from '@/lib/db';
+import { getRole } from '@/lib/auth';
 
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const role = req.cookies.get('auth_token')?.value;
+  const role = getRole(req);
   if (role !== 'shop_owner') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
@@ -55,7 +56,7 @@ export async function DELETE(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const role = req.cookies.get('auth_token')?.value;
+  const role = getRole(req);
   if (role !== 'shop_owner') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }

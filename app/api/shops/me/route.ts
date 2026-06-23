@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { findOne, run } from '@/lib/db';
 import { randomUUID } from 'crypto';
-import { FIXED_SHOP_OWNER_ID } from '@/lib/auth';
+import { getRole, getAuthenticatedUserId } from '@/lib/auth';
 
-async function ensureShop(): Promise<{
+async function ensureShop(userId: string): Promise<{
   id: string;
   name: string;
   slug: string;
@@ -27,23 +27,17 @@ async function ensureShop(): Promise<{
     email: string | null;
     websiteUrl: string | null;
     isActive: boolean;
-  }>('SELECT id, name, slug, description, city, state, phone, email, "websiteUrl", "isActive" FROM shops LIMIT 1');
+  }>('SELECT id, name, slug, description, city, state, phone, email, "websiteUrl", "isActive" FROM shops WHERE "userId" = ?', [userId]);
 
   if (!shop) {
-    const now = new Date().toISOString();
-    await run(
-      `INSERT INTO users (id, username, email, "createdAt", "updatedAt")
-       VALUES (?, ?, ?, ?, ?)
-       ON CONFLICT (id) DO NOTHING`,
-      [FIXED_SHOP_OWNER_ID, 'shop_owner', 'shop@grimoire.local', now, now]
-    );
     const shopId = randomUUID();
+    const now = new Date().toISOString();
     await run(
       `INSERT INTO shops (id, "userId", name, slug, "isActive", "createdAt", "updatedAt")
        VALUES (?, ?, ?, ?, true, ?, ?)`,
-      [shopId, FIXED_SHOP_OWNER_ID, 'My Shop', 'my-shop', now, now]
+      [shopId, userId, 'My Shop', `my-shop-${shopId.slice(0, 6)}`, now, now]
     );
-    return { id: shopId, name: 'My Shop', slug: 'my-shop', description: null, city: null, state: null, phone: null, email: null, websiteUrl: null, isActive: true, isNew: true };
+    return { id: shopId, name: 'My Shop', slug: `my-shop-${shopId.slice(0, 6)}`, description: null, city: null, state: null, phone: null, email: null, websiteUrl: null, isActive: true, isNew: true };
   }
 
   const isNew = shop.name === 'My Shop' && !shop.description;
@@ -51,13 +45,14 @@ async function ensureShop(): Promise<{
 }
 
 export async function GET(req: NextRequest) {
-  const role = req.cookies.get('auth_token')?.value;
+  const role = getRole(req);
   if (role !== 'shop_owner') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   try {
-    const shop = await ensureShop();
+    const userId = getAuthenticatedUserId(req)!;
+    const shop = await ensureShop(userId);
 
     const inventoryRow = await findOne<{ count: string; total: string }>(
       'SELECT COUNT(*) as count, COALESCE(SUM("priceCents" * quantity), 0) as total FROM shop_inventory WHERE "shopId" = ?',
@@ -88,13 +83,14 @@ export async function GET(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  const role = req.cookies.get('auth_token')?.value;
+  const role = getRole(req);
   if (role !== 'shop_owner') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
   try {
-    const shop = await ensureShop();
+    const userId = getAuthenticatedUserId(req)!;
+    const shop = await ensureShop(userId);
 
     const body = await req.json() as {
       name?: string;

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { parseCardList, prepareText } from '@/lib/card-list-parser';
+import { getRole } from '@/lib/auth';
 
 interface ScryfallCard {
   id: string;
@@ -80,7 +81,7 @@ async function fetchCollection(
 }
 
 export async function POST(req: NextRequest) {
-  const role = req.cookies.get('auth_token')?.value;
+  const role = getRole(req);
   if (role !== 'shop_owner') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
