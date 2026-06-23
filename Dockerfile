@@ -52,5 +52,5 @@ RUN chmod +x /app/scripts/init-db.sh
 # Use dumb-init to handle signals properly
 ENTRYPOINT ["dumb-init", "--"]
 
-# Initialize database and start the app
-CMD ["sh", "-c", "/app/scripts/init-db.sh && npm start"]
+# Start the app (migrations run via fly.toml release_command before deploy)
+CMD ["npm", "start"]
