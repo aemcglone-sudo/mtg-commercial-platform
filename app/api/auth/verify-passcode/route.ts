@@ -1,27 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const PASSCODE = 'Magic8581';
+type Role = 'enthusiast' | 'shop_owner';
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { passcode } = body;
+  const { passcode, role } = body as { passcode?: string; role?: Role };
 
-  if (!passcode) {
-    return NextResponse.json({ error: 'Passcode required' }, { status: 400 });
+  if (!passcode || !role) {
+    return NextResponse.json({ error: 'Passcode and role required' }, { status: 400 });
   }
 
-  if (passcode !== PASSCODE) {
+  const expected =
+    role === 'shop_owner'
+      ? process.env.PASSCODE_SHOP_OWNER
+      : process.env.PASSCODE_ENTHUSIAST;
+
+  if (!expected || passcode !== expected) {
     return NextResponse.json({ error: 'Invalid passcode' }, { status: 401 });
   }
 
-  const response = NextResponse.json({ success: true });
+  const response = NextResponse.json({ success: true, role });
 
-  // Set a simple session cookie (httpOnly, secure, 7 days)
-  response.cookies.set('auth_token', 'authenticated', {
+  response.cookies.set('auth_token', role, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
-    maxAge: 7 * 24 * 60 * 60, // 7 days
+    maxAge: 7 * 24 * 60 * 60,
     path: '/',
   });
 

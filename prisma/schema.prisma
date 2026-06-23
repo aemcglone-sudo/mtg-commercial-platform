@@ -15,10 +15,12 @@ model User {
   appleId              String?  @unique
   avatarUrl            String?
   magicPreferencesJson String?
+  role                 String   @default("enthusiast")
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 
   userPreferences UserPreference?
+  shop            Shop?
 
   @@map("users")
 }
@@ -279,4 +281,95 @@ model CommunityVenue {
 
   @@index([city, state])
   @@map("community_venues")
+}
+
+model Shop {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name            String
+  slug            String   @unique
+  description     String?
+  address         String?
+  city            String?
+  state           String?
+  zip             String?
+  lat             Decimal? @db.Decimal(9, 6)
+  lng             Decimal? @db.Decimal(9, 6)
+  phone           String?
+  email           String?
+  websiteUrl      String?
+  customDomain    String?
+  logoUrl         String?
+  bannerUrl       String?
+  stripeAccountId String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  inventory ShopInventory[]
+  orders    ShopOrder[]
+
+  @@map("shops")
+}
+
+model ShopInventory {
+  id              String   @id @default(cuid())
+  shopId          String
+  shop            Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  scryfallId      String
+  cardName        String
+  setCode         String
+  collectorNumber String?
+  condition       String
+  foil            Boolean  @default(false)
+  language        String   @default("en")
+  quantity        Int      @default(1)
+  priceCents      Int
+  notes           String?
+  imageUrl        String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  orderItems ShopOrderItem[]
+
+  @@index([shopId])
+  @@index([scryfallId])
+  @@index([cardName])
+  @@map("shop_inventory")
+}
+
+model ShopOrder {
+  id                    String   @id @default(cuid())
+  shopId                String
+  shop                  Shop     @relation(fields: [shopId], references: [id])
+  buyerUserId           String
+  stripePaymentIntentId String?
+  status                String   @default("pending")
+  subtotalCents         Int
+  platformFeeCents      Int
+  totalCents            Int
+  fulfillmentType       String?
+  notes                 String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  items ShopOrderItem[]
+
+  @@index([shopId])
+  @@index([buyerUserId])
+  @@map("shop_orders")
+}
+
+model ShopOrderItem {
+  id          String         @id @default(cuid())
+  orderId     String
+  order       ShopOrder      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  inventoryId String?
+  inventory   ShopInventory? @relation(fields: [inventoryId], references: [id])
+  cardName    String
+  quantity    Int
+  priceCents  Int
+
+  @@map("shop_order_items")
 }

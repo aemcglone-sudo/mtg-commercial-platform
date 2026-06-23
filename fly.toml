@@ -10,7 +10,7 @@ primary_region = 'iad'
   dockerfile = "Dockerfile"
 
 [deploy]
-  release_command = "npx prisma migrate deploy"
+  release_command = "node_modules/.bin/prisma migrate deploy"
   wait_timeout = "5m"
 
 [http_service]
