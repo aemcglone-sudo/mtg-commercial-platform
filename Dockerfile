@@ -43,8 +43,8 @@ RUN mkdir -p /data
 EXPOSE 3000
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:3000', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"
+HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:3000/api/health', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"
 
 # Make startup script executable
 RUN chmod +x /app/scripts/init-db.sh
@@ -52,5 +52,5 @@ RUN chmod +x /app/scripts/init-db.sh
 # Use dumb-init to handle signals properly
 ENTRYPOINT ["dumb-init", "--"]
 
-# Start the app (migrations run via fly.toml release_command before deploy)
-CMD ["npm", "start"]
+# Start the app directly via node to avoid npm startup overhead
+CMD ["node_modules/.bin/next", "start", "--hostname", "0.0.0.0"]
