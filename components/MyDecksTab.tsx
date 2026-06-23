@@ -1312,6 +1312,8 @@ function DeckDetail({
           cmc: card.cmc || null,
           rarity: card.rarity || null,
           colors: card.colors || [],
+          set: card.set?.toUpperCase() || null,
+          collectorNumber: card.collector_number || null,
         };
         console.log(`Processed ${name}:`, cardData);
         setScryCardCache(prev => ({ ...prev, [key]: cardData }));
@@ -1713,7 +1715,11 @@ function DeckDetail({
                 <button
                   type="button"
                   onClick={() => {
-                    const text = deckCards.map(([name, qty]) => `${qty}x ${name}`).join('\n');
+                    const text = deckCards.map(([name, qty]) => {
+                      const card = getCardData(name);
+                      const suffix = card?.set && card?.collectorNumber ? ` (${card.set}) ${card.collectorNumber}` : '';
+                      return `${qty} ${name}${suffix}`;
+                    }).join('\n');
                     navigator.clipboard.writeText(text).then(() => {
                       setCopied(true);
                       setTimeout(() => setCopied(false), 2000);
@@ -1726,7 +1732,11 @@ function DeckDetail({
                 <button
                   type="button"
                   onClick={() => {
-                    const text = deckCards.map(([name, qty]) => `${qty}x ${name}`).join('\n');
+                    const text = deckCards.map(([name, qty]) => {
+                      const card = getCardData(name);
+                      const suffix = card?.set && card?.collectorNumber ? ` (${card.set}) ${card.collectorNumber}` : '';
+                      return `${qty} ${name}${suffix}`;
+                    }).join('\n');
                     const blob = new Blob([text], { type: 'text/plain' });
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
