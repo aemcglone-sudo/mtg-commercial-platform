@@ -20,6 +20,14 @@ primary_region = 'iad'
   min_machines_running = 0
   processes = ['app']
 
+  [[http_service.checks]]
+    grace_period = "30s"
+    interval = "15s"
+    method = "GET"
+    path = "/api/health"
+    protocol = "http"
+    timeout = "10s"
+
 [[mounts]]
   source = 'data'
   destination = '/data'
