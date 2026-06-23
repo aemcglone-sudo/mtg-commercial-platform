@@ -12,7 +12,8 @@ export function middleware(request: NextRequest) {
     pathname === '/api/collection/dashboard' ||
     pathname === '/api/expensive-cards' ||
     pathname === '/api/trending-cards' ||
-    pathname.startsWith('/api/background/')
+    pathname.startsWith('/api/background/') ||
+    pathname === '/api/health'
   ) {
     return NextResponse.next();
   }
