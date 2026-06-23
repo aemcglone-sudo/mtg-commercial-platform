@@ -53,7 +53,22 @@ export default function Home() {
   const [chatMessage, setChatMessage] = useState('');
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
+  const [healthStatus, setHealthStatus] = useState<'healthy' | 'unhealthy' | 'checking'>('checking');
   const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const checkHealth = async () => {
+      try {
+        const res = await fetch('/api/health');
+        setHealthStatus(res.ok ? 'healthy' : 'unhealthy');
+      } catch {
+        setHealthStatus('unhealthy');
+      }
+    };
+    checkHealth();
+    const interval = setInterval(checkHealth, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleAnalyze = useCallback(async () => {
     setAnalyzing(true);
@@ -194,6 +209,21 @@ export default function Home() {
                 🧙
               </button>
             )}
+
+            <div
+              title={
+                healthStatus === 'healthy' ? 'All systems operational' :
+                healthStatus === 'checking' ? 'Checking status…' :
+                'Service unavailable'
+              }
+              className="flex items-center"
+            >
+              <div className={`w-2 h-2 rounded-full ${
+                healthStatus === 'healthy' ? 'bg-emerald-400 animate-pulse' :
+                healthStatus === 'checking' ? 'bg-zinc-600' :
+                'bg-red-500'
+              }`} />
+            </div>
 
             <div className="relative" ref={menuRef}>
               <button
