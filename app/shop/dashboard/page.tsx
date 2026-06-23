@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 
 interface ShopStats {
   inventoryCount: number;
@@ -11,20 +12,26 @@ interface ShopStats {
 }
 
 export default function ShopDashboard() {
+  const router = useRouter();
   const [stats, setStats] = useState<ShopStats | null>(null);
   const [shopName, setShopName] = useState<string>('Your Shop');
+  const [isNew, setIsNew] = useState(false);
 
   useEffect(() => {
     fetch('/api/shops/me')
       .then((r) => r.json())
       .then((data) => {
-        if (data?.shop) {
-          setShopName(data.shop.name);
-          setStats(data.stats);
+        if (!data?.shop) return;
+        setShopName(data.shop.name);
+        setStats(data.stats);
+        if (data.shop.isNew) {
+          router.replace('/shop/setup');
+        } else {
+          setIsNew(false);
         }
       })
       .catch(() => {});
-  }, []);
+  }, [router]);
 
   const statCards = [
     {
@@ -73,7 +80,7 @@ export default function ShopDashboard() {
               Orders
             </Link>
             <Link
-              href="/shop/settings"
+              href="/shop/setup"
               className="px-3 py-1.5 text-sm text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 rounded-lg transition-colors"
             >
               Settings
@@ -155,19 +162,18 @@ export default function ShopDashboard() {
           </div>
         </div>
 
-        {/* Setup prompt if no shop yet */}
-        {!stats && (
+        {/* Setup prompt */}
+        {isNew && (
           <div className="bg-amber-400/10 border border-amber-400/30 rounded-xl p-6 text-center space-y-3">
-            <div className="text-3xl">🏪</div>
-            <div className="font-semibold text-amber-400">Set up your storefront</div>
+            <div className="font-semibold text-amber-400">Finish setting up your storefront</div>
             <p className="text-sm text-zinc-400 max-w-sm mx-auto">
-              Add your shop details so collectors can find you. It only takes a minute.
+              Add your shop name, location, and contact details so collectors can find you.
             </p>
             <Link
-              href="/shop/settings"
+              href="/shop/setup"
               className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-black bg-amber-400 hover:bg-amber-300 transition-colors text-sm"
             >
-              Set up shop
+              Complete setup
             </Link>
           </div>
         )}
