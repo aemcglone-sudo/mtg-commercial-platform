@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { query } from '@/lib/db';
+import { findMany } from '@/lib/db';
 import { getSession } from '@/lib/session';
 
 export async function GET(req: NextRequest) {
   const session = getSession(req);
   if (session?.role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
-  const shops = await query<{
+  const shops = await findMany<{
     id: string;
     name: string;
     city: string | null;
