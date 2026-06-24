@@ -27,7 +27,10 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        <LogoutButton />
+        <div className="flex items-center gap-4">
+          <a href="/account/password" className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors">Change password</a>
+          <LogoutButton />
+        </div>
       </div>
     </div>
   );

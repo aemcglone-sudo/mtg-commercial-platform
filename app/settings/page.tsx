@@ -105,6 +105,9 @@ export default function SettingsPage() {
             </Link>
             <h1 className="text-lg font-bold">Settings</h1>
           </div>
+          <Link href="/account/password" className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors">
+            Change password
+          </Link>
         </div>
       </header>
 

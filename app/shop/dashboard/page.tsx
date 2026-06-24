@@ -86,6 +86,12 @@ export default function ShopDashboard() {
             >
               Settings
             </Link>
+            <Link
+              href="/account/password"
+              className="px-3 py-1.5 text-sm text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 rounded-lg transition-colors"
+            >
+              Password
+            </Link>
             <LogoutButton className="px-3 py-1.5 text-sm text-zinc-500 hover:text-red-400 hover:bg-zinc-800 rounded-lg transition-colors" />
           </nav>
         </div>
