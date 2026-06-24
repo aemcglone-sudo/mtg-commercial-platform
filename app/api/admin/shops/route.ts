@@ -1,0 +1,32 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { query } from '@/lib/db';
+import { getSession } from '@/lib/session';
+
+export async function GET(req: NextRequest) {
+  const session = getSession(req);
+  if (session?.role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+
+  const shops = await query<{
+    id: string;
+    name: string;
+    city: string | null;
+    state: string | null;
+    email: string | null;
+    createdAt: string;
+    ownerName: string | null;
+    ownerEmail: string;
+    inventoryCount: string;
+  }>(`
+    SELECT
+      s.id, s.name, s.city, s.state, s.email, s."createdAt",
+      u.name as "ownerName", u.email as "ownerEmail",
+      COUNT(si.id) as "inventoryCount"
+    FROM shops s
+    JOIN users u ON u.id = s."userId"
+    LEFT JOIN shop_inventory si ON si."shopId" = s.id
+    GROUP BY s.id, u.name, u.email
+    ORDER BY s."createdAt" DESC
+  `, []);
+
+  return NextResponse.json({ shops: shops.map(s => ({ ...s, inventoryCount: Number(s.inventoryCount) })) });
+}
