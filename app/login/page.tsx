@@ -1,8 +1,13 @@
 'use client';
 
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
+import { Suspense } from 'react';
 
-export default function LoginPage() {
+function LoginContent() {
+  const params = useSearchParams();
+  const signedOut = params.get('signed-out');
+
   return (
     <div className="min-h-screen bg-zinc-950 flex items-center justify-center px-4">
       <div className="w-full max-w-sm space-y-8">
@@ -10,6 +15,12 @@ export default function LoginPage() {
           <h1 className="text-3xl font-black text-amber-400">Grimoire</h1>
           <p className="text-zinc-500 text-sm mt-1">Who are you signing in as?</p>
         </div>
+
+        {signedOut && (
+          <p className="text-center text-sm text-emerald-400 bg-emerald-950 border border-emerald-800 rounded-xl py-3 px-4">
+            You&apos;ve been signed out successfully.
+          </p>
+        )}
 
         <div className="space-y-3">
           <Link href="/collector/login" className="flex items-center justify-between w-full bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 hover:border-amber-500 rounded-xl px-5 py-4 transition-colors group">
@@ -38,5 +49,13 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginContent />
+    </Suspense>
   );
 }

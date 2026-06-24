@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import LogoutButton from '@/components/LogoutButton';
 
 interface ShopStats {
   inventoryCount: number;
@@ -85,14 +86,7 @@ export default function ShopDashboard() {
             >
               Settings
             </Link>
-            <form action="/api/auth/logout" method="POST">
-              <button
-                type="submit"
-                className="px-3 py-1.5 text-sm text-zinc-500 hover:text-red-400 hover:bg-zinc-800 rounded-lg transition-colors"
-              >
-                Sign out
-              </button>
-            </form>
+            <LogoutButton className="px-3 py-1.5 text-sm text-zinc-500 hover:text-red-400 hover:bg-zinc-800 rounded-lg transition-colors" />
           </nav>
         </div>
       </header>

@@ -167,7 +167,7 @@ export default function Home() {
 
   async function handleLogout() {
     await fetch('/api/auth/logout', { method: 'POST' });
-    router.push('/login');
+    router.push('/login?signed-out=1');
     router.refresh();
   }
 

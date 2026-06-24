@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import LogoutButton from '@/components/LogoutButton';
 
 export default function AdminDashboard() {
   return (
@@ -26,11 +27,7 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        <form action="/api/auth/logout" method="POST">
-          <button type="submit" className="text-sm text-zinc-600 hover:text-zinc-400 transition-colors">
-            Sign out
-          </button>
-        </form>
+        <LogoutButton />
       </div>
     </div>
   );
