@@ -55,7 +55,7 @@ export function proxy(request: NextRequest) {
   if (pathname === '/login' || pathname.startsWith('/register')) {
     if (session.role === 'admin') return NextResponse.redirect(new URL('/admin', request.url));
     if (session.role === 'shop_owner') return NextResponse.redirect(new URL('/shop/dashboard', request.url));
-    return NextResponse.redirect(new URL('/collection', request.url));
+    return NextResponse.redirect(new URL('/', request.url));
   }
 
   return NextResponse.next();
