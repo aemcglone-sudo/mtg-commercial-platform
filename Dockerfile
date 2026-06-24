@@ -12,7 +12,8 @@ RUN npm ci
 # Copy source
 COPY . .
 
-# Build Next.js app
+# Build Next.js app (ARG busts Depot cache when changed)
+ARG CACHEBUST=1
 RUN npm run build
 
 # Production stage
