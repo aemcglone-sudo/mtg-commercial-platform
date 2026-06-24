@@ -3,6 +3,8 @@ import { verifySessionToken } from './lib/session';
 
 const PUBLIC_PATHS = [
   '/login',
+  '/collector/login',
+  '/shop/login',
   '/admin/login',
   '/api/auth/login',
   '/api/auth/logout',
@@ -51,8 +53,9 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
-  // Redirect already-authenticated users away from login/register
-  if (pathname === '/login' || pathname.startsWith('/register')) {
+  // Redirect already-authenticated users away from login/register pages
+  const isLoginPage = ['/login', '/collector/login', '/shop/login', '/admin/login'].includes(pathname);
+  if (isLoginPage || pathname.startsWith('/register')) {
     if (session.role === 'admin') return NextResponse.redirect(new URL('/admin', request.url));
     if (session.role === 'shop_owner') return NextResponse.redirect(new URL('/shop/dashboard', request.url));
     return NextResponse.redirect(new URL('/', request.url));
