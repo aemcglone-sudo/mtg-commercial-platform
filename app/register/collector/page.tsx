@@ -27,7 +27,7 @@ export default function CollectorRegisterPage() {
       });
       const data = await res.json() as { error?: string };
       if (!res.ok) { setError(data.error ?? 'Registration failed'); return; }
-      router.push('/collection');
+      router.push('/');
       router.refresh();
     } catch {
       setError('Something went wrong. Please try again.');
@@ -78,7 +78,7 @@ export default function CollectorRegisterPage() {
 
         <p className="text-center text-sm text-zinc-500">
           Already have an account?{' '}
-          <Link href="/login" className="text-amber-400 hover:text-amber-300 transition-colors">Sign in</Link>
+          <Link href="/collector/login" className="text-amber-400 hover:text-amber-300 transition-colors">Sign in</Link>
         </p>
         <p className="text-center text-sm text-zinc-500">
           Opening a shop?{' '}

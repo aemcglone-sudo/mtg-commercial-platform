@@ -86,7 +86,7 @@ export default function ShopRegisterPage() {
 
         <p className="text-center text-sm text-zinc-500">
           Already have an account?{' '}
-          <Link href="/login" className="text-amber-400 hover:text-amber-300 transition-colors">Sign in</Link>
+          <Link href="/shop/login" className="text-amber-400 hover:text-amber-300 transition-colors">Sign in</Link>
         </p>
         <p className="text-center text-sm text-zinc-500">
           Just collecting?{' '}
