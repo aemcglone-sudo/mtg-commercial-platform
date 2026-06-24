@@ -225,39 +225,16 @@ export default function Home() {
               }`} />
             </div>
 
-            <div className="relative" ref={menuRef}>
-              <button
-                type="button"
-                onClick={() => setUserMenuOpen((v) => !v)}
-                className="flex items-center gap-2 text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
-              >
-                <span className="w-7 h-7 rounded-full bg-amber-400 text-black flex items-center justify-center font-bold text-xs">
-                  M
-                </span>
-                <span className="hidden sm:block">Grimoire</span>
-                <span className="text-xs text-zinc-600">{userMenuOpen ? '▲' : '▼'}</span>
-              </button>
-
-              {userMenuOpen && (
-                <div className="absolute right-0 top-full mt-2 w-44 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl py-1 z-20">
-                  <Link
-                    href="/settings"
-                    onClick={() => setUserMenuOpen(false)}
-                    className="flex items-center gap-2 px-4 py-2.5 text-sm text-zinc-300 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
-                  >
-                    ⚙️ Settings
-                  </Link>
-                  <div className="border-t border-zinc-800 my-1" />
-                  <button
-                    type="button"
-                    onClick={handleLogout}
-                    className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-zinc-400 hover:text-red-400 hover:bg-zinc-800 transition-colors"
-                  >
-                    Sign out
-                  </button>
-                </div>
-              )}
-            </div>
+            <Link
+              href="/settings"
+              className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
+              title="Settings"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="8" r="4" />
+                <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
+              </svg>
+            </Link>
           </div>
         </div>
 
