@@ -11,6 +11,11 @@ interface ScryfallCard {
   image_uris?: { normal: string };
   card_faces?: Array<{ image_uris?: { normal: string } }>;
   prices: { usd: string | null; usd_foil: string | null };
+  type_line?: string;
+  colors?: string[];
+  color_identity?: string[];
+  cmc?: number;
+  rarity?: string;
 }
 
 interface ScryfallIdentifier {
@@ -32,6 +37,10 @@ export interface ParsedResult {
   priceCents: number;
   condition: string;
   foil: boolean;
+  typeLine?: string | null;
+  colors?: string[];
+  cmc?: number | null;
+  rarity?: string | null;
 }
 
 // Normalize card names for comparison: lowercase + standardize apostrophes/quotes
@@ -137,6 +146,10 @@ export async function POST(req: NextRequest) {
       priceCents: marketPriceCents ?? 100,
       condition: 'NM',
       foil: false,
+      typeLine: card.type_line ?? null,
+      colors: card.colors ?? card.color_identity ?? [],
+      cmc: card.cmc ?? null,
+      rarity: card.rarity ?? null,
     };
   });
 

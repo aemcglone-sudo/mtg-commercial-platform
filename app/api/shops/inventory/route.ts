@@ -58,9 +58,14 @@ export async function GET(req: NextRequest) {
       scryfallId: string;
       notes: string | null;
       createdAt: string;
+      typeLine: string | null;
+      colors: string | null;
+      cmc: number | null;
+      rarity: string | null;
     }>(
       `SELECT id, "cardName", "setCode", "collectorNumber", condition, foil, language,
-              quantity, "priceCents", "imageUrl", "scryfallId", notes, "createdAt"
+              quantity, "priceCents", "imageUrl", "scryfallId", notes, "createdAt",
+              "typeLine", colors, cmc, rarity
        FROM shop_inventory
        WHERE ${where}
        ORDER BY "cardName" ASC
@@ -117,6 +122,10 @@ export async function POST(req: NextRequest) {
       priceCents: number;
       notes?: string;
       imageUrl?: string;
+      typeLine?: string | null;
+      colors?: string[];
+      cmc?: number | null;
+      rarity?: string | null;
     }>;
   };
 
@@ -132,8 +141,9 @@ export async function POST(req: NextRequest) {
       `INSERT INTO shop_inventory
          (id, "shopId", "scryfallId", "cardName", "setCode", "collectorNumber",
           condition, foil, language, quantity, "priceCents", notes, "imageUrl",
+          "typeLine", colors, cmc, rarity,
           "createdAt", "updatedAt")
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         randomUUID(),
         shopId,
@@ -148,6 +158,10 @@ export async function POST(req: NextRequest) {
         card.priceCents,
         card.notes ?? null,
         card.imageUrl ?? null,
+        card.typeLine ?? null,
+        card.colors ? JSON.stringify(card.colors) : null,
+        card.cmc ?? null,
+        card.rarity ?? null,
         now,
         now,
       ]

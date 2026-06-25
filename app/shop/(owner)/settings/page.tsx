@@ -17,6 +17,7 @@ interface ReviewCard {
   collectorNumber?: string; imageUrl?: string | null;
   marketPriceCents?: number | null; priceCents: number;
   condition: string; foil: boolean; include: boolean;
+  typeLine?: string | null; colors?: string[]; cmc?: number | null; rarity?: string | null;
 }
 
 const fmt = (cents: number) => `$${(cents / 100).toFixed(2)}`;
@@ -131,7 +132,7 @@ function ShopSettingsContent() {
       const res = await fetch('/api/shops/inventory', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cards: toAdd.map(c => ({ scryfallId: c.scryfallId!, cardName: c.cardName ?? c.name, setCode: c.setCode ?? '', collectorNumber: c.collectorNumber, condition: c.condition, foil: c.foil, quantity: c.qty, priceCents: c.priceCents, imageUrl: c.imageUrl })) }),
+        body: JSON.stringify({ cards: toAdd.map(c => ({ scryfallId: c.scryfallId!, cardName: c.cardName ?? c.name, setCode: c.setCode ?? '', collectorNumber: c.collectorNumber, condition: c.condition, foil: c.foil, quantity: c.qty, priceCents: c.priceCents, imageUrl: c.imageUrl, typeLine: c.typeLine, colors: c.colors, cmc: c.cmc, rarity: c.rarity })) }),
       });
       const data = await res.json() as { added: number };
       setAddResult(`Added ${data.added} card${data.added !== 1 ? 's' : ''} to inventory.`);

@@ -329,6 +329,10 @@ model ShopInventory {
   priceCents      Int
   notes           String?
   imageUrl        String?
+  typeLine        String?
+  colors          String?  // JSON array e.g. ["W","U"]
+  cmc             Float?
+  rarity          String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

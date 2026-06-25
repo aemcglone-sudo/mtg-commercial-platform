@@ -21,7 +21,11 @@ async function fetchShopCollection(): Promise<CollectionResult | null> {
     const res = await fetch(`/api/shops/inventory?page=${page}&limit=200`);
     if (!res.ok) return null;
     const data = await res.json() as {
-      items: Array<{ cardName: string; quantity: number; priceCents: number; imageUrl: string | null; scryfallId: string; setCode: string }>;
+      items: Array<{
+        cardName: string; quantity: number; priceCents: number; imageUrl: string | null;
+        scryfallId: string; setCode: string; typeLine: string | null;
+        colors: string | null; cmc: number | null; rarity: string | null;
+      }>;
       total: number; pages: number;
     };
     pages = data.pages ?? 1;
@@ -35,7 +39,10 @@ async function fetchShopCollection(): Promise<CollectionResult | null> {
         imageUrl: item.imageUrl,
         scryfallUri: item.scryfallId ? `https://scryfall.com/card/${item.scryfallId}` : null,
         setName: item.setCode ?? null,
-        typeLine: null, colors: [], cmc: null, rarity: null,
+        typeLine: item.typeLine ?? null,
+        colors: item.colors ? JSON.parse(item.colors) : [],
+        cmc: item.cmc ?? null,
+        rarity: item.rarity ?? null,
         collectionType: 'paper',
       });
     }
