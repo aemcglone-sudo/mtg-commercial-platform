@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { initializeCommanderGame, applyAction, endPhase, mulligan, keepHand } from '@/lib/magic-game/commander-engine';
 import { getCardImageUrl } from '@/lib/magic-game/scryfall-integration';
 import type { CommanderGameState, ScryfallCard } from '@/lib/magic-game/commander-types';
-import type { CollectionResult } from '@/app/page';
+import type { CollectionResult } from '@/app/(collector)/page';
 import DeckReview from './DeckReview';
 
 export default function CommanderPlayground() {

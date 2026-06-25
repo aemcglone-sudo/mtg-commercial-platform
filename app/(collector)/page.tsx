@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import CollectionBrowser, { type CollectionCardData } from '@/components/CollectionBrowser';
 import DeckFinderTab from '@/components/DeckFinderTab';
 import CollectionChatTab from '@/components/CollectionChatTab';

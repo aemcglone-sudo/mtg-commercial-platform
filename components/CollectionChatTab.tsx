@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
-import type { CollectionResult } from '@/app/page';
+import type { CollectionResult } from '@/app/(collector)/page';
 import type { AgentCard } from '@/lib/magic-agent/chat-integration';
 import { parseDeckFromText } from '@/lib/parse-deck';
 import SaveDeckModal from './SaveDeckModal';
