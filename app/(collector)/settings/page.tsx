@@ -4,7 +4,6 @@ import { useState, useCallback, useEffect, FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Suspense } from 'react';
-import LogoutButton from '@/components/LogoutButton';
 
 interface SavedInfo {
   collectionSize: number;
@@ -128,16 +127,6 @@ function SettingsContent() {
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
-      <header className="border-b border-zinc-800 px-6 py-4">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Link href="/" className="text-zinc-500 hover:text-zinc-300 text-sm transition-colors">← Back</Link>
-            <h1 className="text-lg font-bold">Settings</h1>
-          </div>
-          <LogoutButton />
-        </div>
-      </header>
-
       <div className="max-w-4xl mx-auto px-6 py-10 flex gap-10">
         {/* Main content */}
         <div className="flex-1 min-w-0">

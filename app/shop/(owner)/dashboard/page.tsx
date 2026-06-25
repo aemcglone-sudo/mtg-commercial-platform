@@ -1,9 +1,7 @@
 'use client';
 
-import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import LogoutButton from '@/components/LogoutButton';
 
 interface ShopStats {
   inventoryCount: number;
@@ -58,43 +56,7 @@ export default function ShopDashboard() {
   ];
 
   return (
-    <main className="min-h-screen bg-zinc-950 text-zinc-100">
-      <header className="border-b border-zinc-800 sticky top-0 bg-zinc-950/95 backdrop-blur z-10">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="text-xl font-black">
-              <span className="text-amber-400">Grimoire</span>
-            </span>
-            <span className="text-zinc-600 text-sm hidden sm:block">/ {shopName}</span>
-          </div>
-          <nav className="flex items-center gap-1">
-            <Link
-              href="/shop/inventory"
-              className="px-3 py-1.5 text-sm text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 rounded-lg transition-colors"
-            >
-              Inventory
-            </Link>
-            <Link
-              href="/shop/orders"
-              className="px-3 py-1.5 text-sm text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 rounded-lg transition-colors"
-            >
-              Orders
-            </Link>
-            <Link
-              href="/shop/settings"
-              className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
-              title="Settings"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="8" r="4" />
-                <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
-              </svg>
-            </Link>
-            <LogoutButton className="px-3 py-1.5 text-sm text-zinc-500 hover:text-red-400 hover:bg-zinc-800 rounded-lg transition-colors" />
-          </nav>
-        </div>
-      </header>
-
+    <div className="min-h-screen text-zinc-100">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-8">
         <div>
           <h1 className="text-2xl font-bold">Dashboard</h1>
@@ -176,6 +138,6 @@ export default function ShopDashboard() {
           </div>
         )}
       </div>
-    </main>
+    </div>
   );
 }

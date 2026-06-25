@@ -1,8 +1,7 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import CollectionBrowser, { type CollectionCardData } from '@/components/CollectionBrowser';
 import DeckFinderTab from '@/components/DeckFinderTab';
 import CollectionChatTab from '@/components/CollectionChatTab';
@@ -49,12 +48,10 @@ export default function Home() {
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzeError, setAnalyzeError] = useState('');
   const [loading, setLoading] = useState(true);
-  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [chatMessage, setChatMessage] = useState('');
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
   const [healthStatus, setHealthStatus] = useState<'healthy' | 'unhealthy' | 'checking'>('checking');
-  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const checkHealth = async () => {
@@ -150,25 +147,9 @@ export default function Home() {
     }
   }, [collection, decks, analyzing, handleAnalyze]);
 
-  // Close user menu on outside click
-  useEffect(() => {
-    function handler(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setUserMenuOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
 
   function handleCardClick(cardName: string) {
     setSelectedCard(cardName);
-  }
-
-  async function handleLogout() {
-    await fetch('/api/auth/logout', { method: 'POST' });
-    router.push('/login?signed-out=1');
-    router.refresh();
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -176,29 +157,28 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-zinc-950 text-zinc-100">
 
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
+      {/* ── Tab bar ─────────────────────────────────────────────────────────── */}
       <header className="border-b border-zinc-800 sticky top-0 bg-zinc-950/95 backdrop-blur z-10">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-2 sm:py-3 flex items-center justify-between">
-
-          {/* Brand + collection badge */}
-          <div className="flex items-center gap-2 sm:gap-3">
-            <span className="text-lg sm:text-xl font-black tracking-tight">
-              <span className="text-amber-400">Grimoire</span>
-            </span>
-            {collection && (
-              <span className="text-xs text-zinc-500 hidden sm:flex items-center gap-1.5">
-                {collection.collectionSize.toLocaleString()} cards
-                {collection.detectedFormat && collection.detectedFormat !== 'Unknown' && (
-                  <span className="px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400">
-                    {collection.detectedFormat}
-                  </span>
-                )}
-              </span>
-            )}
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 flex items-center justify-between py-1">
+          <div className="flex gap-1 overflow-x-auto">
+            {TABS.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-1.5 px-2 sm:px-4 py-2.5 text-xs sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                  activeTab === tab.id
+                    ? 'border-amber-400 text-amber-400'
+                    : 'border-transparent text-zinc-400 hover:text-zinc-200 hover:border-zinc-600'
+                }`}
+                title={tab.label}
+              >
+                <span className="text-base sm:text-lg">{tab.icon}</span>
+                <span className="hidden sm:inline">{tab.label}</span>
+              </button>
+            ))}
           </div>
-
-          {/* Copilot toggle + User menu */}
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-2 pl-2 shrink-0">
             {collection && (
               <button
                 type="button"
@@ -209,53 +189,10 @@ export default function Home() {
                 🧙
               </button>
             )}
-
-            <div
-              title={
-                healthStatus === 'healthy' ? 'All systems operational' :
-                healthStatus === 'checking' ? 'Checking status…' :
-                'Service unavailable'
-              }
-              className="flex items-center"
-            >
-              <div className={`w-2 h-2 rounded-full ${
-                healthStatus === 'healthy' ? 'bg-emerald-400 animate-pulse' :
-                healthStatus === 'checking' ? 'bg-zinc-600' :
-                'bg-red-500'
-              }`} />
+            <div title={healthStatus === 'healthy' ? 'All systems operational' : healthStatus === 'checking' ? 'Checking status…' : 'Service unavailable'}>
+              <div className={`w-2 h-2 rounded-full ${healthStatus === 'healthy' ? 'bg-emerald-400 animate-pulse' : healthStatus === 'checking' ? 'bg-zinc-600' : 'bg-red-500'}`} />
             </div>
-
-            <Link
-              href="/settings"
-              className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
-              title="Settings"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="8" r="4" />
-                <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
-              </svg>
-            </Link>
           </div>
-        </div>
-
-        {/* Tab bar — always visible */}
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 flex gap-1 pb-0 overflow-x-auto">
-          {TABS.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-1.5 px-2 sm:px-4 py-2.5 text-xs sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-                activeTab === tab.id
-                  ? 'border-amber-400 text-amber-400'
-                  : 'border-transparent text-zinc-400 hover:text-zinc-200 hover:border-zinc-600'
-              }`}
-              title={tab.label}
-            >
-              <span className="text-base sm:text-lg">{tab.icon}</span>
-              <span className="hidden sm:inline">{tab.label}</span>
-            </button>
-          ))}
         </div>
       </header>
 
