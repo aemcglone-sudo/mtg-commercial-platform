@@ -71,7 +71,21 @@ function SettingsContent() {
 
   const handleFile = useCallback((file: File) => {
     setFileName(file.name);
-    file.text().then(setText);
+    file.text().then(raw => {
+      if (file.name.toLowerCase().endsWith('.rtf')) {
+        // Strip RTF control codes to get plain text
+        let text = raw
+          .replace(/\{[^{}]*\}/g, ' ')           // remove groups like {\colortbl...}
+          .replace(/\\[a-z]+[-]?\d*[ ]?/g, ' ')  // remove control words like \rtf1 \b \par
+          .replace(/\\\*/g, '')                   // remove \* escaped destinations
+          .replace(/[{}\\]/g, ' ')               // remove remaining braces/backslashes
+          .replace(/[ \t]+/g, ' ')               // collapse whitespace
+          .split('\n').map(l => l.trim()).filter(Boolean).join('\n');
+        setText(text);
+      } else {
+        setText(raw);
+      }
+    });
     setUploadSuccess('');
     setUploadError('');
   }, []);
@@ -228,7 +242,7 @@ function SettingsContent() {
                   onDragLeave={() => setDragOver(false)}
                   onDrop={handleDrop}
                 >
-                  <input type="file" accept=".txt,.csv,.dek" title="Upload collection file" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+                  <input type="file" accept=".txt,.csv,.dek,.rtf" title="Upload collection file" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
                   <div className="pointer-events-none space-y-1">
                     <p className="text-zinc-300 font-medium text-sm">{fileName || 'Drop your collection file here'}</p>
                     <p className="text-zinc-600 text-xs">MTGO, Moxfield, ManaBox, Deckbox, or TCGPlayer · or paste below</p>
