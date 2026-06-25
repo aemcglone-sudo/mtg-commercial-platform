@@ -77,6 +77,23 @@ export async function GET(req: NextRequest) {
   });
 }
 
+export async function DELETE(req: NextRequest) {
+  const role = getRole(req);
+  if (role !== 'shop_owner') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+  const userId = getAuthenticatedUserId(req)!;
+  const shopId = await getShopId(userId);
+  if (!shopId) return NextResponse.json({ error: 'Shop not found' }, { status: 404 });
+
+  const { count } = await findOne<{ count: string }>(
+    'SELECT COUNT(*) as count FROM shop_inventory WHERE "shopId" = ?',
+    [shopId]
+  ) ?? { count: '0' };
+  await run('DELETE FROM shop_inventory WHERE "shopId" = ?', [shopId]);
+  return NextResponse.json({ deleted: parseInt(count, 10) });
+}
+
 export async function POST(req: NextRequest) {
   const role = getRole(req);
   if (role !== 'shop_owner') {

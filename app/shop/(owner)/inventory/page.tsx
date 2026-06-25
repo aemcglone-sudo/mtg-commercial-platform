@@ -105,6 +105,8 @@ export default function InventoryPage() {
   // Add to inventory
   const [adding, setAdding] = useState(false);
   const [addResult, setAddResult] = useState<string | null>(null);
+  const [clearing, setClearing] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
 
   // ─── Load shop name ───────────────────────────────────────────────
   useEffect(() => {
@@ -113,6 +115,19 @@ export default function InventoryPage() {
       .then(d => { if (d?.shop?.name) setShopName(d.shop.name); })
       .catch(() => {});
   }, []);
+
+  // ─── Clear inventory ──────────────────────────────────────────────
+  async function clearInventory() {
+    setClearing(true);
+    try {
+      await fetch('/api/shops/inventory', { method: 'DELETE' });
+      setItems([]);
+      setTotal(0);
+    } finally {
+      setClearing(false);
+      setConfirmClear(false);
+    }
+  }
 
   // ─── Load inventory ───────────────────────────────────────────────
   const loadInventory = useCallback(async () => {
@@ -282,6 +297,23 @@ export default function InventoryPage() {
             <h1 className="text-2xl font-bold">Inventory</h1>
             <p className="text-zinc-500 text-sm mt-0.5">{total.toLocaleString()} cards in stock</p>
           </div>
+          {total > 0 && (
+            <div className="flex items-center gap-2">
+              {confirmClear ? (
+                <>
+                  <span className="text-xs text-zinc-400">Clear all {total.toLocaleString()} cards?</span>
+                  <button type="button" onClick={() => setConfirmClear(false)} className="px-3 py-1.5 text-xs rounded-lg border border-zinc-700 text-zinc-400 hover:text-zinc-200 transition-colors">Cancel</button>
+                  <button type="button" onClick={clearInventory} disabled={clearing} className="px-3 py-1.5 text-xs rounded-lg bg-red-600 hover:bg-red-500 text-white font-semibold transition-colors disabled:opacity-50">
+                    {clearing ? 'Clearing…' : 'Yes, clear all'}
+                  </button>
+                </>
+              ) : (
+                <button type="button" onClick={() => setConfirmClear(true)} className="px-3 py-1.5 text-xs rounded-lg border border-zinc-700 text-zinc-500 hover:text-red-400 hover:border-red-700 transition-colors">
+                  Clear Inventory
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* ─── ADD CARDS PANEL ──────────────────────────────────────────── */}
