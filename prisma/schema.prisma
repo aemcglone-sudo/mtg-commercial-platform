@@ -168,10 +168,11 @@ model PriceAlert {
 }
 
 model KhoaChat {
-  id        String @id
+  id        String  @id
   userId    String
   title     String
-  messages  String @default("[]")
+  messages  String  @default("[]")
+  pinned    Boolean @default(false)
   createdAt String
   updatedAt String
 
