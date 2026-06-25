@@ -117,6 +117,10 @@ function SettingsContent() {
       setUploadSuccess(`Saved! ${data.collectionSize.toLocaleString()} unique cards detected.`);
       setText('');
       setFileName('');
+      // Notify layout to check for new combos
+      if (data.cardNames && Array.isArray(data.cardNames)) {
+        window.dispatchEvent(new CustomEvent('collection-updated', { detail: data.cardNames }));
+      }
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : 'Something went wrong');
     } finally {

@@ -81,6 +81,7 @@ export async function POST(req: NextRequest) {
     totalCards: [...collection.values()].reduce((a, b) => a + b, 0),
     detectedFormat,
     collectionCards,
+    cardNames: collectionCards.map(c => c.name),
   };
 
   // Persist to DB when authenticated
