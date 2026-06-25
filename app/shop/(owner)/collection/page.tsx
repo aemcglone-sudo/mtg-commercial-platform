@@ -4,16 +4,13 @@ import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import CollectionBrowser from '@/components/CollectionBrowser';
 import CollectionInsightsTab from '@/components/CollectionInsightsTab';
-import MyDecksTab from '@/components/MyDecksTab';
-import DeckFinderTab from '@/components/DeckFinderTab';
-import MTGNewsTab from '@/components/MTGNewsTab';
 import CollectionChatTab from '@/components/CollectionChatTab';
 import CardDetailModal from '@/components/CardDetailModal';
-import type { CollectionResult, DeckResult } from '@/app/(collector)/page';
+import type { CollectionResult } from '@/app/(collector)/page';
 import type { CollectionCardData } from '@/components/CollectionBrowser';
 
-type Tab = 'collection' | 'insights' | 'mydecks' | 'decks' | 'news' | 'chat';
-const VALID_TABS: Tab[] = ['collection', 'insights', 'mydecks', 'decks', 'news', 'chat'];
+type Tab = 'inventory' | 'insights' | 'chat';
+const VALID_TABS: Tab[] = ['inventory', 'insights', 'chat'];
 
 async function fetchShopCollection(): Promise<CollectionResult | null> {
   const allCards: CollectionCardData[] = [];
@@ -24,10 +21,7 @@ async function fetchShopCollection(): Promise<CollectionResult | null> {
     const res = await fetch(`/api/shops/inventory?page=${page}&limit=200`);
     if (!res.ok) return null;
     const data = await res.json() as {
-      items: Array<{
-        cardName: string; quantity: number; priceCents: number;
-        imageUrl: string | null; scryfallId: string; setCode: string;
-      }>;
+      items: Array<{ cardName: string; quantity: number; priceCents: number; imageUrl: string | null; scryfallId: string; setCode: string }>;
       total: number; pages: number;
     };
     pages = data.pages ?? 1;
@@ -61,20 +55,15 @@ function ShopCollectionContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const rawTab = searchParams.get('tab') as Tab | null;
-  const activeTab: Tab = rawTab && VALID_TABS.includes(rawTab) ? rawTab : 'collection';
+  const activeTab: Tab = rawTab && VALID_TABS.includes(rawTab) ? rawTab : 'inventory';
 
   const [collection, setCollection] = useState<CollectionResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [chatMessage, setChatMessage] = useState('');
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
-  const [decks, setDecks] = useState<DeckResult | null>(null);
-  const [analyzing, setAnalyzing] = useState(false);
-  const [analyzeError, setAnalyzeError] = useState('');
 
   useEffect(() => {
-    fetchShopCollection()
-      .then(setCollection)
-      .finally(() => setLoading(false));
+    fetchShopCollection().then(setCollection).finally(() => setLoading(false));
   }, []);
 
   useEffect(() => {
@@ -85,35 +74,15 @@ function ShopCollectionContent() {
     return () => window.removeEventListener('card-detail-open', handler);
   }, []);
 
-  const handleAnalyze = useCallback(async () => {
-    if (!collection) return;
-    setAnalyzing(true);
-    setAnalyzeError('');
-    try {
-      const res = await fetch('/api/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cards: collection.collectionCards.map(c => ({ name: c.name, quantity: c.quantity })) }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'Analysis failed');
-      setDecks(data);
-    } catch (err) {
-      setAnalyzeError(err instanceof Error ? err.message : 'Something went wrong');
-    } finally {
-      setAnalyzing(false);
-    }
-  }, [collection]);
-
-  function setTab(tab: Tab) {
-    router.push(`/shop/collection?tab=${tab}`);
-  }
+  const setTab = useCallback((t: Tab) => router.push(`/shop/collection?tab=${t}`), [router]);
 
   return (
     <div className="min-h-screen">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-6">
         <div>
-          <h1 className="text-xl font-bold">My Collection</h1>
+          <h1 className="text-xl font-bold">
+            {activeTab === 'inventory' ? 'Inventory' : activeTab === 'insights' ? 'Insights' : 'Ask Khoa'}
+          </h1>
           {collection && (
             <p className="text-zinc-500 text-sm mt-0.5">
               {collection.collectionSize.toLocaleString()} unique cards · {collection.totalCards.toLocaleString()} total
@@ -122,23 +91,21 @@ function ShopCollectionContent() {
         </div>
 
         {loading && (
-          <div className="flex items-center justify-center py-24 text-zinc-600 text-sm">
-            Loading inventory…
-          </div>
+          <div className="flex items-center justify-center py-24 text-zinc-600 text-sm">Loading inventory…</div>
         )}
 
         {!loading && !collection && (
           <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-10 text-center space-y-3">
             <p className="text-zinc-400">Your inventory is empty.</p>
-            <a href="/shop/inventory" className="text-amber-400 text-sm hover:text-amber-300 transition-colors">
-              Add cards to inventory →
+            <a href="/shop/settings?tab=inventory" className="text-amber-400 text-sm hover:text-amber-300 transition-colors">
+              Upload inventory in Settings →
             </a>
           </div>
         )}
 
         {!loading && collection && (
           <>
-            {activeTab === 'collection' && (
+            {activeTab === 'inventory' && (
               <CollectionBrowser
                 cards={collection.collectionCards}
                 totalCards={collection.totalCards}
@@ -148,19 +115,6 @@ function ShopCollectionContent() {
             {activeTab === 'insights' && (
               <CollectionInsightsTab cards={collection.collectionCards} />
             )}
-            {activeTab === 'mydecks' && (
-              <MyDecksTab collection={collection.collectionCards} />
-            )}
-            {activeTab === 'decks' && (
-              <DeckFinderTab
-                decks={decks}
-                analyzing={analyzing}
-                error={analyzeError}
-                onAnalyze={handleAnalyze}
-                collection={collection.collectionCards}
-              />
-            )}
-            {activeTab === 'news' && <MTGNewsTab />}
             {activeTab === 'chat' && (
               <CollectionChatTab
                 collection={collection}
@@ -184,9 +138,5 @@ function ShopCollectionContent() {
 }
 
 export default function ShopCollectionPage() {
-  return (
-    <Suspense>
-      <ShopCollectionContent />
-    </Suspense>
-  );
+  return <Suspense><ShopCollectionContent /></Suspense>;
 }
