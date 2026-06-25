@@ -3,8 +3,13 @@
 import NavSidebar from '@/components/NavSidebar';
 
 const NAV = [
-  { href: '/', label: 'My Collection', exact: true },
-  { href: '/settings', label: 'Settings' },
+  { href: '/?tab=collection', label: 'My Collection', exact: true },
+  { href: '/?tab=insights',   label: 'Insights' },
+  { href: '/?tab=mydecks',    label: 'My Decks & Lists' },
+  { href: '/?tab=decks',      label: 'Top Decks' },
+  { href: '/?tab=news',       label: 'News' },
+  { href: '/?tab=chat',       label: 'Ask Khoa', dividerAfter: true },
+  { href: '/settings',        label: 'Settings' },
 ];
 
 export default function CollectorLayout({ children }: { children: React.ReactNode }) {

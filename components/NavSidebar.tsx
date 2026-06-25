@@ -1,14 +1,15 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import LogoutButton from '@/components/LogoutButton';
 
 export interface NavItem {
   href: string;
   label: string;
   exact?: boolean;
+  dividerAfter?: boolean;
 }
 
 interface NavSidebarProps {
@@ -17,34 +18,46 @@ interface NavSidebarProps {
   brandLabel?: string;
 }
 
-export default function NavSidebar({ items, userName, brandLabel = 'Grimoire' }: NavSidebarProps) {
+function NavContent({ items, userName, brandLabel, onNavigate }: NavSidebarProps & { onNavigate?: () => void }) {
   const pathname = usePathname();
-  const [open, setOpen] = useState(false);
+  const searchParams = useSearchParams();
 
   function isActive(item: NavItem) {
-    return item.exact ? pathname === item.href : pathname === item.href || pathname.startsWith(item.href + '/');
+    const [path, query] = item.href.split('?');
+    if (pathname !== path) return false;
+    if (!query) {
+      // No query in href — active only if page also has no tab param (or exact match)
+      return item.exact ? !searchParams.get('tab') : true;
+    }
+    const param = new URLSearchParams(query);
+    const tab = param.get('tab');
+    return tab ? searchParams.get('tab') === tab : true;
   }
 
-  const navContent = (
+  return (
     <div className="flex flex-col h-full">
       <div className="px-5 py-5 border-b border-zinc-800">
-        <span className="text-lg font-black text-amber-400">{brandLabel}</span>
+        <span className="text-lg font-black text-amber-400">{brandLabel ?? 'Grimoire'}</span>
       </div>
 
-      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-        {items.map(item => (
-          <Link
-            key={item.href}
-            href={item.href}
-            onClick={() => setOpen(false)}
-            className={`block px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-              isActive(item)
-                ? 'bg-zinc-800 text-zinc-100'
-                : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900'
-            }`}
-          >
-            {item.label}
-          </Link>
+      <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
+        {items.map((item, i) => (
+          <div key={item.href}>
+            <Link
+              href={item.href}
+              onClick={onNavigate}
+              className={`block px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                isActive(item)
+                  ? 'bg-zinc-800 text-zinc-100'
+                  : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900'
+              }`}
+            >
+              {item.label}
+            </Link>
+            {item.dividerAfter && i < items.length - 1 && (
+              <div className="my-2 border-t border-zinc-800" />
+            )}
+          </div>
         ))}
       </nav>
 
@@ -54,12 +67,18 @@ export default function NavSidebar({ items, userName, brandLabel = 'Grimoire' }:
       </div>
     </div>
   );
+}
+
+export default function NavSidebar(props: NavSidebarProps) {
+  const [open, setOpen] = useState(false);
 
   return (
     <>
       {/* Desktop sidebar — always visible */}
       <aside className="hidden md:flex md:flex-col w-52 shrink-0 border-r border-zinc-800 bg-zinc-950 h-screen sticky top-0">
-        {navContent}
+        <Suspense>
+          <NavContent {...props} />
+        </Suspense>
       </aside>
 
       {/* Mobile — hamburger button + overlay drawer */}
@@ -75,15 +94,10 @@ export default function NavSidebar({ items, userName, brandLabel = 'Grimoire' }:
           </svg>
         </button>
 
-        {/* Backdrop */}
         {open && (
-          <div
-            className="fixed inset-0 z-40 bg-black/60"
-            onClick={() => setOpen(false)}
-          />
+          <div className="fixed inset-0 z-40 bg-black/60" onClick={() => setOpen(false)} />
         )}
 
-        {/* Drawer */}
         <aside className={`fixed top-0 left-0 z-50 h-full w-52 bg-zinc-950 border-r border-zinc-800 transition-transform duration-200 ${open ? 'translate-x-0' : '-translate-x-full'}`}>
           <button
             type="button"
@@ -95,7 +109,9 @@ export default function NavSidebar({ items, userName, brandLabel = 'Grimoire' }:
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
-          {navContent}
+          <Suspense>
+            <NavContent {...props} onNavigate={() => setOpen(false)} />
+          </Suspense>
         </aside>
       </div>
     </>

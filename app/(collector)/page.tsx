@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import CollectionBrowser, { type CollectionCardData } from '@/components/CollectionBrowser';
 import DeckFinderTab from '@/components/DeckFinderTab';
@@ -16,6 +16,7 @@ import type { DeckSummary } from '@/components/CardDetailModal';
 
 type DeckWithoutCards = Omit<MatchedDeck, 'cards'>;
 type PortalTab = 'collection' | 'insights' | 'decks' | 'chat' | 'mydecks' | 'news';
+const VALID_TABS: PortalTab[] = ['collection', 'insights', 'decks', 'chat', 'mydecks', 'news'];
 
 export interface CollectionResult {
   collectionSize: number;
@@ -30,18 +31,11 @@ export interface DeckResult {
   suggested?: DeckWithoutCards[];
 }
 
-const TABS: { id: PortalTab; label: string; icon: string }[] = [
-  { id: 'collection', label: 'My Collection', icon: '🃏' },
-  { id: 'insights',   label: 'Insights',      icon: '📊' },
-  { id: 'mydecks',    label: 'My Decks & Lists', icon: '🎯' },
-  { id: 'decks',      label: 'Top Decks',     icon: '⭐' },
-  { id: 'news',       label: 'News',          icon: '📰' },
-  { id: 'chat',       label: 'Ask Khoa',      icon: '💬' },
-];
-
-export default function Home() {
+function HomeContent() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<PortalTab>('collection');
+  const searchParams = useSearchParams();
+  const rawTab = searchParams.get('tab') as PortalTab | null;
+  const activeTab: PortalTab = rawTab && VALID_TABS.includes(rawTab) ? rawTab : 'collection';
   const [collection, setCollection] = useState<CollectionResult | null>(null);
   const [collectionText, setCollectionText] = useState('');
   const [decks, setDecks] = useState<DeckResult | null>(null);
@@ -90,13 +84,8 @@ export default function Home() {
     }
   }, [collection, collectionText]);
 
-  // Load saved collection and active tab on mount
+  // Load saved collection on mount
   useEffect(() => {
-    const savedTab = localStorage.getItem('activeTab') as PortalTab | null;
-    if (savedTab && ['collection', 'insights', 'decks', 'chat', 'mydecks', 'news'].includes(savedTab)) {
-      setActiveTab(savedTab);
-    }
-
     fetch('/api/collection/saved')
       .then((r) => r.json())
       .then((data) => {
@@ -121,25 +110,20 @@ export default function Home() {
       .catch(() => {});
   }, []);
 
-  // Persist active tab to localStorage
-  useEffect(() => {
-    localStorage.setItem('activeTab', activeTab);
-  }, [activeTab]);
-
   function handleAskAboutCard(cardName: string, question: string) {
     setChatMessage(question);
-    setActiveTab('chat');
+    router.push('/?tab=chat');
   }
 
   useEffect(() => {
     function handleKhoaPrompt(e: Event) {
       const prompt = (e as CustomEvent<string>).detail;
       setChatMessage(prompt);
-      setActiveTab('chat');
+      router.push('/?tab=chat');
     }
     window.addEventListener('khoa-prompt', handleKhoaPrompt);
     return () => window.removeEventListener('khoa-prompt', handleKhoaPrompt);
-  }, []);
+  }, [router]);
 
   // Auto-analyze decks when collection loads
   useEffect(() => {
@@ -157,47 +141,6 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-zinc-950 text-zinc-100">
-
-      {/* ── Tab bar ─────────────────────────────────────────────────────────── */}
-      <header className="border-b border-zinc-800 sticky top-0 bg-zinc-950/95 backdrop-blur z-10">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 flex items-center justify-between py-1">
-          <div className="flex gap-1 overflow-x-auto">
-            {TABS.map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-1.5 px-2 sm:px-4 py-2.5 text-xs sm:text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-                  activeTab === tab.id
-                    ? 'border-amber-400 text-amber-400'
-                    : 'border-transparent text-zinc-400 hover:text-zinc-200 hover:border-zinc-600'
-                }`}
-                title={tab.label}
-              >
-                <span className="text-base sm:text-lg">{tab.icon}</span>
-                <span className="hidden sm:inline">{tab.label}</span>
-              </button>
-            ))}
-          </div>
-          <div className="flex items-center gap-2 pl-2 shrink-0">
-            {collection && (
-              <button
-                type="button"
-                onClick={() => setCopilotOpen((v) => !v)}
-                className="hidden sm:block p-2 rounded-lg hover:bg-zinc-800 transition-colors text-zinc-400 hover:text-amber-400"
-                title="Open Khoa copilot"
-              >
-                🧙
-              </button>
-            )}
-            <div title={healthStatus === 'healthy' ? 'All systems operational' : healthStatus === 'checking' ? 'Checking status…' : 'Service unavailable'}>
-              <div className={`w-2 h-2 rounded-full ${healthStatus === 'healthy' ? 'bg-emerald-400 animate-pulse' : healthStatus === 'checking' ? 'bg-zinc-600' : 'bg-red-500'}`} />
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {/* ── Main content ────────────────────────────────────────────────────── */}
       <div className={`max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8 transition-all duration-300 ${copilotOpen ? 'hidden sm:block sm:mr-96' : ''}`}>
 
         {/* Loading saved collection */}
@@ -326,4 +269,8 @@ export default function Home() {
       )}
     </main>
   );
+}
+
+export default function Home() {
+  return <Suspense><HomeContent /></Suspense>;
 }
