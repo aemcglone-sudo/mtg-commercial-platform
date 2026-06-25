@@ -75,6 +75,7 @@ function SettingsContent() {
       if (file.name.toLowerCase().endsWith('.rtf')) {
         // Strip RTF control codes to get plain text
         let text = raw
+          .replace(/\\'([0-9a-fA-F]{2})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16))) // decode hex escapes like \'c9 → É
           .replace(/\{[^{}]*\}/g, ' ')           // remove groups like {\colortbl...}
           .replace(/\\[a-z]+[-]?\d*[ ]?/g, ' ')  // remove control words like \rtf1 \b \par
           .replace(/\\\*/g, '')                   // remove \* escaped destinations

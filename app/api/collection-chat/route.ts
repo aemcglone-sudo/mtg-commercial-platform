@@ -358,31 +358,37 @@ ${cardList || '(no cards loaded)'}
           parts: [{ text: msg.content }]
         }));
 
-        const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + process.env.GOOGLE_API_KEY, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            systemInstruction: {
-              parts: [{ text: system }]
-            },
-            contents,
-            generationConfig: {
-              maxOutputTokens: 4096
-            }
-          }),
+        const geminiBody = JSON.stringify({
+          systemInstruction: { parts: [{ text: system }] },
+          contents,
+          generationConfig: { maxOutputTokens: 4096 },
         });
 
-        const data = await res.json() as any;
+        // eslint-disable-next-line prefer-const
+        let res: Response = null!;
+        let data: any = null;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          if (attempt > 0) await new Promise(r => setTimeout(r, attempt * 2000));
+          res = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + process.env.GOOGLE_API_KEY, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: geminiBody,
+          });
+          data = await res.json() as any;
+          const isOverloaded = res.status === 503 || /high demand|overload|unavailable/i.test(data?.error?.message ?? '');
+          if (!isOverloaded) break;
+          console.warn(`Gemini overloaded, retry ${attempt + 1}`);
+        }
 
-        if (!res.ok) {
-          const errMsg = data?.error?.message ?? `Gemini error ${res.status}`;
+        if (!res!.ok) {
+          const errMsg = data?.error?.message ?? `Gemini error ${res!.status}`;
           console.error('Chat Gemini error:', errMsg);
-          const isQuota = res.status === 429 || /quota|rate.?limit|exceeded/i.test(errMsg);
-          throw new Error(isQuota
-            ? 'Rate limit reached — please wait about a minute and try again.'
-            : errMsg
+          const isQuota = res!.status === 429 || /quota|rate.?limit|exceeded/i.test(errMsg);
+          const isOverload = res!.status === 503 || /high demand|overload/i.test(errMsg);
+          throw new Error(
+            isQuota ? 'Rate limit reached — please wait a minute and try again.' :
+            isOverload ? 'Khoa is busy right now — try again in a few seconds.' :
+            errMsg
           );
         }
 
