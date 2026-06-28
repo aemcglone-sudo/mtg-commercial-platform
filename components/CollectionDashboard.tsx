@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { CardNameLink } from '@/components/CardNameLink';
 
 interface CollectionData {
   collection: {
@@ -103,7 +104,7 @@ export default function CollectionDashboard() {
             {data.topCards.map((card, i) => (
               <div key={i} className="flex items-center justify-between py-2 border-b border-zinc-800 last:border-0">
                 <div className="flex-1">
-                  <p className="font-medium text-zinc-100">{card.name}</p>
+                  <p className="font-medium text-zinc-100"><CardNameLink name={card.name} /></p>
                   <p className="text-xs text-zinc-500">
                     {card.quantity}x @ ${card.price.toFixed(2)}
                   </p>

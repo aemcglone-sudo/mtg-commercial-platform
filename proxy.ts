@@ -19,6 +19,10 @@ const PUBLIC_PREFIXES = [
   '/api/collection/dashboard',
   '/api/expensive-cards',
   '/api/trending-cards',
+  '/api/deck-wizard/themes/recommend',
+  '/api/deck-wizard/commanders/suggest',
+  '/api/deck-wizard/commanders/explain',
+  '/api/deck-wizard/name',
 ];
 
 export function proxy(request: NextRequest) {

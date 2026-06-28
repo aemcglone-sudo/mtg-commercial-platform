@@ -1,8 +1,11 @@
 'use client';
 
 import Link from 'next/link';
+import { CardNameLink } from '@/components/CardNameLink';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import type { PriceAlert } from '@/app/api/shops/price-alerts/route';
+import ShopInventoryInsightsTab from '@/components/ShopInventoryInsightsTab';
 
 interface ShopStats {
   inventoryCount: number;
@@ -15,129 +18,116 @@ export default function ShopDashboard() {
   const router = useRouter();
   const [stats, setStats] = useState<ShopStats | null>(null);
   const [shopName, setShopName] = useState<string>('Your Shop');
-  const [isNew, setIsNew] = useState(false);
+  const [priceAlerts, setPriceAlerts] = useState<{ up: PriceAlert[]; down: PriceAlert[] } | null>(null);
+  const [staleCount, setStaleCount] = useState(0);
 
   useEffect(() => {
     fetch('/api/shops/me')
-      .then((r) => r.json())
-      .then((data) => {
+      .then(r => r.json())
+      .then(data => {
         if (!data?.shop) return;
         setShopName(data.shop.name);
         setStats(data.stats);
-        if (data.shop.isNew) {
-          router.replace('/shop/setup');
-        } else {
-          setIsNew(false);
-        }
+        if (data.shop.isNew) router.replace('/shop/setup');
+        fetch('/api/shops/refresh-prices', { method: 'POST' }).catch(() => {});
       })
+      .catch(() => {});
+    fetch('/api/shops/price-alerts')
+      .then(r => r.json())
+      .then(d => setPriceAlerts(d))
+      .catch(() => {});
+    fetch('/api/shops/pricing/stale-ids')
+      .then(r => r.json())
+      .then((d) => setStaleCount(d.ids?.length ?? 0))
       .catch(() => {});
   }, [router]);
 
-  const statCards = [
-    {
-      label: 'Cards in Stock',
-      value: stats?.inventoryCount.toLocaleString() ?? '—',
-      icon: '🃏',
-    },
-    {
-      label: 'Inventory Value',
-      value: stats ? `$${(stats.totalValueCents / 100).toFixed(2)}` : '—',
-      icon: '💰',
-    },
-    {
-      label: 'Pending Orders',
-      value: stats?.pendingOrders.toLocaleString() ?? '—',
-      icon: '📦',
-    },
-    {
-      label: 'Revenue This Month',
-      value: stats ? `$${(stats.revenueThisMonthCents / 100).toFixed(2)}` : '—',
-      icon: '📈',
-    },
-  ];
-
   return (
-    <div className="min-h-screen text-zinc-100">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-8">
+    <div className="min-h-screen">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+
         <div>
-          <h1 className="text-2xl font-bold">Dashboard</h1>
-          <p className="text-zinc-500 text-sm mt-1">Welcome back</p>
+          <h1 className="text-xl font-bold">{shopName}</h1>
+          <p className="text-zinc-500 text-sm mt-0.5">Dashboard</p>
         </div>
 
-        {/* Stats grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          {statCards.map((s) => (
-            <div
-              key={s.label}
-              className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-2"
-            >
-              <span className="text-2xl">{s.icon}</span>
-              <div className="text-2xl font-bold">{s.value}</div>
+        {staleCount > 0 && (
+          <Link href="/shop/collection?tab=inventory"
+            className="flex items-center gap-3 bg-yellow-900/20 border border-yellow-700/40 hover:border-yellow-500/60 rounded-xl p-4 transition-colors group">
+            <span className="text-xl">⚠</span>
+            <div>
+              <div className="font-semibold text-yellow-300 group-hover:text-yellow-200 transition-colors text-sm">
+                {staleCount} stale price{staleCount !== 1 ? 's' : ''} — market has moved &gt;10% since last update
+              </div>
+              <div className="text-xs text-yellow-600">Click to review in Inventory →</div>
+            </div>
+          </Link>
+        )}
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            { label: 'Cards in Stock', value: stats?.inventoryCount.toLocaleString() ?? '—', icon: '🃏' },
+            { label: 'Inventory Value', value: stats ? `$${(stats.totalValueCents / 100).toFixed(2)}` : '—', icon: '💰' },
+            { label: 'Pending Orders', value: stats?.pendingOrders.toLocaleString() ?? '—', icon: '📦' },
+            { label: 'Revenue This Month', value: stats ? `$${(stats.revenueThisMonthCents / 100).toFixed(2)}` : '—', icon: '📈' },
+          ].map(s => (
+            <div key={s.label} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-1">
+              <span className="text-xl">{s.icon}</span>
+              <div className="text-xl font-bold tabular-nums">{s.value}</div>
               <div className="text-xs text-zinc-500">{s.label}</div>
             </div>
           ))}
         </div>
 
-        {/* Quick actions */}
-        <div className="space-y-3">
-          <h2 className="text-sm font-semibold text-zinc-400 uppercase tracking-wider">
-            Quick Actions
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <Link
-              href="/shop/inventory?action=scan"
-              className="flex items-center gap-3 bg-zinc-900 border border-zinc-800 hover:border-amber-500/40 rounded-xl p-4 transition-colors group"
-            >
-              <span className="text-2xl">📷</span>
-              <div>
-                <div className="font-semibold group-hover:text-amber-400 transition-colors">
-                  Scan Cards
+        {priceAlerts && (priceAlerts.up.length > 0 || priceAlerts.down.length > 0) && (
+          <div>
+            <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3">Price Movements (48h)</h2>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {[...priceAlerts.up.slice(0, 5), ...priceAlerts.down.slice(0, 5)].map(alert => (
+                <div key={alert.scryfallId}
+                  className="shrink-0 bg-zinc-900 border border-zinc-800 rounded-xl p-3 min-w-44 space-y-1">
+                  <div className="text-xs text-zinc-400 truncate font-medium"><CardNameLink name={alert.cardName} /></div>
+                  <div className={`text-sm font-bold ${alert.delta > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    {alert.delta > 0 ? '+' : ''}{alert.delta.toFixed(0)}%
+                  </div>
+                  <div className="text-xs text-zinc-600">
+                    ${(alert.prevCents / 100).toFixed(2)} → ${(alert.currentCents / 100).toFixed(2)}
+                  </div>
                 </div>
-                <div className="text-xs text-zinc-500">Add inventory via camera</div>
-              </div>
-            </Link>
-            <Link
-              href="/shop/inventory"
-              className="flex items-center gap-3 bg-zinc-900 border border-zinc-800 hover:border-amber-500/40 rounded-xl p-4 transition-colors group"
-            >
-              <span className="text-2xl">📋</span>
-              <div>
-                <div className="font-semibold group-hover:text-amber-400 transition-colors">
-                  Manage Inventory
-                </div>
-                <div className="text-xs text-zinc-500">View, edit, and price cards</div>
-              </div>
-            </Link>
-            <Link
-              href="/shop/orders"
-              className="flex items-center gap-3 bg-zinc-900 border border-zinc-800 hover:border-amber-500/40 rounded-xl p-4 transition-colors group"
-            >
-              <span className="text-2xl">📦</span>
-              <div>
-                <div className="font-semibold group-hover:text-amber-400 transition-colors">
-                  View Orders
-                </div>
-                <div className="text-xs text-zinc-500">Fulfill pending orders</div>
-              </div>
-            </Link>
-          </div>
-        </div>
-
-        {/* Setup prompt */}
-        {isNew && (
-          <div className="bg-amber-400/10 border border-amber-400/30 rounded-xl p-6 text-center space-y-3">
-            <div className="font-semibold text-amber-400">Finish setting up your storefront</div>
-            <p className="text-sm text-zinc-400 max-w-sm mx-auto">
-              Add your shop name, location, and contact details so collectors can find you.
-            </p>
-            <Link
-              href="/shop/setup"
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-black bg-amber-400 hover:bg-amber-300 transition-colors text-sm"
-            >
-              Complete setup
-            </Link>
+              ))}
+            </div>
           </div>
         )}
+
+        <div className="grid grid-cols-3 gap-3">
+          <Link href="/shop/inventory?action=scan"
+            className="flex items-center gap-3 bg-zinc-900 border border-zinc-800 hover:border-amber-500/40 rounded-xl p-4 transition-colors group">
+            <span className="text-xl">📷</span>
+            <div>
+              <div className="text-sm font-semibold group-hover:text-amber-400 transition-colors">Scan Cards</div>
+              <div className="text-xs text-zinc-500">Add inventory via camera</div>
+            </div>
+          </Link>
+          <Link href="/shop/collection?tab=inventory"
+            className="flex items-center gap-3 bg-zinc-900 border border-zinc-800 hover:border-amber-500/40 rounded-xl p-4 transition-colors group">
+            <span className="text-xl">📋</span>
+            <div>
+              <div className="text-sm font-semibold group-hover:text-amber-400 transition-colors">Manage Inventory</div>
+              <div className="text-xs text-zinc-500">View, edit, and price cards</div>
+            </div>
+          </Link>
+          <Link href="/shop/orders"
+            className="flex items-center gap-3 bg-zinc-900 border border-zinc-800 hover:border-amber-500/40 rounded-xl p-4 transition-colors group">
+            <span className="text-xl">📦</span>
+            <div>
+              <div className="text-sm font-semibold group-hover:text-amber-400 transition-colors">View Orders</div>
+              <div className="text-xs text-zinc-500">Fulfill pending orders</div>
+            </div>
+          </Link>
+        </div>
+
+        <ShopInventoryInsightsTab />
+
       </div>
     </div>
   );

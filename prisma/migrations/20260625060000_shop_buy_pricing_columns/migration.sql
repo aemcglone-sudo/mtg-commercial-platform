@@ -1,0 +1,2 @@
+ALTER TABLE shops ADD COLUMN IF NOT EXISTS buy_matrix JSONB DEFAULT '{"NM":60,"LP":51,"MP":42,"HP":30,"DMG":15}';
+ALTER TABLE shops ADD COLUMN IF NOT EXISTS margin_targets JSONB DEFAULT '{"under_1":60,"1_to_10":45,"10_to_50":40,"over_50":35}';

@@ -25,7 +25,10 @@ export async function PATCH(
   const args: (string | number | boolean | null)[] = [];
 
   if (body.quantity !== undefined) { sets.push('"quantity" = ?'); args.push(body.quantity); }
-  if (body.priceCents !== undefined) { sets.push('"priceCents" = ?'); args.push(body.priceCents); }
+  if (body.priceCents !== undefined) {
+    sets.push('"priceCents" = ?'); args.push(body.priceCents);
+    sets.push('price_updated_at = ?'); args.push(new Date().toISOString());
+  }
   if (body.condition !== undefined) { sets.push('condition = ?'); args.push(body.condition); }
   if (body.foil !== undefined) { sets.push('foil = ?'); args.push(body.foil); }
   if (body.notes !== undefined) { sets.push('notes = ?'); args.push(body.notes); }

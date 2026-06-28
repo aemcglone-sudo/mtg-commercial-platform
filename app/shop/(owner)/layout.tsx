@@ -4,8 +4,13 @@ import NavSidebar from '@/components/NavSidebar';
 
 const NAV = [
   { href: '/shop/dashboard',                  label: 'Dashboard', exact: true },
+  { href: '/shop/orders',                     label: 'Orders' },
+  { href: '/shop/campaigns',                  label: 'Campaigns' },
+  { label: 'Pricing', children: [
+      { href: '/shop/pricing?tab=sale',     label: 'Sale Pricing' },
+      { href: '/shop/pricing?tab=purchase', label: 'Purchase Pricing' },
+  ]},
   { href: '/shop/collection?tab=inventory',   label: 'Inventory' },
-  { href: '/shop/collection?tab=insights',    label: 'Insights' },
   { href: '/shop/collection?tab=chat',        label: 'Ask Khoa', dividerAfter: true },
   { href: '/shop/settings',                   label: 'Settings' },
 ];

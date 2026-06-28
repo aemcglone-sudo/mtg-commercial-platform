@@ -6,10 +6,11 @@ import { usePathname, useSearchParams } from 'next/navigation';
 import LogoutButton from '@/components/LogoutButton';
 
 export interface NavItem {
-  href: string;
+  href?: string;
   label: string;
   exact?: boolean;
   dividerAfter?: boolean;
+  children?: { href: string; label: string; exact?: boolean }[];
 }
 
 interface NavSidebarProps {
@@ -22,16 +23,39 @@ function NavContent({ items, userName, brandLabel, onNavigate }: NavSidebarProps
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  function isActive(item: NavItem) {
-    const [path, query] = item.href.split('?');
+  function isActive(href: string, exact?: boolean) {
+    const [path, query] = href.split('?');
     if (pathname !== path) return false;
-    if (!query) {
-      // No query in href — active only if page also has no tab param (or exact match)
-      return item.exact ? !searchParams.get('tab') : true;
-    }
+    if (!query) return exact ? !searchParams.get('tab') : true;
     const param = new URLSearchParams(query);
     const tab = param.get('tab');
     return tab ? searchParams.get('tab') === tab : true;
+  }
+
+  function groupActive(item: NavItem) {
+    if (item.href) return isActive(item.href, item.exact);
+    return item.children?.some(c => isActive(c.href, c.exact)) ?? false;
+  }
+
+  // Track which groups are open — start open if a child is active
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
+    const init: Record<string, boolean> = {};
+    for (const item of items) {
+      if (item.children) {
+        init[item.label] = item.children.some(c => {
+          const [path, query] = c.href.split('?');
+          if (typeof window === 'undefined') return false;
+          if (pathname !== path) return false;
+          if (!query) return true;
+          return true;
+        });
+      }
+    }
+    return init;
+  });
+
+  function toggleGroup(label: string) {
+    setOpenGroups(prev => ({ ...prev, [label]: !prev[label] }));
   }
 
   return (
@@ -41,24 +65,70 @@ function NavContent({ items, userName, brandLabel, onNavigate }: NavSidebarProps
       </div>
 
       <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-        {items.map((item, i) => (
-          <div key={item.href}>
-            <Link
-              href={item.href}
-              onClick={onNavigate}
-              className={`block px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                isActive(item)
-                  ? 'bg-zinc-800 text-zinc-100'
-                  : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900'
-              }`}
-            >
-              {item.label}
-            </Link>
-            {item.dividerAfter && i < items.length - 1 && (
-              <div className="my-2 border-t border-zinc-800" />
-            )}
-          </div>
-        ))}
+        {items.map((item, i) => {
+          const active = groupActive(item);
+          const isGroup = !!item.children;
+          const expanded = openGroups[item.label];
+
+          return (
+            <div key={item.label}>
+              {isGroup ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => toggleGroup(item.label)}
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                      active
+                        ? 'bg-zinc-800 text-zinc-100'
+                        : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900'
+                    }`}
+                  >
+                    <span>{item.label}</span>
+                    <svg
+                      className={`w-3.5 h-3.5 transition-transform duration-150 ${expanded ? 'rotate-180' : ''}`}
+                      fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  {expanded && (
+                    <div className="mt-0.5 ml-3 pl-3 border-l border-zinc-800 space-y-0.5">
+                      {item.children!.map(child => (
+                        <Link
+                          key={child.href}
+                          href={child.href}
+                          onClick={onNavigate}
+                          className={`block px-3 py-2 rounded-lg text-sm transition-colors ${
+                            isActive(child.href, child.exact)
+                              ? 'text-zinc-100 bg-zinc-800'
+                              : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900'
+                          }`}
+                        >
+                          {child.label}
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <Link
+                  href={item.href!}
+                  onClick={onNavigate}
+                  className={`block px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                    active
+                      ? 'bg-zinc-800 text-zinc-100'
+                      : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900'
+                  }`}
+                >
+                  {item.label}
+                </Link>
+              )}
+              {item.dividerAfter && i < items.length - 1 && (
+                <div className="my-2 border-t border-zinc-800" />
+              )}
+            </div>
+          );
+        })}
       </nav>
 
       <div className="px-4 py-4 border-t border-zinc-800 space-y-1">
@@ -74,14 +144,14 @@ export default function NavSidebar(props: NavSidebarProps) {
 
   return (
     <>
-      {/* Desktop sidebar — always visible */}
+      {/* Desktop sidebar */}
       <aside className="hidden md:flex md:flex-col w-52 shrink-0 border-r border-zinc-800 bg-zinc-950 h-screen sticky top-0">
         <Suspense>
           <NavContent {...props} />
         </Suspense>
       </aside>
 
-      {/* Mobile — hamburger button + overlay drawer */}
+      {/* Mobile hamburger + drawer */}
       <div className="md:hidden">
         <button
           type="button"
@@ -94,9 +164,7 @@ export default function NavSidebar(props: NavSidebarProps) {
           </svg>
         </button>
 
-        {open && (
-          <div className="fixed inset-0 z-40 bg-black/60" onClick={() => setOpen(false)} />
-        )}
+        {open && <div className="fixed inset-0 z-40 bg-black/60" onClick={() => setOpen(false)} />}
 
         <aside className={`fixed top-0 left-0 z-50 h-full w-52 bg-zinc-950 border-r border-zinc-800 transition-transform duration-200 ${open ? 'translate-x-0' : '-translate-x-full'}`}>
           <button

@@ -1,5 +1,8 @@
 import { NextRequest } from 'next/server';
 import { analyzeForChat, extractDeckFromContext, formatCardsForStream } from '@/lib/magic-agent/chat-integration';
+import { findOne } from '@/lib/db';
+import { getRole, getAuthenticatedUserId } from '@/lib/auth';
+import { isDemoMode, chatWithClaude } from '@/lib/demo-llm';
 
 // Cache Scryfall set list for 6 hours
 let setCache: { data: string; ts: number } | null = null;
@@ -53,28 +56,23 @@ Rules:
 
     const userContent = `Conversation so far:\n${last.map((m) => `${m.role}: ${m.content.slice(0, 200)}`).join('\n')}\n\nReturn 3 follow-up button options as a JSON array.`;
 
-    const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=' + process.env.GOOGLE_API_KEY, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        systemInstruction: {
-          parts: [{ text: systemPrompt }]
-        },
-        contents: [
-          {
-            role: 'user',
-            parts: [{ text: userContent }]
-          }
-        ],
-        generationConfig: {
-          maxOutputTokens: 256
-        }
-      }),
-    });
-    const data = await res.json() as any;
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '[]';
+    let text: string;
+    if (isDemoMode()) {
+      text = await chatWithClaude(userContent, { system: systemPrompt, maxTokens: 256 }) ?? '[]';
+    } else {
+      const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=' + process.env.GOOGLE_API_KEY, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: systemPrompt }] },
+          contents: [{ role: 'user', parts: [{ text: userContent }] }],
+          generationConfig: { maxOutputTokens: 256 },
+        }),
+      });
+      const data = await res.json() as { candidates: Array<{ content: { parts: Array<{ text: string }> } }> };
+      text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '[]';
+    }
+
     const match = text.match(/\[[\s\S]*\]/);
     if (!match) return [];
     const parsed = JSON.parse(match[0]);
@@ -112,12 +110,8 @@ async function enforceSwapPairing(
     .join('\n\n');
 
   try {
-    const cutRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${apiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        systemInstruction: {
-          parts: [{ text: `You are a Magic: The Gathering expert. You will be given a conversation and Khoa's latest response recommending cards for a Commander deck.
+    const cutPrompt = `CONVERSATION HISTORY:\n${conversationSummary}\n\nKHOA'S LATEST RESPONSE:\n${response}\n\nGenerate the swap pairs now:`;
+    const cutSystemPrompt = `You are a Magic: The Gathering expert. You will be given a conversation and Khoa's latest response recommending cards for a Commander deck.
 
 Your job: for every specific card Khoa recommended adding or suggested the user consider, name a specific card to cut from the deck and explain why.
 
@@ -128,17 +122,24 @@ Output ONLY the swap pairs in this exact format, one per line:
 ➕ ADD: [Exact Card Name] — [one sentence: why this replacement is better]
 
 If Khoa named 3 cards to add, output 3 swap pairs.
-If the response contained no specific card recommendations, output: NONE` }]
-        },
-        contents: [{
-          role: 'user',
-          parts: [{ text: `CONVERSATION HISTORY:\n${conversationSummary}\n\nKHOA'S LATEST RESPONSE:\n${response}\n\nGenerate the swap pairs now:` }]
-        }],
-        generationConfig: { maxOutputTokens: 600 }
-      }),
-    });
-    const cutData = await cutRes.json() as any;
-    const cuts = cutData.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? '';
+If the response contained no specific card recommendations, output: NONE`;
+
+    let cuts = '';
+    if (isDemoMode()) {
+      cuts = await chatWithClaude(cutPrompt, { system: cutSystemPrompt, maxTokens: 600 }) ?? '';
+    } else {
+      const cutRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: cutSystemPrompt }] },
+          contents: [{ role: 'user', parts: [{ text: cutPrompt }] }],
+          generationConfig: { maxOutputTokens: 600 },
+        }),
+      });
+      const cutData = await cutRes.json() as { candidates: Array<{ content: { parts: Array<{ text: string }> } }> };
+      cuts = cutData.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? '';
+    }
 
     if (cuts && cuts !== 'NONE' && cuts.length > 10) {
       return `${response}\n\n---\n**🔄 Recommended Swaps**\n${cuts}`;
@@ -151,10 +152,32 @@ If the response contained no specific card recommendations, output: NONE` }]
 }
 
 export async function POST(req: NextRequest) {
+  const role = getRole(req);
+  let shopBuyContext = '';
+  if (role === 'shop_owner') {
+    const userId = getAuthenticatedUserId(req);
+    if (userId) {
+      const shop = await findOne<{ buy_matrix: unknown; margin_targets: unknown; name: string }>(
+        'SELECT buy_matrix, margin_targets, name FROM shops WHERE "userId" = ?',
+        [userId]
+      ).catch(() => null);
+      if (shop) {
+        shopBuyContext = `\n\n═══════════════════════════════════════════\n## SHOP OWNER MODE — ${shop.name}\n\nYou are also assisting a shop owner. You have access to their buy pricing configuration:\n- Buy matrix (% of TCG market paid per condition): ${JSON.stringify(shop.buy_matrix ?? { NM: 60, LP: 51, MP: 42, HP: 30, DMG: 15 })}\n- Margin targets by card value: ${JSON.stringify(shop.margin_targets ?? { under_1: 60, '1_to_10': 45, '10_to_50': 40, over_50: 35 })}\n\nWhen the shop owner asks about buying cards, you can:\n- Calculate fair buy prices: tcgPrice × (matrix[condition] / 100)\n- Flag risky buys (cards trending down, upcoming rotation, power level bans)\n- Evaluate whether a collection offer is fair\n- Suggest counter-offers when a seller's ask is above market\n\nNever reveal the exact buy matrix percentages to non-owners. Only use this info when the user is the shop owner asking about purchasing.\n═══════════════════════════════════════════`;
+      }
+    }
+  }
+
   const { messages, collectionSize, detectedFormat, allCards } = await req.json();
 
   const cards = (allCards as CardEntry[] | undefined) ?? [];
-  const setsContext = await getCurrentSetsContext();
+  const [setsContext, rulesDoc] = await Promise.all([
+    getCurrentSetsContext(),
+    fetch(`${process.env.NEXTAUTH_URL ?? 'http://localhost:3000'}/api/deck-wizard/rules`, {
+      headers: { cookie: req.headers.get('cookie') ?? '' },
+    }).then(r => r.ok ? r.json() as Promise<{ value: string }> : { value: '' })
+      .then(d => d.value ?? '')
+      .catch(() => ''),
+  ]);
 
   // Create owned cards set for quick lookups
   const ownedCardsSet = new Set(cards.map(c => c.name.toLowerCase()));
@@ -292,6 +315,11 @@ ${setsContext || '(set data unavailable)'}
 When answering questions about recent or upcoming sets, commanders, or products, use the above list as your authoritative source. If a set appears in "RECENTLY RELEASED SETS", it is real and has been released — do not deny its existence or claim uncertainty about it.
 
 ═══════════════════════════════════════════
+## DECK BUILDING RULES & FORMAT GUIDELINES
+
+${rulesDoc ? rulesDoc.slice(0, 4000) : '(rules doc unavailable — use standard MTG deckbuilding conventions)'}
+
+═══════════════════════════════════════════
 ## COLLECTION CONTEXT
 
 USER'S COLLECTION: ${collectionTypeInfo}
@@ -341,7 +369,7 @@ ${cardList || '(no cards loaded)'}
 - End with: "You can save this as a wishlist using the 📋 Save as List button below!"
 
 **Prose:** Keep to 1-2 sentences before switching to lists. Say what needs to be said, no more.
-═══════════════════════════════════════════`;
+═══════════════════════════════════════════${shopBuyContext}`;
 
   const encoder = new TextEncoder();
   const incomingMessages: ChatMessage[] = (messages ?? []).slice(-20);
@@ -349,55 +377,60 @@ ${cardList || '(no cards loaded)'}
   const stream = new ReadableStream({
     async start(controller) {
       try {
-        if (!process.env.GOOGLE_API_KEY) {
-          throw new Error('GOOGLE_API_KEY environment variable is missing');
-        }
+        let fullResponse: string;
 
-        const contents = incomingMessages.map(msg => ({
-          role: msg.role === 'user' ? 'user' : 'model',
-          parts: [{ text: msg.content }]
-        }));
+        if (isDemoMode()) {
+          const userTurn = incomingMessages.map(m => `${m.role === 'user' ? 'User' : 'Khoa'}: ${m.content}`).join('\n\n');
+          fullResponse = await chatWithClaude(userTurn, { system, maxTokens: 4096 }) ?? '';
+        } else {
+          if (!process.env.GOOGLE_API_KEY) {
+            throw new Error('GOOGLE_API_KEY environment variable is missing');
+          }
 
-        const geminiBody = JSON.stringify({
-          systemInstruction: { parts: [{ text: system }] },
-          contents,
-          generationConfig: { maxOutputTokens: 4096 },
-        });
+          const contents = incomingMessages.map(msg => ({
+            role: msg.role === 'user' ? 'user' : 'model',
+            parts: [{ text: msg.content }]
+          }));
 
-        // eslint-disable-next-line prefer-const
-        let res: Response = null!;
-        let data: any = null;
-        for (let attempt = 0; attempt < 3; attempt++) {
-          if (attempt > 0) await new Promise(r => setTimeout(r, attempt * 2000));
-          res = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + process.env.GOOGLE_API_KEY, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: geminiBody,
+          const geminiBody = JSON.stringify({
+            systemInstruction: { parts: [{ text: system }] },
+            contents,
+            generationConfig: { maxOutputTokens: 4096 },
           });
-          data = await res.json() as any;
-          const isOverloaded = res.status === 503 || /high demand|overload|unavailable/i.test(data?.error?.message ?? '');
-          if (!isOverloaded) break;
-          console.warn(`Gemini overloaded, retry ${attempt + 1}`);
-        }
 
-        if (!res!.ok) {
-          const errMsg = data?.error?.message ?? `Gemini error ${res!.status}`;
-          console.error('Chat Gemini error:', errMsg);
-          const isQuota = res!.status === 429 || /quota|rate.?limit|exceeded/i.test(errMsg);
-          const isOverload = res!.status === 503 || /high demand|overload/i.test(errMsg);
-          throw new Error(
-            isQuota ? 'Rate limit reached — please wait a minute and try again.' :
-            isOverload ? 'Khoa is busy right now — try again in a few seconds.' :
-            errMsg
-          );
-        }
+          let res: Response = null!;
+          let data: { candidates?: Array<{ content: { parts: Array<{ text: string }> } }>; error?: { message: string } } = {};
+          for (let attempt = 0; attempt < 3; attempt++) {
+            if (attempt > 0) await new Promise(r => setTimeout(r, attempt * 2000));
+            res = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + process.env.GOOGLE_API_KEY, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: geminiBody,
+            });
+            data = await res.json() as typeof data;
+            const isOverloaded = res.status === 503 || /high demand|overload|unavailable/i.test(data?.error?.message ?? '');
+            if (!isOverloaded) break;
+            console.warn(`Gemini overloaded, retry ${attempt + 1}`);
+          }
 
-        let fullResponse = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-        console.log(`Chat response: ${res.status}, length: ${fullResponse.length}`);
+          if (!res!.ok) {
+            const errMsg = data?.error?.message ?? `Gemini error ${res!.status}`;
+            console.error('Chat Gemini error:', errMsg);
+            const isQuota = res!.status === 429 || /quota|rate.?limit|exceeded/i.test(errMsg);
+            const isOverload = res!.status === 503 || /high demand|overload/i.test(errMsg);
+            throw new Error(
+              isQuota ? 'Rate limit reached — please wait a minute and try again.' :
+              isOverload ? 'Khoa is busy right now — try again in a few seconds.' :
+              errMsg
+            );
+          }
+
+          fullResponse = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+        }
+        console.log(`Chat response length: ${fullResponse.length}`);
 
         if (!fullResponse) {
-          console.error('Empty Gemini response:', JSON.stringify(data).slice(0, 500));
-          throw new Error('Empty response from Gemini');
+          throw new Error('Empty response from AI');
         }
 
         controller.enqueue(

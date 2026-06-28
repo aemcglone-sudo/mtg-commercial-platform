@@ -52,12 +52,13 @@ interface Props {
   deck: Omit<MatchedDeck, 'cards'>;
   rank?: number;
   onSave?: () => void;
+  onBuildWithWizard?: () => void;
   collectionType?: 'paper' | 'arena';
   collection?: Array<{ name: string; collectionType?: 'paper' | 'arena' }>;
   onCardClick?: (name: string) => void;
 }
 
-export default function DeckCard({ deck, rank, onSave, collectionType = 'paper', collection = [], onCardClick }: Props) {
+export default function DeckCard({ deck, rank, onSave, onBuildWithWizard, collectionType = 'paper', collection = [], onCardClick }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [tab, setTab] = useState<'all' | 'have' | 'need'>('all');
 
@@ -119,6 +120,16 @@ export default function DeckCard({ deck, rank, onSave, collectionType = 'paper',
             <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${formatBadge}`}>
               {deck.format}
             </span>
+            {onBuildWithWizard && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onBuildWithWizard(); }}
+                className="px-3 py-1 rounded-lg text-xs font-semibold text-zinc-100 bg-zinc-700 hover:bg-zinc-600 transition-colors shrink-0"
+                title="Build this deck with the Deck Wizard"
+              >
+                Build This Deck
+              </button>
+            )}
             {onSave && (
               <button
                 type="button"

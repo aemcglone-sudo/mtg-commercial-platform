@@ -6,6 +6,8 @@ const NAV = [
   { href: '/admin', label: 'Dashboard', exact: true },
   { href: '/admin/users', label: 'Users' },
   { href: '/admin/shops', label: 'Shops' },
+  { href: '/admin/mtg-rules', label: 'MTG Rules' },
+  { href: '/admin/product', label: 'Product' },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {

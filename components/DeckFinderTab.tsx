@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import DeckCard from './DeckCard';
 import FormatTabs from './FormatTabs';
 import CardDetailModal from './CardDetailModal';
@@ -19,6 +20,7 @@ interface Props {
 }
 
 export default function DeckFinderTab({ decks, analyzing, error, onAnalyze, onDeckSelected, collection = [] }: Props) {
+  const router = useRouter();
   const [formatFilter, setFormatFilter] = useState<FormatFilter>('All');
   const [selectedDeck, setSelectedDeck] = useState<DeckWithoutCards | null>(null);
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
@@ -156,6 +158,9 @@ export default function DeckFinderTab({ decks, analyzing, error, onAnalyze, onDe
                   setSelectedDeck(deck);
                   setDeckName(deck.name);
                   setShowAddForm(true);
+                }}
+                onBuildWithWizard={() => {
+                  router.push(`/decks/wizard?prefill=true&format=${encodeURIComponent(deck.format.toLowerCase())}`);
                 }}
               />
             ))}

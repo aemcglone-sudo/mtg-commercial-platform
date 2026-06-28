@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { CardNameLink } from '@/components/CardNameLink';
 import { initializeCommanderGame, applyAction, endPhase, mulligan, keepHand } from '@/lib/magic-game/commander-engine';
 import { getCardImageUrl } from '@/lib/magic-game/scryfall-integration';
 import type { CommanderGameState, ScryfallCard } from '@/lib/magic-game/commander-types';

@@ -1,0 +1,3 @@
+ALTER TABLE shops ADD COLUMN IF NOT EXISTS condition_matrix JSONB DEFAULT '{"NM":100,"LP":85,"MP":70,"HP":50,"DMG":25}';
+ALTER TABLE shops ADD COLUMN IF NOT EXISTS floor_prices JSONB DEFAULT '{"global":10,"C":10,"U":25,"R":50,"M":100}';
+ALTER TABLE shop_inventory ADD COLUMN IF NOT EXISTS price_updated_at TIMESTAMPTZ DEFAULT NOW();

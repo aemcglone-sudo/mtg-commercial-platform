@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { CardNameLink } from '@/components/CardNameLink';
 import type { ScryfallCard } from '@/lib/magic-game/commander-types';
 
 interface DeckReviewProps {
@@ -150,7 +151,7 @@ export default function DeckReview({ commander, deck, onStartGame, onChangeComma
                   <div className="space-y-1 ml-2">
                     {cards.map((card, idx) => (
                       <div key={`${type}-${card.id}-${idx}`} className="text-xs text-gray-200 flex justify-between">
-                        <span>{card.name}</span>
+                        <span><CardNameLink name={card.name} imageUrl={card.image_uris?.normal} /></span>
                         <span className="text-gray-500">{card.cmc ? `${card.cmc}c` : '0c'}</span>
                       </div>
                     ))}

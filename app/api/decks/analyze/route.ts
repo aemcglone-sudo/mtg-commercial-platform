@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthenticatedUserId } from '@/lib/auth';
 import { findOne, findMany } from '@/lib/db';
+import { isDemoMode, chatWithClaude } from '@/lib/demo-llm';
 
 interface DeckCard {
   name: string;
@@ -78,10 +79,20 @@ ${deckCards.filter(c => collectionMap.has(c.name)).map(c => `- ${c.name} (have $
       return NextResponse.json({ error: 'Google API key not configured' }, { status: 500 });
     }
 
+    const rulesDoc = await fetch(
+      `${process.env.NEXTAUTH_URL ?? 'http://localhost:3000'}/api/deck-wizard/rules`,
+      { headers: { cookie: req.headers.get('cookie') ?? '' } }
+    ).then(r => r.ok ? r.json() as Promise<{ value: string }> : { value: '' })
+      .then(d => d.value ?? '')
+      .catch(() => '');
+
     const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
     const geminiBody = JSON.stringify({
       systemInstruction: {
-        parts: [{ text: 'You are a Magic: The Gathering expert deck analyst. Every recommendation must include both a card to ADD and a specific card to CUT from the deck. Commander is exactly 100 cards — adding a card always means cutting a card. Return only valid JSON, no markdown or prose.' }]
+        parts: [{ text: `You are a Magic: The Gathering expert deck analyst. Every recommendation must include both a card to ADD and a specific card to CUT from the deck. Commander is exactly 100 cards — adding a card always means cutting a card. Return only valid JSON, no markdown or prose.
+
+DECK BUILDING REFERENCE:
+${rulesDoc ? rulesDoc.slice(0, 3000) : '(use standard MTG deckbuilding conventions)'}` }]
       },
       contents: [{
         role: 'user',
@@ -139,18 +150,22 @@ Provide 3-5 strengths, 3-5 weaknesses, and 5-7 swap recommendations. Every recom
         maxOutputTokens: 8192,
       },
     });
-    const geminiOpts = { method: 'POST' as const, headers: { 'Content-Type': 'application/json' }, body: geminiBody };
-
-    const response = await fetch(geminiUrl, geminiOpts);
-
-    if (!response.ok) {
-      const errBody = await response.text();
-      console.error('Gemini API error:', errBody);
-      return NextResponse.json({ error: `AI service error: ${response.status}` }, { status: 502 });
+    let analysisText: string;
+    if (isDemoMode()) {
+      const systemPrompt = JSON.parse(geminiBody).systemInstruction.parts[0].text as string;
+      const userPrompt = JSON.parse(geminiBody).contents[0].parts[0].text as string;
+      analysisText = await chatWithClaude(userPrompt, { system: systemPrompt, maxTokens: 4096 }) ?? '';
+    } else {
+      const geminiOpts = { method: 'POST' as const, headers: { 'Content-Type': 'application/json' }, body: geminiBody };
+      const response = await fetch(geminiUrl, geminiOpts);
+      if (!response.ok) {
+        const errBody = await response.text();
+        console.error('Gemini API error:', errBody);
+        return NextResponse.json({ error: `AI service error: ${response.status}` }, { status: 502 });
+      }
+      const data = await response.json();
+      analysisText = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
     }
-
-    const data = await response.json();
-    const analysisText = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
     if (!analysisText) {
       return NextResponse.json({ error: 'Empty response from AI' }, { status: 502 });
     }

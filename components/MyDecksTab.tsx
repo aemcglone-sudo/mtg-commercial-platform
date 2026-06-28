@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from 'react';
+import { useRouter } from 'next/navigation';
+import { CardNameLink } from '@/components/CardNameLink';
 import type { CollectionCardData } from './CollectionBrowser';
 import CardDetailModal from './CardDetailModal';
 import BuyOnTCGPlayer from './BuyOnTCGPlayer';
@@ -21,15 +23,25 @@ interface Props {
 }
 
 export default function MyDecksTab({ collection }: Props) {
+  const router = useRouter();
   const [decks, setDecks] = useState<Deck[]>([]);
   const [selectedDeck, setSelectedDeck] = useState<Deck | null>(null);
   const [showNew, setShowNew] = useState(false);
+  const [resumeSessionId, setResumeSessionId] = useState<string | null>(null);
+  const [resumeBannerDismissed, setResumeBannerDismissed] = useState(false);
   const [showNewList, setShowNewList] = useState(false);
   const [loading, setLoading] = useState(true);
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
 
   useEffect(() => {
     loadDecks();
+    // Check for an in-progress wizard session to show resume banner
+    fetch('/api/deck-wizard/session?status=in_progress')
+      .then(r => r.ok ? r.json() : null)
+      .then((data: { sessions: Array<{ id: string }> } | null) => {
+        if (data?.sessions?.[0]) setResumeSessionId(data.sessions[0].id);
+      })
+      .catch(() => {});
   }, []);
 
   async function loadDecks() {
@@ -85,7 +97,7 @@ export default function MyDecksTab({ collection }: Props) {
           </button>
           <button
             type="button"
-            onClick={() => setShowNew(true)}
+            onClick={() => router.push('/decks/wizard')}
             className="px-6 py-3 rounded-xl font-semibold text-black bg-amber-400 hover:bg-amber-300 transition-colors"
           >
             + New Deck
@@ -150,6 +162,23 @@ export default function MyDecksTab({ collection }: Props) {
 
   return (
     <div className="space-y-4">
+      {/* Resume wizard banner */}
+      {resumeSessionId && !resumeBannerDismissed && (
+        <div className="flex items-center justify-between rounded-xl border border-amber-700/50 bg-amber-400/5 px-4 py-3">
+          <div>
+            <span className="text-sm font-semibold text-amber-400">You have an unfinished deck in progress</span>
+            <span className="text-sm text-zinc-500 ml-2">— Pick up where you left off</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => router.push(`/decks/wizard/${resumeSessionId}`)}
+              className="rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-900 font-semibold px-3 py-1.5 text-sm transition-colors">
+              Resume Wizard →
+            </button>
+            <button type="button" onClick={() => setResumeBannerDismissed(true)}
+              className="text-zinc-600 hover:text-zinc-400 text-lg transition-colors">✕</button>
+          </div>
+        </div>
+      )}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-xl font-semibold text-zinc-100">My Decks & Lists ({decks.length})</h2>
         <div className="flex items-center gap-2">
@@ -162,7 +191,7 @@ export default function MyDecksTab({ collection }: Props) {
           </button>
           <button
             type="button"
-            onClick={() => setShowNew(true)}
+            onClick={() => router.push('/decks/wizard')}
             className="px-4 py-2 rounded-lg text-sm font-semibold text-black bg-amber-400 hover:bg-amber-300 transition-colors"
           >
             + New Deck
@@ -1289,7 +1318,12 @@ function DeckDetail({
   }, 0);
   const missingValue = missingCards.reduce((s, [name, qty]) => {
     if (isBasicLand(name)) return s;
-    const price = allCollectionCards.find(c => c.name.toLowerCase() === name.toLowerCase())?.priceUsd ?? 0;
+    const key = name.toLowerCase();
+    const price =
+      allCollectionCards.find(c => c.name.toLowerCase() === key)?.priceUsd ??
+      scryCardCache[key]?.priceUsd ??
+      scryCardCache[name.split('//')[0].trim().toLowerCase()]?.priceUsd ??
+      0;
     return s + price * qty;
   }, 0);
   const totalValue = ownedValue + missingValue;
@@ -1373,19 +1407,52 @@ function DeckDetail({
     return sorted;
   }, [deck.format, deckCards, ownedCards, allCollectionCards, collection, sortColumn, sortDirection]);
 
-  // Fetch Scryfall data for missing cards on mount
+  // Batch-fetch Scryfall data for all missing cards using /cards/collection
   useEffect(() => {
-    const fetchMissingCards = async () => {
-      for (const [name] of missingCards) {
-        if (!scryCardCache[name.toLowerCase()]) {
-          await fetchScryCard(name);
+    const unknown = missingCards.filter(([name]) => !scryCardCache[name.toLowerCase()]);
+    if (unknown.length === 0) return;
+
+    const chunks: string[][] = [];
+    for (let i = 0; i < unknown.length; i += 75) {
+      chunks.push(unknown.slice(i, i + 75).map(([name]) => name));
+    }
+
+    Promise.all(
+      chunks.map(chunk =>
+        fetch('https://api.scryfall.com/cards/collection', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ identifiers: chunk.map(name => ({ name })) }),
+        })
+          .then(r => r.ok ? r.json() : { data: [] })
+          .then((d: { data: Array<{ name: string; prices?: { usd?: string }; type_line?: string; cmc?: number; rarity?: string; colors?: string[]; set?: string; collector_number?: string }> }) => d.data ?? [])
+      )
+    ).then(results => {
+      const updates: Record<string, ReturnType<typeof getCardData>> = {};
+      for (const batch of results) {
+        for (const card of batch) {
+          const entry = {
+            name: card.name,
+            priceUsd: card.prices?.usd ? parseFloat(card.prices.usd) : null,
+            typeLine: card.type_line ?? null,
+            cmc: card.cmc ?? null,
+            rarity: card.rarity ?? null,
+            colors: card.colors ?? [],
+            set: card.set?.toUpperCase() ?? null,
+            collectorNumber: card.collector_number ?? null,
+          } as NonNullable<ReturnType<typeof getCardData>>;
+          updates[card.name.toLowerCase()] = entry;
+          // MDFCs return "Front // Back" — also index by front face so deck lookups by short name work
+          if (card.name.includes('//')) {
+            updates[card.name.split('//')[0].trim().toLowerCase()] = entry;
+          }
         }
       }
-    };
-    if (missingCards.length > 0) {
-      fetchMissingCards();
-    }
-  }, [missingCards]);
+      if (Object.keys(updates).length > 0) {
+        setScryCardCache(prev => ({ ...prev, ...updates }));
+      }
+    }).catch(() => {});
+  }, [missingCards.map(([n]) => n).join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleSort(column: typeof sortColumn) {
     if (sortColumn === column) {

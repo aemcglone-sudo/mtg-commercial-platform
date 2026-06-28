@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { matchDeckToCollection, type DeckSource, type MatchedDeck } from '@/lib/deck-matcher';
 import { getCards, cardPrice } from '@/lib/scryfall';
+import { nimChat, stripThinkTags } from '@/lib/nvidia-nim';
 
 export const maxDuration = 60;
 
@@ -12,21 +13,9 @@ interface CollectionCard {
 }
 
 async function generateDeckList(prompt: string): Promise<string> {
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${process.env.GOOGLE_API_KEY}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: { maxOutputTokens: 2000 },
-      }),
-    }
-  );
-
-  if (!res.ok) throw new Error(`Gemini error ${res.status}`);
-  const data = await res.json() as any;
-  return data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+  const raw = await nimChat(prompt, 0.7);
+  if (!raw) throw new Error('No response from NIM');
+  return stripThinkTags(raw);
 }
 
 export async function POST(req: NextRequest) {

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { CardNameLink } from '@/components/CardNameLink';
 import QuickAddCard from './QuickAddCard';
 import CardDetailModal, { type DeckSummary } from './CardDetailModal';
 import { getRulesHint } from '@/lib/rules-hints';
@@ -440,7 +441,7 @@ export default function CollectionBrowser({ cards, totalCards, detectedFormat, d
                 />
               ) : (
                 <div className="w-full aspect-[63/88] rounded-lg border border-zinc-700 bg-gradient-to-br from-zinc-800 to-zinc-900 flex items-center justify-center p-2 group-hover:border-amber-400 transition-colors">
-                  <span className="text-zinc-400 text-xs text-center leading-tight font-medium">{card.name}</span>
+                  <span className="text-zinc-400 text-xs text-center leading-tight font-medium"><CardNameLink name={card.name} imageUrl={card.imageUrl} /></span>
                 </div>
               )}
               {/* Quantity badge */}

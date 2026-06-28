@@ -343,7 +343,7 @@ function ShopSettingsContent() {
                       <div key={i} className={`flex items-center gap-3 px-4 py-3 text-sm ${!card.found ? 'opacity-40' : ''}`}>
                         <input
                           type="checkbox"
-                          aria-label={`Include ${card.cardName ?? card.name}`}
+                          aria-label={`Include ${card.cardName ?? card.name ?? ''}`}
                           checked={card.include && card.found}
                           disabled={!card.found}
                           onChange={e => updateReview(i, { include: e.target.checked })}

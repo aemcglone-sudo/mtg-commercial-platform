@@ -303,13 +303,21 @@ model Shop {
   customDomain    String?
   logoUrl         String?
   bannerUrl       String?
-  stripeAccountId String?
-  isActive        Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  stripeAccountId  String?
+  isActive         Boolean  @default(true)
+  conditionMatrix  Json?    @default("{\"NM\":100,\"LP\":85,\"MP\":70,\"HP\":50,\"DMG\":25}") @map("condition_matrix")
+  floorPrices      Json?    @default("{\"global\":10,\"C\":10,\"U\":25,\"R\":50,\"M\":100}") @map("floor_prices")
+  buyMatrix        Json?    @default("{\"NM\":60,\"LP\":51,\"MP\":42,\"HP\":30,\"DMG\":15}") @map("buy_matrix")
+  marginTargets    Json?    @default("{\"under_1\":60,\"1_to_10\":45,\"10_to_50\":40,\"over_50\":35}") @map("margin_targets")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  inventory ShopInventory[]
-  orders    ShopOrder[]
+  inventory     ShopInventory[]
+  orders        ShopOrder[]
+  pricingRules  ShopPricingRule[]
+  buyRules      ShopBuyRule[]
+  purchases     ShopPurchase[]
+  offers        ShopOffer[]
 
   @@map("shops")
 }
@@ -333,6 +341,7 @@ model ShopInventory {
   colors          String?  // JSON array e.g. ["W","U"]
   cmc             Float?
   rarity          String?
+  priceUpdatedAt  DateTime? @map("price_updated_at")
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -377,4 +386,95 @@ model ShopOrderItem {
   priceCents  Int
 
   @@map("shop_order_items")
+}
+
+model ShopPricingRule {
+  id                 String   @id @default(cuid())
+  shopId             String   @map("shop_id")
+  shop               Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  priority           Int
+  scopeConditions    String[] @default([]) @map("scope_conditions")
+  scopeRarities      String[] @default([]) @map("scope_rarities")
+  scopeSetCodes      String[] @default([]) @map("scope_set_codes")
+  scopePriceMinCents Int?     @map("scope_price_min_cents")
+  scopePriceMaxCents Int?     @map("scope_price_max_cents")
+  strategy           String
+  strategyValue      Decimal? @db.Decimal(8, 2) @map("strategy_value")
+  strategyDirection  String?  @map("strategy_direction")
+  floorPriceCents    Int?     @map("floor_price_cents")
+  isActive           Boolean  @default(true) @map("is_active")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  @@index([shopId, priority])
+  @@map("shop_pricing_rules")
+}
+
+model ShopBuyRule {
+  id                   String   @id @default(cuid())
+  shopId               String   @map("shop_id")
+  shop                 Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  priority             Int
+  scopeConditions      String[] @default([]) @map("scope_conditions")
+  scopeRarities        String[] @default([]) @map("scope_rarities")
+  scopeSetCodes        String[] @default([]) @map("scope_set_codes")
+  scopePriceMinCents   Int?     @map("scope_price_min_cents")
+  scopePriceMaxCents   Int?     @map("scope_price_max_cents")
+  scopeTrendThresholdPct Decimal? @db.Decimal(5, 2) @map("scope_trend_threshold_pct")
+  adjustmentType       String   @map("adjustment_type")
+  adjustmentValue      Decimal  @db.Decimal(8, 2) @map("adjustment_value")
+  isActive             Boolean  @default(true) @map("is_active")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  @@index([shopId, priority])
+  @@map("shop_buy_rules")
+}
+
+model ShopPurchase {
+  id             String         @id @default(cuid())
+  shopId         String         @map("shop_id")
+  shop           Shop           @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  sellerName     String?        @map("seller_name")
+  sellerContact  String?        @map("seller_contact")
+  totalPaidCents Int            @map("total_paid_cents")
+  notes          String?
+  status         String         @default("completed")
+  createdAt      DateTime       @default(now()) @map("created_at")
+
+  items          ShopPurchaseItem[]
+
+  @@index([shopId])
+  @@map("shop_purchases")
+}
+
+model ShopPurchaseItem {
+  id                  String       @id @default(cuid())
+  purchaseId          String       @map("purchase_id")
+  purchase            ShopPurchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  scryfallId          String       @map("scryfall_id")
+  cardName            String       @map("card_name")
+  setCode             String       @default("") @map("set_code")
+  condition           String
+  foil                Boolean      @default(false)
+  quantity            Int
+  buyPriceCents       Int          @map("buy_price_cents")
+  tcgMarketCents      Int          @map("tcg_market_cents")
+  targetSellPriceCents Int?        @map("target_sell_price_cents")
+
+  @@map("shop_purchase_items")
+}
+
+model ShopOffer {
+  id               String   @id @default(cuid())
+  shopId           String   @map("shop_id")
+  shop             Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  items            Json
+  totalCents       Int      @map("total_cents")
+  roundedTotalCents Int     @map("rounded_total_cents")
+  shopName         String   @map("shop_name")
+  expiresAt        DateTime @map("expires_at")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@map("shop_offers")
 }
