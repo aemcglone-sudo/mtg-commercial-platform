@@ -13,9 +13,9 @@ interface ShopRow {
 }
 
 interface PrefsRow {
-  notify_on_hold_request: boolean;
-  notify_via_sms: boolean;
-  sms_number: string;
+  sms_enabled: boolean;
+  sms_number: string | null;
+  email_enabled: boolean;
 }
 
 export async function GET(req: NextRequest) {
@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
     if (!shop) return NextResponse.json({ error: 'Shop not found' }, { status: 404 });
 
     const prefs = await findOne<PrefsRow>(
-      'SELECT notify_on_hold_request, notify_via_sms, sms_number FROM shop_notification_prefs WHERE shop_id = ?',
+      'SELECT sms_enabled, sms_number, email_enabled FROM shop_notification_prefs WHERE shop_id = ?',
       [shop.id]
     );
 
@@ -42,8 +42,7 @@ export async function GET(req: NextRequest) {
       address: shop.address ?? '',
       lat: shop.lat ? parseFloat(shop.lat) : null,
       lng: shop.lng ? parseFloat(shop.lng) : null,
-      notifyOnHoldRequest: prefs?.notify_on_hold_request ?? true,
-      notifyViaSms: prefs?.notify_via_sms ?? false,
+      notifyViaSms: prefs?.sms_enabled ?? false,
       smsNumber: prefs?.sms_number ?? '',
     });
   } catch (err) {
@@ -68,7 +67,6 @@ export async function PATCH(req: NextRequest) {
       address?: string;
       lat?: number | null;
       lng?: number | null;
-      notifyOnHoldRequest?: boolean;
       notifyViaSms?: boolean;
       smsNumber?: string;
     };
@@ -90,15 +88,14 @@ export async function PATCH(req: NextRequest) {
       await run(`UPDATE shops SET ${sets.join(', ')} WHERE id = ?`, vals);
     }
 
-    if (body.notifyViaSms !== undefined || body.notifyOnHoldRequest !== undefined || body.smsNumber !== undefined) {
+    if (body.notifyViaSms !== undefined || body.smsNumber !== undefined) {
       await run(
-        `INSERT INTO shop_notification_prefs (id, shop_id, notify_on_hold_request, notify_via_sms, sms_number)
-         VALUES (gen_random_uuid(), ?, ?, ?, ?)
+        `INSERT INTO shop_notification_prefs (id, shop_id, sms_enabled, sms_number)
+         VALUES (gen_random_uuid(), ?, ?, ?)
          ON CONFLICT (shop_id) DO UPDATE SET
-           notify_on_hold_request = EXCLUDED.notify_on_hold_request,
-           notify_via_sms = EXCLUDED.notify_via_sms,
+           sms_enabled = EXCLUDED.sms_enabled,
            sms_number = EXCLUDED.sms_number`,
-        [shop.id, body.notifyOnHoldRequest ?? true, body.notifyViaSms ?? false, body.smsNumber ?? '']
+        [shop.id, body.notifyViaSms ?? false, body.smsNumber ?? null]
       );
     }
 

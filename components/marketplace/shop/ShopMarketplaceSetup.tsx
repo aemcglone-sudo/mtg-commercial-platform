@@ -6,7 +6,6 @@ interface ShopPrefs {
   marketplaceActive: boolean;
   specialties: string[];
   holdInstructions: string;
-  notifyOnHoldRequest: boolean;
   notifyViaSms: boolean;
   smsNumber: string;
   address: string;
@@ -30,7 +29,7 @@ export default function ShopMarketplaceSetup() {
       .then((data: ShopPrefs | null) => {
         setPrefs(data ?? {
           marketplaceActive: false, specialties: [], holdInstructions: '',
-          notifyOnHoldRequest: true, notifyViaSms: false,
+          notifyViaSms: false,
           smsNumber: '', address: '', lat: null, lng: null,
         });
       })
