@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const shop = await findOne<ShopRow>(
-      'SELECT id, marketplace_active, specialties, hold_instructions, address, lat, lng FROM shops WHERE user_id = ?',
+      'SELECT id, marketplace_active, specialties, hold_instructions, address, lat, lng FROM shops WHERE "userId" = ?',
       [userId]
     );
     if (!shop) return NextResponse.json({ error: 'Shop not found' }, { status: 404 });
@@ -58,7 +58,7 @@ export async function PATCH(req: NextRequest) {
   if (getRole(req) !== 'shop_owner') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   try {
-    const shop = await findOne<{ id: string }>('SELECT id FROM shops WHERE user_id = ?', [userId]);
+    const shop = await findOne<{ id: string }>('SELECT id FROM shops WHERE "userId" = ?', [userId]);
     if (!shop) return NextResponse.json({ error: 'Shop not found' }, { status: 404 });
 
     const body = await req.json() as {
