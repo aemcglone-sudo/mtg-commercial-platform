@@ -15,10 +15,17 @@ interface ShopPrefs {
 
 const SPECIALTIES = ['Commander', 'Modern', 'Legacy', 'Vintage', 'Standard', 'Pioneer', 'Draft', 'Sealed', 'Buylist', 'Foils', 'Signed', 'Alters'];
 
+async function geocodeAddress(address: string): Promise<{ lat: number; lng: number } | null> {
+  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(address)}`;
+  const res = await fetch(url, { headers: { 'Accept-Language': 'en' } });
+  if (!res.ok) return null;
+  const data = await res.json() as Array<{ lat: string; lon: string }>;
+  if (!data.length) return null;
+  return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+}
+
 export default function ShopMarketplaceSetup() {
   const [prefs, setPrefs] = useState<ShopPrefs | null>(null);
-  const [zip, setZip] = useState('');
-  const [geocoding, setGeocoding] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
@@ -29,42 +36,50 @@ export default function ShopMarketplaceSetup() {
       .then((data: ShopPrefs | null) => {
         setPrefs(data ?? {
           marketplaceActive: false, specialties: [], holdInstructions: '',
-          notifyViaSms: false,
-          smsNumber: '', address: '', lat: null, lng: null,
+          notifyViaSms: false, smsNumber: '', address: '', lat: null, lng: null,
         });
       })
       .catch(() => {});
   }, []);
 
-  async function geocodeZip() {
-    if (!/^\d{5}$/.test(zip)) { setError('Enter a valid 5-digit zip'); return; }
-    setGeocoding(true);
-    setError('');
-    const res = await fetch(`/api/marketplace/geocode?zip=${zip}`);
-    if (!res.ok) { setError('Zip not found'); setGeocoding(false); return; }
-    const data = await res.json() as { lat: number; lng: number };
-    setPrefs(p => p ? { ...p, lat: data.lat, lng: data.lng } : p);
-    setGeocoding(false);
-  }
-
   async function save() {
     if (!prefs) return;
-    if (prefs.marketplaceActive && (!prefs.lat || !prefs.lng)) {
-      setError('Set your store location (zip code) before enabling the marketplace');
-      return;
-    }
     setSaving(true);
     setError('');
+
+    let { lat, lng } = prefs;
+
+    // Geocode if address changed or coords missing
+    if (prefs.address && (!lat || !lng)) {
+      const coords = await geocodeAddress(prefs.address);
+      if (!coords) {
+        setError('Could not find that address. Try including city and state.');
+        setSaving(false);
+        return;
+      }
+      lat = coords.lat;
+      lng = coords.lng;
+    }
+
+    if (prefs.marketplaceActive && (!lat || !lng)) {
+      setError('Add a store address so collectors can find you by distance.');
+      setSaving(false);
+      return;
+    }
+
     const res = await fetch('/api/shops/settings/marketplace', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(prefs),
+      body: JSON.stringify({ ...prefs, lat, lng }),
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       setError(data.error || 'Failed to save');
+    } else {
+      setPrefs(p => p ? { ...p, lat, lng } : p);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
     }
-    else { setSaved(true); setTimeout(() => setSaved(false), 3000); }
     setSaving(false);
   }
 
@@ -91,58 +106,21 @@ export default function ShopMarketplaceSetup() {
         </div>
       </div>
 
-      {/* Store location — required for search */}
-      <div className="space-y-2">
-        <label className="block text-sm text-zinc-400">Store location <span className="text-red-400">*</span> <span className="text-zinc-600 text-xs">(required for collectors to find you)</span></label>
-        {prefs.lat && prefs.lng ? (
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-emerald-400">📍 Location set ({prefs.lat.toFixed(3)}, {prefs.lng.toFixed(3)})</span>
-            <button type="button" onClick={() => setPrefs({ ...prefs, lat: null, lng: null })} className="text-xs text-zinc-600 hover:text-zinc-400 underline">Change</button>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            <div>
-              <input
-                type="text"
-                value={prefs.address}
-                onChange={e => setPrefs({ ...prefs, address: e.target.value })}
-                placeholder="123 Main St, Atlanta, GA 30301"
-                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
-              />
-              <p className="text-xs text-zinc-600 mt-1">Then set your zip code so collectors can find you by distance:</p>
-            </div>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={zip}
-                onChange={e => setZip(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && geocodeZip()}
-                placeholder="Store zip code"
-                maxLength={5}
-                className="w-32 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
-              />
-              <button
-                type="button"
-                onClick={geocodeZip}
-                disabled={geocoding}
-                className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-100 rounded-lg text-sm transition-colors disabled:opacity-50"
-              >
-                {geocoding ? 'Looking up…' : 'Set Location'}
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
       <div>
-        <label className="block text-sm text-zinc-400 mb-1">Store address <span className="text-zinc-600">(shown to collectors)</span></label>
+        <label className="block text-sm text-zinc-400 mb-1">
+          Store address <span className="text-red-400">*</span>
+          <span className="text-zinc-600 text-xs ml-2">(shown to collectors · used for distance search)</span>
+        </label>
         <input
           type="text"
           value={prefs.address}
-          onChange={e => setPrefs({ ...prefs, address: e.target.value })}
+          onChange={e => setPrefs({ ...prefs, address: e.target.value, lat: null, lng: null })}
           placeholder="123 Main St, Atlanta, GA 30301"
           className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
         />
+        {prefs.lat && prefs.lng && (
+          <p className="text-xs text-emerald-500 mt-1">📍 Location resolved ({prefs.lat.toFixed(4)}, {prefs.lng.toFixed(4)})</p>
+        )}
       </div>
 
       <div>
@@ -172,17 +150,15 @@ export default function ShopMarketplaceSetup() {
         />
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm text-zinc-400 mb-1">SMS for hold notifications</label>
-          <input
-            type="tel"
-            value={prefs.smsNumber}
-            onChange={e => setPrefs({ ...prefs, smsNumber: e.target.value })}
-            placeholder="+15551234567"
-            className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
-          />
-        </div>
+      <div>
+        <label className="block text-sm text-zinc-400 mb-1">SMS for hold notifications</label>
+        <input
+          type="tel"
+          value={prefs.smsNumber}
+          onChange={e => setPrefs({ ...prefs, smsNumber: e.target.value })}
+          placeholder="+15551234567"
+          className="w-32 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
+        />
       </div>
 
       {error && <p className="text-sm text-red-400">{error}</p>}
@@ -194,7 +170,7 @@ export default function ShopMarketplaceSetup() {
           disabled={saving}
           className="px-5 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-100 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
         >
-          {saved ? '✓ Saved' : saving ? 'Saving…' : 'Save Settings'}
+          {saved ? '✓ Saved' : saving ? 'Geocoding & saving…' : 'Save Settings'}
         </button>
       </div>
     </div>
