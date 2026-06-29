@@ -8,6 +8,7 @@ interface SearchRow {
   card_name: string;
   scryfall_id: string;
   set_code: string;
+  collector_number: string;
   condition: string;
   foil: boolean;
   price_cents: string;
@@ -37,6 +38,7 @@ export async function GET(req: NextRequest) {
       si."cardName" AS card_name,
       si."scryfallId" AS scryfall_id,
       si."setCode" AS set_code,
+      si."collectorNumber" AS collector_number,
       si.condition,
       si.foil,
       si."priceCents"::text AS price_cents,
@@ -86,6 +88,7 @@ export async function GET(req: NextRequest) {
       shopId: r.shop_id,
       shopName: r.shop_name,
       shopSlug: r.shop_slug,
+      collectorNumber: r.collector_number,
       shopLat: parseFloat(r.shop_lat),
       shopLng: parseFloat(r.shop_lng),
       distanceMiles: parseFloat(parseFloat(r.distance_miles).toFixed(1)),

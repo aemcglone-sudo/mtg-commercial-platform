@@ -22,6 +22,7 @@ interface CardResult {
   imageUrl: string;
   setCode: string;
   setName?: string;
+  collectorNumber?: string;
   distanceMiles: number;
 }
 
@@ -29,6 +30,9 @@ interface SearchResult {
   inventoryId: string;
   cardName: string;
   scryfallId: string;
+  setCode: string;
+  setName?: string;
+  collectorNumber?: string;
   condition: string;
   foil: boolean;
   priceCents: number;
@@ -148,7 +152,8 @@ export default function FindLocally({ initialCard }: Props) {
     const res = await fetch(`/api/marketplace/search?q=${encodeURIComponent(name)}&lat=${location.lat}&lng=${location.lng}&radius=${radius}`);
     if (res.ok) {
       const data = await res.json() as { results: SearchResult[] };
-      setResults(data.results);
+      await resolveSetNames(data.results.map(r => r.setCode).filter(Boolean));
+      setResults(data.results.map(r => ({ ...r, setName: setNameCache.current[r.setCode] })));
     }
     setLoading(false);
   }
@@ -255,6 +260,7 @@ export default function FindLocally({ initialCard }: Props) {
             )}
           </div>
           <select
+            aria-label="Search radius"
             value={radius}
             onChange={e => setRadius(parseInt(e.target.value))}
             className="bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-zinc-300 focus:outline-none"
@@ -315,8 +321,8 @@ export default function FindLocally({ initialCard }: Props) {
                   </div>
                   <div className="text-right shrink-0">
                     <p className="text-amber-400 font-semibold">${(r.priceCents / 100).toFixed(2)}</p>
-                    <p className={`text-xs ${CONDITION_COLOR[r.condition] ?? 'text-zinc-400'}`}>{CONDITION_LABEL[r.condition] ?? r.condition}{r.foil ? ' · Foil' : ''}</p>
-                    {r.setName && <p className="text-xs text-zinc-600">{r.setName}</p>}
+                    <p className={`text-xs ${CONDITION_COLOR[r.condition] ?? 'text-zinc-400'}`}>{CONDITION_LABEL[r.condition] ?? r.condition}{r.foil ? ' · Foil' : ' · Non-foil'}</p>
+                    {r.setName && <p className="text-xs text-zinc-600">{r.setName}{r.collectorNumber ? ` #${r.collectorNumber}` : ''}</p>}
                     <p className="text-xs text-zinc-600">Qty: {r.quantity}</p>
                   </div>
                 </div>
@@ -336,8 +342,9 @@ export default function FindLocally({ initialCard }: Props) {
               {r.imageUrl && <img src={r.imageUrl} alt="" className="w-10 h-14 object-cover rounded" />}
               <div className="flex-1 min-w-0">
                 <p className="font-medium text-zinc-100 text-sm truncate">{r.cardName}</p>
+                {r.setName && <p className="text-xs text-zinc-500">{r.setName}{r.collectorNumber ? ` #${r.collectorNumber}` : ''}</p>}
                 <p className="text-xs text-zinc-400">{r.shopName} · {r.distanceMiles} mi</p>
-                <p className={`text-xs ${CONDITION_COLOR[r.condition] ?? 'text-zinc-400'}`}>{CONDITION_LABEL[r.condition] ?? r.condition}{r.foil ? ' · Foil' : ''}</p>
+                <p className={`text-xs ${CONDITION_COLOR[r.condition] ?? 'text-zinc-400'}`}>{CONDITION_LABEL[r.condition] ?? r.condition}{r.foil ? ' · Foil' : ' · Non-foil'}</p>
               </div>
               <div className="text-right shrink-0 space-y-1">
                 <p className="text-amber-400 font-semibold">${(r.priceCents / 100).toFixed(2)}</p>
