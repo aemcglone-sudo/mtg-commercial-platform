@@ -66,15 +66,15 @@ export async function PATCH(req: NextRequest) {
 
   await run(
     `UPDATE shops SET
-      marketplace_active = COALESCE($1, marketplace_active),
-      specialties = COALESCE($2, specialties),
-      hold_instructions = COALESCE($3, hold_instructions),
-      max_holds_per_day = $4,
-      address = COALESCE($5, address),
-      lat = COALESCE($6::text, lat),
-      lng = COALESCE($7::text, lng),
+      marketplace_active = COALESCE(?, marketplace_active),
+      specialties = COALESCE(?, specialties),
+      hold_instructions = COALESCE(?, hold_instructions),
+      max_holds_per_day = ?,
+      address = COALESCE(?, address),
+      lat = COALESCE(?, lat),
+      lng = COALESCE(?, lng),
       updated_at = NOW()
-    WHERE id = $8`,
+    WHERE id = ?`,
     [
       body.marketplaceActive ?? null,
       body.specialties ?? null,
@@ -90,7 +90,7 @@ export async function PATCH(req: NextRequest) {
   if (body.notifyViaSms !== undefined || body.notifyOnHoldRequest !== undefined || body.smsNumber !== undefined) {
     await run(
       `INSERT INTO shop_notification_prefs (id, shop_id, notify_on_hold_request, notify_via_sms, sms_number)
-       VALUES (gen_random_uuid(), $1, $2, $3, $4)
+       VALUES (gen_random_uuid(), ?, ?, ?, ?)
        ON CONFLICT (shop_id) DO UPDATE SET
          notify_on_hold_request = EXCLUDED.notify_on_hold_request,
          notify_via_sms = EXCLUDED.notify_via_sms,
