@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 interface Prefs {
   lat: number | null;
   lng: number | null;
+  address: string;
   searchRadiusMiles: number;
   notifyOnAvailability: boolean;
   notifyOnCampaigns: boolean;
@@ -13,9 +14,17 @@ interface Prefs {
   mutedShops: string[];
 }
 
+async function geocodeAddress(address: string): Promise<{ lat: number; lng: number } | null> {
+  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(address)}`;
+  const res = await fetch(url, { headers: { 'Accept-Language': 'en' } });
+  if (!res.ok) return null;
+  const data = await res.json() as Array<{ lat: string; lon: string }>;
+  if (!data.length) return null;
+  return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+}
+
 export default function CollectorMarketplacePrefs() {
   const [prefs, setPrefs] = useState<Prefs | null>(null);
-  const [zip, setZip] = useState('');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
@@ -24,25 +33,16 @@ export default function CollectorMarketplacePrefs() {
     fetch('/api/marketplace/preferences')
       .then(r => r.ok ? r.json() : null)
       .then((data: Prefs | null) => setPrefs(data ?? {
-        lat: null, lng: null, searchRadiusMiles: 50,
+        lat: null, lng: null, address: '', searchRadiusMiles: 50,
         notifyOnAvailability: true, notifyOnCampaigns: true,
         smsEnabled: false, smsNumber: '', mutedShops: [],
       }))
       .catch(() => {});
   }, []);
 
-  async function geoByZip() {
-    if (!/^\d{5}$/.test(zip)) { setError('Enter a valid 5-digit zip'); return; }
-    const res = await fetch(`/api/marketplace/geocode?zip=${zip}`);
-    if (!res.ok) { setError('Zip not found'); return; }
-    const data = await res.json() as { lat: number; lng: number };
-    setPrefs(p => p ? { ...p, lat: data.lat, lng: data.lng } : p);
-    setError('');
-  }
-
   function requestGPS() {
     navigator.geolocation.getCurrentPosition(
-      pos => setPrefs(p => p ? { ...p, lat: pos.coords.latitude, lng: pos.coords.longitude } : p),
+      pos => setPrefs(p => p ? { ...p, lat: pos.coords.latitude, lng: pos.coords.longitude, address: '' } : p),
       () => setError('Could not get your location')
     );
   }
@@ -51,13 +51,32 @@ export default function CollectorMarketplacePrefs() {
     if (!prefs) return;
     setSaving(true);
     setError('');
+
+    let { lat, lng } = prefs;
+
+    if (prefs.address && (!lat || !lng)) {
+      const coords = await geocodeAddress(prefs.address);
+      if (!coords) {
+        setError('Could not find that address. Try including city and state.');
+        setSaving(false);
+        return;
+      }
+      lat = coords.lat;
+      lng = coords.lng;
+    }
+
     const res = await fetch('/api/marketplace/preferences', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(prefs),
+      body: JSON.stringify({ ...prefs, lat, lng }),
     });
-    if (!res.ok) { setError('Failed to save'); }
-    else { setSaved(true); setTimeout(() => setSaved(false), 3000); }
+    if (!res.ok) {
+      setError('Failed to save');
+    } else {
+      setPrefs(p => p ? { ...p, lat, lng } : p);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    }
     setSaving(false);
   }
 
@@ -67,16 +86,31 @@ export default function CollectorMarketplacePrefs() {
     <div className="space-y-8">
       {/* Location */}
       <section className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-4">
-        <h2 className="font-semibold text-zinc-100">Location</h2>
-        {prefs.lat && prefs.lng ? (
-          <p className="text-sm text-emerald-400">📍 Location set ({prefs.lat.toFixed(3)}, {prefs.lng.toFixed(3)})</p>
-        ) : (
-          <p className="text-sm text-zinc-500">No location set — results won't show distance</p>
-        )}
-        <div className="flex gap-2">
-          <input type="text" value={zip} onChange={e => setZip(e.target.value)} onKeyDown={e => e.key === 'Enter' && geoByZip()} placeholder="Zip code" maxLength={5} className="w-28 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500" />
-          <button type="button" onClick={geoByZip} className="px-3 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-100 rounded-lg text-sm transition-colors">Set</button>
-          <button type="button" onClick={requestGPS} className="px-3 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-100 rounded-lg text-sm transition-colors">Use GPS</button>
+        <h2 className="font-semibold text-zinc-100">Your Location</h2>
+        <p className="text-xs text-zinc-500">Used to calculate distance to nearby shops. Your address is geocoded to coordinates and never shared with stores.</p>
+
+        <div>
+          <label className="block text-sm text-zinc-400 mb-1">Home address</label>
+          <input
+            type="text"
+            value={prefs.address ?? ''}
+            onChange={e => setPrefs({ ...prefs, address: e.target.value, lat: null, lng: null })}
+            placeholder="123 Main St, Atlanta, GA 30301"
+            className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
+          />
+          {prefs.lat && prefs.lng && (
+            <p className="text-xs text-emerald-500 mt-1">📍 Location resolved ({prefs.lat.toFixed(4)}, {prefs.lng.toFixed(4)})</p>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-zinc-600">or</span>
+          <button type="button" onClick={requestGPS} className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg text-xs transition-colors border border-zinc-700">
+            📡 Use my current location
+          </button>
+          {prefs.lat && prefs.lng && !prefs.address && (
+            <span className="text-xs text-emerald-500">📍 GPS set</span>
+          )}
         </div>
 
         <div>

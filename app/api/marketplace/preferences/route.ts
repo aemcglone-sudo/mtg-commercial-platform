@@ -33,12 +33,16 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     availabilityAlerts: prefs.availability_alerts,
+    notifyOnAvailability: prefs.availability_alerts,
     campaignNotifications: prefs.campaign_notifications,
+    notifyOnCampaigns: prefs.campaign_notifications,
     holdNotifications: prefs.hold_notifications,
     searchRadiusMiles: parseInt(prefs.search_radius_miles),
     optedOutShops: prefs.opted_out_shops ?? [],
+    mutedShops: prefs.opted_out_shops ?? [],
     lat: prefs.lat ? parseFloat(prefs.lat) : null,
     lng: prefs.lng ? parseFloat(prefs.lng) : null,
+    address: '',
     locationUpdatedAt: prefs.location_updated_at,
     smsEnabled: prefs.sms_enabled,
     smsNumber: prefs.sms_number,
@@ -51,7 +55,9 @@ export async function PATCH(req: NextRequest) {
 
   const body = await req.json() as {
     availabilityAlerts?: boolean;
+    notifyOnAvailability?: boolean;
     campaignNotifications?: boolean;
+    notifyOnCampaigns?: boolean;
     holdNotifications?: boolean;
     searchRadiusMiles?: number;
     lat?: number;
@@ -59,6 +65,10 @@ export async function PATCH(req: NextRequest) {
     smsEnabled?: boolean;
     smsNumber?: string;
   };
+
+  // Accept either alias
+  if (body.notifyOnAvailability !== undefined) body.availabilityAlerts = body.notifyOnAvailability;
+  if (body.notifyOnCampaigns !== undefined) body.campaignNotifications = body.notifyOnCampaigns;
 
   const existing = await findOne<{ id: string }>(
     `SELECT id FROM collector_notification_prefs WHERE user_id = ?`, [userId]
