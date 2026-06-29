@@ -104,7 +104,8 @@ export async function PATCH(req: NextRequest) {
 
     return NextResponse.json({ ok: true });
   } catch (err) {
-    console.error('[marketplace settings PATCH]', err);
-    return NextResponse.json({ error: 'Server error' }, { status: 500 });
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[marketplace settings PATCH]', msg);
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

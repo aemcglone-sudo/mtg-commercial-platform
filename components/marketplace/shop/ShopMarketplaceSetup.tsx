@@ -61,7 +61,10 @@ export default function ShopMarketplaceSetup() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(prefs),
     });
-    if (!res.ok) setError('Failed to save');
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error || 'Failed to save');
+    }
     else { setSaved(true); setTimeout(() => setSaved(false), 3000); }
     setSaving(false);
   }
