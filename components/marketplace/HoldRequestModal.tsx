@@ -79,12 +79,12 @@ export default function HoldRequestModal({ item, sourceDeckId, sourceListId, sou
 
         <div className="space-y-3">
           <div>
-            <label className="block text-sm text-zinc-400 mb-1">When can you pick up? <span className="text-zinc-600">(optional)</span></label>
+            <label className="block text-sm text-zinc-400 mb-1">Availability for pickup <span className="text-zinc-600">(optional)</span></label>
             <input
               type="text"
               value={pickupWindow}
               onChange={e => setPickupWindow(e.target.value)}
-              placeholder="e.g. Saturday afternoon, weekday evenings"
+              placeholder="e.g. Saturday afternoon, weekday evenings after 5pm"
               className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
             />
           </div>
