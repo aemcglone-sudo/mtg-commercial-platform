@@ -7,9 +7,6 @@ interface AvailabilityRow {
   scryfall_id: string;
   store_count: string;
   lowest_price_cents: string;
-  shop_id: string;
-  shop_name: string;
-  distance_miles: string;
 }
 
 export async function GET(req: NextRequest) {
@@ -27,34 +24,25 @@ export async function GET(req: NextRequest) {
 
   const rows = await findMany<AvailabilityRow>(`
     SELECT
-      si.scryfall_id,
-      COUNT(DISTINCT si.shop_id)::text AS store_count,
-      MIN(si.price_cents)::text AS lowest_price_cents,
-      MIN(si.shop_id) AS shop_id,
-      MIN(s.name) AS shop_name,
-      MIN(
-        3959 * acos(
-          LEAST(1.0, cos(radians($1)) * cos(radians(s.lat::float)) *
-          cos(radians(s.lng::float) - radians($2)) +
-          sin(radians($1)) * sin(radians(s.lat::float)))
-        )
-      )::text AS distance_miles
+      si."scryfallId" AS scryfall_id,
+      COUNT(DISTINCT si."shopId")::text AS store_count,
+      MIN(si."priceCents")::text AS lowest_price_cents
     FROM shop_inventory si
-    JOIN shops s ON s.id = si.shop_id
-    WHERE si.scryfall_id = ANY($3)
+    JOIN shops s ON s.id = si."shopId"
+    WHERE si."scryfallId" = ANY(?)
       AND si.quantity > 0
       AND s.marketplace_active = true
       AND s.lat IS NOT NULL
       AND s.lng IS NOT NULL
       AND (
         3959 * acos(
-          LEAST(1.0, cos(radians($1)) * cos(radians(s.lat::float)) *
-          cos(radians(s.lng::float) - radians($2)) +
-          sin(radians($1)) * sin(radians(s.lat::float)))
+          LEAST(1.0, cos(radians(?)) * cos(radians(s.lat::float)) *
+          cos(radians(s.lng::float) - radians(?)) +
+          sin(radians(?)) * sin(radians(s.lat::float)))
         )
-      ) <= $4
-    GROUP BY si.scryfall_id
-  `, [lat, lng, scryfallIds, radius]);
+      ) <= ?
+    GROUP BY si."scryfallId"
+  `, [scryfallIds, lat, lng, lat, radius]);
 
   const result: Record<string, { available: boolean; store_count: number; lowest_price_cents: number }> = {};
   for (const id of scryfallIds) {

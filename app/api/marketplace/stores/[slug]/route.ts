@@ -30,9 +30,10 @@ export async function GET(
   if (!shop) return NextResponse.json({ error: 'Store not found' }, { status: 404 });
 
   const inventory = await findMany<InventoryRow>(
-    `SELECT scryfall_id, card_name, condition, foil, price_cents::text, quantity::text, image_url, set_code
-     FROM shop_inventory WHERE shop_id = ? AND quantity > 0
-     ORDER BY card_name ASC LIMIT 200`,
+    `SELECT "scryfallId" AS scryfall_id, "cardName" AS card_name, condition, foil,
+            "priceCents"::text AS price_cents, quantity::text, "imageUrl" AS image_url, "setCode" AS set_code
+     FROM shop_inventory WHERE "shopId" = ? AND quantity > 0
+     ORDER BY "cardName" ASC LIMIT 200`,
     [shop.id]
   );
 

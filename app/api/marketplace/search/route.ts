@@ -32,41 +32,41 @@ export async function GET(req: NextRequest) {
   const rows = await findMany<SearchRow>(`
     SELECT
       si.id AS inventory_id,
-      si.card_name,
-      si.scryfall_id,
-      si.set_code,
+      si."cardName" AS card_name,
+      si."scryfallId" AS scryfall_id,
+      si."setCode" AS set_code,
       si.condition,
       si.foil,
-      si.price_cents::text,
+      si."priceCents"::text AS price_cents,
       si.quantity::text,
-      si.image_url,
+      si."imageUrl" AS image_url,
       s.id AS shop_id,
       s.name AS shop_name,
       s.slug AS shop_slug,
       (
         3959 * acos(
-          LEAST(1.0, cos(radians($1)) * cos(radians(s.lat::float)) *
-          cos(radians(s.lng::float) - radians($2)) +
-          sin(radians($1)) * sin(radians(s.lat::float)))
+          LEAST(1.0, cos(radians(?)) * cos(radians(s.lat::float)) *
+          cos(radians(s.lng::float) - radians(?)) +
+          sin(radians(?)) * sin(radians(s.lat::float)))
         )
       )::text AS distance_miles
     FROM shop_inventory si
-    JOIN shops s ON s.id = si.shop_id
-    WHERE si.card_name ILIKE $3
+    JOIN shops s ON s.id = si."shopId"
+    WHERE si."cardName" ILIKE ?
       AND si.quantity > 0
       AND s.marketplace_active = true
       AND s.lat IS NOT NULL
       AND s.lng IS NOT NULL
       AND (
         3959 * acos(
-          LEAST(1.0, cos(radians($1)) * cos(radians(s.lat::float)) *
-          cos(radians(s.lng::float) - radians($2)) +
-          sin(radians($1)) * sin(radians(s.lat::float)))
+          LEAST(1.0, cos(radians(?)) * cos(radians(s.lat::float)) *
+          cos(radians(s.lng::float) - radians(?)) +
+          sin(radians(?)) * sin(radians(s.lat::float)))
         )
-      ) <= $4
-    ORDER BY distance_miles ASC, si.price_cents ASC
+      ) <= ?
+    ORDER BY distance_miles ASC, si."priceCents" ASC
     LIMIT 50
-  `, [lat, lng, `%${q}%`, radius]);
+  `, [lat, lng, lat, `%${q}%`, lat, lng, lat, radius]);
 
   return NextResponse.json({
     results: rows.map(r => ({

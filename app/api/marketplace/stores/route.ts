@@ -61,7 +61,7 @@ export async function GET(req: NextRequest) {
       )::text` : `'0'`} AS distance_miles,
       COUNT(si.id)::text AS inventory_count
     FROM shops s
-    LEFT JOIN shop_inventory si ON si.shop_id = s.id AND si.quantity > 0
+    LEFT JOIN shop_inventory si ON si."shopId" = s.id AND si.quantity > 0
     WHERE s.marketplace_active = true
       AND s.is_active = true
       ${hasLocation ? `AND s.lat IS NOT NULL AND s.lng IS NOT NULL AND (

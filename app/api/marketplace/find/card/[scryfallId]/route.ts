@@ -51,33 +51,33 @@ export async function GET(
       si.condition,
       si.foil,
       si.quantity::text,
-      si.price_cents::text,
-      si.image_url,
-      si.set_code,
-      si.collector_number,
+      si."priceCents"::text AS price_cents,
+      si."imageUrl" AS image_url,
+      si."setCode" AS set_code,
+      si."collectorNumber" AS collector_number,
       (
         3959 * acos(
-          LEAST(1.0, cos(radians($1)) * cos(radians(s.lat::float)) *
-          cos(radians(s.lng::float) - radians($2)) +
-          sin(radians($1)) * sin(radians(s.lat::float)))
+          LEAST(1.0, cos(radians(?)) * cos(radians(s.lat::float)) *
+          cos(radians(s.lng::float) - radians(?)) +
+          sin(radians(?)) * sin(radians(s.lat::float)))
         )
       )::text AS distance_miles
     FROM shop_inventory si
-    JOIN shops s ON s.id = si.shop_id
-    WHERE si.scryfall_id = $3
+    JOIN shops s ON s.id = si."shopId"
+    WHERE si."scryfallId" = ?
       AND si.quantity > 0
       AND s.marketplace_active = true
       AND s.lat IS NOT NULL
       AND s.lng IS NOT NULL
       AND (
         3959 * acos(
-          LEAST(1.0, cos(radians($1)) * cos(radians(s.lat::float)) *
-          cos(radians(s.lng::float) - radians($2)) +
-          sin(radians($1)) * sin(radians(s.lat::float)))
+          LEAST(1.0, cos(radians(?)) * cos(radians(s.lat::float)) *
+          cos(radians(s.lng::float) - radians(?)) +
+          sin(radians(?)) * sin(radians(s.lat::float)))
         )
-      ) <= $4
-    ORDER BY distance_miles ASC, si.price_cents ASC
-  `, [lat, lng, scryfallId, radius]);
+      ) <= ?
+    ORDER BY distance_miles ASC, si."priceCents" ASC
+  `, [lat, lng, lat, scryfallId, lat, lng, lat, radius]);
 
   return NextResponse.json({
     results: rows.map(r => ({

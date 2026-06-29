@@ -46,33 +46,33 @@ export async function GET(req: NextRequest) {
       s.hold_instructions,
       (
         3959 * acos(
-          LEAST(1.0, cos(radians($1)) * cos(radians(s.lat::float)) *
-          cos(radians(s.lng::float) - radians($2)) +
-          sin(radians($1)) * sin(radians(s.lat::float)))
+          LEAST(1.0, cos(radians(?)) * cos(radians(s.lat::float)) *
+          cos(radians(s.lng::float) - radians(?)) +
+          sin(radians(?)) * sin(radians(s.lat::float)))
         )
       )::text AS distance_miles,
-      si.scryfall_id,
+      si."scryfallId" AS scryfall_id,
       si.id AS inventory_id,
       si.condition,
       si.foil,
-      si.price_cents::text,
+      si."priceCents"::text AS price_cents,
       si.quantity::text
     FROM shop_inventory si
-    JOIN shops s ON s.id = si.shop_id
-    WHERE si.scryfall_id = ANY($3)
+    JOIN shops s ON s.id = si."shopId"
+    WHERE si."scryfallId" = ANY(?)
       AND si.quantity > 0
       AND s.marketplace_active = true
       AND s.lat IS NOT NULL
       AND s.lng IS NOT NULL
       AND (
         3959 * acos(
-          LEAST(1.0, cos(radians($1)) * cos(radians(s.lat::float)) *
-          cos(radians(s.lng::float) - radians($2)) +
-          sin(radians($1)) * sin(radians(s.lat::float)))
+          LEAST(1.0, cos(radians(?)) * cos(radians(s.lat::float)) *
+          cos(radians(s.lng::float) - radians(?)) +
+          sin(radians(?)) * sin(radians(s.lat::float)))
         )
-      ) <= $4
-    ORDER BY distance_miles ASC, si.price_cents ASC
-  `, [lat, lng, scryfallIds, radius]);
+      ) <= ?
+    ORDER BY distance_miles ASC, si."priceCents" ASC
+  `, [lat, lng, lat, scryfallIds, lat, lng, lat, radius]);
 
   // Group by shop
   const shopMap = new Map<string, {

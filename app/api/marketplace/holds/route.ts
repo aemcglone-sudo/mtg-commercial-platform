@@ -95,7 +95,8 @@ export async function POST(req: NextRequest) {
   }
 
   const item = await findOne<InventoryRow>(
-    `SELECT id, shop_id, card_name, scryfall_id, set_code, collector_number, condition, foil, price_cents::text
+    `SELECT id, "shopId" AS shop_id, "cardName" AS card_name, "scryfallId" AS scryfall_id,
+            "setCode" AS set_code, "collectorNumber" AS collector_number, condition, foil, "priceCents"::text AS price_cents
      FROM shop_inventory WHERE id = ? AND quantity > 0`,
     [body.inventoryItemId]
   );
