@@ -51,6 +51,10 @@ const CONDITION_COLOR: Record<string, string> = {
   NM: 'text-emerald-400', LP: 'text-green-400', MP: 'text-yellow-400',
   HP: 'text-orange-400', DMG: 'text-red-400',
 };
+const CONDITION_LABEL: Record<string, string> = {
+  NM: 'Near Mint', LP: 'Lightly Played', MP: 'Moderately Played',
+  HP: 'Heavily Played', DMG: 'Damaged',
+};
 
 export default function FindLocally({ initialCard }: Props) {
   const [query, setQuery] = useState('');
@@ -311,7 +315,8 @@ export default function FindLocally({ initialCard }: Props) {
                   </div>
                   <div className="text-right shrink-0">
                     <p className="text-amber-400 font-semibold">${(r.priceCents / 100).toFixed(2)}</p>
-                    <p className={`text-xs ${CONDITION_COLOR[r.condition] ?? 'text-zinc-400'}`}>{r.condition}{r.foil ? ' Foil' : ''}</p>
+                    <p className={`text-xs ${CONDITION_COLOR[r.condition] ?? 'text-zinc-400'}`}>{CONDITION_LABEL[r.condition] ?? r.condition}{r.foil ? ' · Foil' : ''}</p>
+                    {r.setName && <p className="text-xs text-zinc-600">{r.setName}</p>}
                     <p className="text-xs text-zinc-600">Qty: {r.quantity}</p>
                   </div>
                 </div>
@@ -332,7 +337,7 @@ export default function FindLocally({ initialCard }: Props) {
               <div className="flex-1 min-w-0">
                 <p className="font-medium text-zinc-100 text-sm truncate">{r.cardName}</p>
                 <p className="text-xs text-zinc-400">{r.shopName} · {r.distanceMiles} mi</p>
-                <p className={`text-xs ${CONDITION_COLOR[r.condition] ?? 'text-zinc-400'}`}>{r.condition}{r.foil ? ' · Foil' : ''}</p>
+                <p className={`text-xs ${CONDITION_COLOR[r.condition] ?? 'text-zinc-400'}`}>{CONDITION_LABEL[r.condition] ?? r.condition}{r.foil ? ' · Foil' : ''}</p>
               </div>
               <div className="text-right shrink-0 space-y-1">
                 <p className="text-amber-400 font-semibold">${(r.priceCents / 100).toFixed(2)}</p>
