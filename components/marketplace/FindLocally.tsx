@@ -21,6 +21,7 @@ interface CardResult {
   priceCents: number;
   imageUrl: string;
   setCode: string;
+  setName?: string;
   distanceMiles: number;
 }
 
@@ -66,6 +67,7 @@ export default function FindLocally({ initialCard }: Props) {
   const [holdSuccess, setHoldSuccess] = useState('');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const setNameCache = useRef<Record<string, string>>({});
 
   // Load location from prefs
   useEffect(() => {
@@ -155,6 +157,19 @@ export default function FindLocally({ initialCard }: Props) {
     searchByName(query);
   }
 
+  async function resolveSetNames(codes: string[]): Promise<void> {
+    const unknown = [...new Set(codes)].filter(c => c && !setNameCache.current[c]);
+    await Promise.all(unknown.map(async code => {
+      try {
+        const r = await fetch(`https://api.scryfall.com/sets/${code.toLowerCase()}`);
+        if (r.ok) {
+          const d = await r.json() as { name: string };
+          setNameCache.current[code] = d.name;
+        }
+      } catch { /* ignore */ }
+    }));
+  }
+
   async function searchCard(scryfallId: string) {
     if (!location) return;
     setLoading(true);
@@ -162,7 +177,8 @@ export default function FindLocally({ initialCard }: Props) {
     const res = await fetch(`/api/marketplace/find/card/${scryfallId}?lat=${location.lat}&lng=${location.lng}&radius=${radius}`);
     if (res.ok) {
       const data = await res.json() as { results: CardResult[] };
-      setCardResults(data.results);
+      await resolveSetNames(data.results.map(r => r.setCode).filter(Boolean));
+      setCardResults(data.results.map(r => ({ ...r, setName: setNameCache.current[r.setCode] })));
     }
     setLoading(false);
   }

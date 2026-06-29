@@ -1,6 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
+
+const CONDITION_LABEL: Record<string, string> = {
+  NM: 'Near Mint',
+  LP: 'Lightly Played',
+  MP: 'Moderately Played',
+  HP: 'Heavily Played',
+  DMG: 'Damaged',
+};
 
 interface InventoryItem {
   inventoryId: string;
@@ -11,6 +19,7 @@ interface InventoryItem {
   foil: boolean;
   priceCents: number;
   holdInstructions?: string;
+  setName?: string;
 }
 
 interface Props {
@@ -22,9 +31,21 @@ interface Props {
   onSuccess: () => void;
 }
 
+const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+const TIMES = ['Morning (9am–12pm)', 'Afternoon (12pm–5pm)', 'Evening (5pm–9pm)'];
+
 export default function HoldRequestModal({ item, sourceDeckId, sourceListId, sourceCampaignId, onClose, onSuccess }: Props) {
-  const [pickupWindow, setPickupWindow] = useState('');
+  const [pickupDays, setPickupDays] = useState<string[]>([]);
+  const [pickupTimes, setPickupTimes] = useState<string[]>([]);
   const [collectorNote, setCollectorNote] = useState('');
+
+  const pickupWindow = useMemo(() => {
+    if (!pickupDays.length && !pickupTimes.length) return undefined;
+    const parts = [];
+    if (pickupDays.length) parts.push(pickupDays.join(', '));
+    if (pickupTimes.length) parts.push(pickupTimes.join(' or '));
+    return parts.join(' — ');
+  }, [pickupDays, pickupTimes]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -67,7 +88,10 @@ export default function HoldRequestModal({ item, sourceDeckId, sourceListId, sou
         {/* Card summary */}
         <div className="bg-zinc-800 rounded-xl p-4 space-y-1">
           <p className="font-medium text-zinc-100">{item.cardName}</p>
-          <p className="text-sm text-zinc-400">{item.condition}{item.foil ? ' · Foil' : ''} · <span className="text-amber-400 font-semibold">${(item.priceCents / 100).toFixed(2)}</span></p>
+          {item.setName && <p className="text-xs text-zinc-500">{item.setName}</p>}
+          <p className="text-sm text-zinc-400">
+            {CONDITION_LABEL[item.condition] ?? item.condition} ({item.condition}){item.foil ? ' · Foil' : ''} · <span className="text-amber-400 font-semibold">${(item.priceCents / 100).toFixed(2)}</span>
+          </p>
           <p className="text-sm text-zinc-500">{item.shopName}</p>
         </div>
 
@@ -79,14 +103,33 @@ export default function HoldRequestModal({ item, sourceDeckId, sourceListId, sou
 
         <div className="space-y-3">
           <div>
-            <label className="block text-sm text-zinc-400 mb-1">Availability for pickup <span className="text-zinc-600">(optional)</span></label>
-            <input
-              type="text"
-              value={pickupWindow}
-              onChange={e => setPickupWindow(e.target.value)}
-              placeholder="e.g. Saturday afternoon, weekday evenings after 5pm"
-              className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
-            />
+            <label className="block text-sm text-zinc-400 mb-2">When can you pick up? <span className="text-zinc-600">(optional)</span></label>
+            <div className="space-y-2">
+              <div className="flex flex-wrap gap-1.5">
+                {DAYS.map(day => (
+                  <button
+                    key={day}
+                    type="button"
+                    onClick={() => setPickupDays(d => d.includes(day) ? d.filter(x => x !== day) : [...d, day])}
+                    className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${pickupDays.includes(day) ? 'bg-emerald-700 text-emerald-100' : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-700'}`}
+                  >
+                    {day.slice(0, 3)}
+                  </button>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {TIMES.map(time => (
+                  <button
+                    key={time}
+                    type="button"
+                    onClick={() => setPickupTimes(t => t.includes(time) ? t.filter(x => x !== time) : [...t, time])}
+                    className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${pickupTimes.includes(time) ? 'bg-emerald-700 text-emerald-100' : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-700'}`}
+                  >
+                    {time}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
           <div>
             <label className="block text-sm text-zinc-400 mb-1">Note to shop <span className="text-zinc-600">(optional)</span></label>
