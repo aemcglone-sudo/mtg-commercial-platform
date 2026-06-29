@@ -4,7 +4,7 @@ const g = globalThis as { _pool?: Pool };
 if (!g._pool) g._pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const pool = g._pool;
 
-type Arg = string | number | boolean | null;
+type Arg = string | number | boolean | null | string[];
 
 function toPostgres(sql: string): string {
   let i = 0;

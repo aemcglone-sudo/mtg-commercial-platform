@@ -309,15 +309,25 @@ model Shop {
   floorPrices      Json?    @default("{\"global\":10,\"C\":10,\"U\":25,\"R\":50,\"M\":100}") @map("floor_prices")
   buyMatrix        Json?    @default("{\"NM\":60,\"LP\":51,\"MP\":42,\"HP\":30,\"DMG\":15}") @map("buy_matrix")
   marginTargets    Json?    @default("{\"under_1\":60,\"1_to_10\":45,\"10_to_50\":40,\"over_50\":35}") @map("margin_targets")
+  // Marketplace fields
+  marketplaceActive Boolean  @default(true) @map("marketplace_active")
+  hours             Json?
+  specialties       String[] @default([])
+  holdInstructions  String?  @map("hold_instructions")
+  featuredUntil     DateTime? @map("featured_until")
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  inventory     ShopInventory[]
-  orders        ShopOrder[]
-  pricingRules  ShopPricingRule[]
-  buyRules      ShopBuyRule[]
-  purchases     ShopPurchase[]
-  offers        ShopOffer[]
+  inventory          ShopInventory[]
+  orders             ShopOrder[]
+  pricingRules       ShopPricingRule[]
+  buyRules           ShopBuyRule[]
+  purchases          ShopPurchase[]
+  offers             ShopOffer[]
+  holds              Hold[]
+  holdGroups         HoldGroup[]
+  notificationPrefs  ShopNotificationPrefs?
+  shopCampaigns      ShopCampaign[]
 
   @@map("shops")
 }
@@ -478,3 +488,228 @@ model ShopOffer {
 
   @@map("shop_offers")
 }
+
+// ─── Local Marketplace ────────────────────────────────────────────────────────
+
+model HoldGroup {
+  id              String   @id @default(cuid())
+  collectorUserId String   @map("collector_user_id")
+  shopId          String   @map("shop_id")
+  shop            Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  sourceDeckId    String?  @map("source_deck_id")
+  sourceListId    String?  @map("source_list_id")
+  collectorNote   String?  @map("collector_note")
+  pickupWindow    String?  @map("pickup_window")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  holds Hold[]
+
+  @@index([collectorUserId])
+  @@index([shopId])
+  @@map("hold_groups")
+}
+
+model Hold {
+  id              String   @id @default(cuid())
+  collectorUserId String   @map("collector_user_id")
+  shopId          String   @map("shop_id")
+  shop            Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  inventoryItemId String?  @map("inventory_item_id")
+  holdGroupId     String?  @map("hold_group_id")
+  holdGroup       HoldGroup? @relation(fields: [holdGroupId], references: [id], onDelete: SetNull)
+
+  // Card snapshot at request time
+  cardName        String   @map("card_name")
+  scryfallId      String   @map("scryfall_id")
+  setCode         String   @map("set_code")
+  collectorNumber String?  @map("collector_number")
+  condition       String
+  foil            Boolean  @default(false)
+  priceCents      Int      @map("price_cents")
+
+  // Status: requested | confirmed | completed | declined | expired | cancelled
+  status          String   @default("requested")
+
+  // Collector input
+  collectorNote   String?  @map("collector_note")
+  pickupWindow    String?  @map("pickup_window")
+
+  // Shop response
+  shopNote        String?  @map("shop_note")
+  confirmedAt     DateTime? @map("confirmed_at")
+  declinedAt      DateTime? @map("declined_at")
+  completedAt     DateTime? @map("completed_at")
+  cancelledAt     DateTime? @map("cancelled_at")
+
+  // Expiry
+  requestExpiresAt DateTime @map("request_expires_at")
+  pickupExpiresAt  DateTime? @map("pickup_expires_at")
+
+  // Notification tracking
+  shopNotifiedSmsAt  DateTime? @map("shop_notified_sms_at")
+  shopNotifiedAppAt  DateTime? @map("shop_notified_app_at")
+  collectorNotifiedAt DateTime? @map("collector_notified_at")
+
+  // Source attribution
+  sourceDeckId     String? @map("source_deck_id")
+  sourceListId     String? @map("source_list_id")
+  sourceCampaignId String? @map("source_campaign_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([collectorUserId])
+  @@index([shopId])
+  @@index([status])
+  @@index([inventoryItemId])
+  @@index([holdGroupId])
+  @@index([sourceCampaignId])
+  @@map("holds")
+}
+
+model ShopNotificationPrefs {
+  id                  String   @id @default(cuid())
+  shopId              String   @unique @map("shop_id")
+  shop                Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  smsEnabled          Boolean  @default(true) @map("sms_enabled")
+  smsNumber           String?  @map("sms_number")
+  emailEnabled        Boolean  @default(true) @map("email_enabled")
+  appEnabled          Boolean  @default(true) @map("app_enabled")
+  requestExpiryHours  Int      @default(24) @map("request_expiry_hours")
+  pickupExpiryHours   Int      @default(72) @map("pickup_expiry_hours")
+  maxActiveHolds      Int      @default(50) @map("max_active_holds")
+  campaignsPerWeek    Int      @default(3) @map("campaigns_per_week")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  @@map("shop_notification_prefs")
+}
+
+model CollectorNotificationPrefs {
+  id                     String   @id @default(cuid())
+  userId                 String   @unique @map("user_id")
+  availabilityAlerts     Boolean  @default(true) @map("availability_alerts")
+  campaignNotifications  Boolean  @default(true) @map("campaign_notifications")
+  holdNotifications      Boolean  @default(true) @map("hold_notifications")
+  searchRadiusMiles      Int      @default(50) @map("search_radius_miles")
+  optedOutShops          String[] @default([]) @map("opted_out_shops")
+  // Location (set via settings page — GPS or zip)
+  lat                    Decimal? @db.Decimal(9, 6)
+  lng                    Decimal? @db.Decimal(9, 6)
+  locationUpdatedAt      DateTime? @map("location_updated_at")
+  // SMS for collectors
+  smsEnabled             Boolean  @default(false) @map("sms_enabled")
+  smsNumber              String?  @map("sms_number")
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+
+  @@map("collector_notification_prefs")
+}
+
+model CollectorCardWatchlist {
+  id                  String   @id @default(cuid())
+  userId              String   @map("user_id")
+  scryfallId          String   @map("scryfall_id")
+  cardName            String   @map("card_name")
+  // deck_missing | wishlist | manual
+  sourceType          String   @map("source_type")
+  sourceId            String?  @map("source_id")
+  maxPriceCents       Int?     @map("max_price_cents")
+  conditionFloor      String   @default("HP") @map("condition_floor")
+  lastNotifiedAt      DateTime? @map("last_notified_at")
+  notifyCooldownHours Int      @default(24) @map("notify_cooldown_hours")
+  active              Boolean  @default(true)
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, scryfallId, sourceType, sourceId])
+  @@index([scryfallId])
+  @@index([userId])
+  @@map("collector_card_watchlist")
+}
+
+model Notification {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  // hold_requested | hold_confirmed | hold_declined | hold_expired |
+  // hold_completed | hold_cancelled |
+  // card_available | card_available_batch |
+  // campaign_new_inventory | campaign_sale | campaign_buylist | campaign_featured | campaign_event
+  type        String
+  title       String
+  body        String
+  holdId      String?  @map("hold_id")
+  campaignId  String?  @map("campaign_id")
+  scryfallId  String?  @map("scryfall_id")
+  shopId      String?  @map("shop_id")
+  ctaUrl      String?  @map("cta_url")
+  read        Boolean  @default(false)
+  readAt      DateTime? @map("read_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([holdId])
+  @@map("notifications")
+}
+
+model ShopCampaign {
+  id              String   @id @default(cuid())
+  shopId          String   @map("shop_id")
+  shop            Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  // new_inventory | sale | buylist | featured_card | event
+  type            String
+  title           String
+  body            String
+  ctaText         String?  @map("cta_text")
+  ctaUrl          String?  @map("cta_url")
+
+  // Targeting: matching_watchlist | radius | all
+  targetType      String   @default("matching_watchlist") @map("target_type")
+  radiusMiles     Int      @default(50) @map("radius_miles")
+  scryfallIds     String[] @default([]) @map("scryfall_ids")
+  discountPercent Int?     @map("discount_percent")
+  validUntil      DateTime? @map("valid_until")
+
+  // Delivery
+  // draft | scheduled | sent | cancelled
+  status          String   @default("draft")
+  scheduledFor    DateTime? @map("scheduled_for")
+  sentAt          DateTime? @map("sent_at")
+  recipientsCount Int?     @map("recipients_count")
+
+  // Rate limit tracking (ISO week)
+  weekNumber      Int?     @map("week_number")
+  weekYear        Int?     @map("week_year")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  deliveries CampaignDelivery[]
+
+  @@index([shopId])
+  @@index([status])
+  @@index([shopId, weekNumber, weekYear])
+  @@map("shop_campaigns")
+}
+
+model CampaignDelivery {
+  id          String   @id @default(cuid())
+  campaignId  String   @map("campaign_id")
+  campaign    ShopCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  userId      String   @map("user_id")
+  deliveredAt DateTime @default(now()) @map("delivered_at")
+  read        Boolean  @default(false)
+  readAt      DateTime? @map("read_at")
+  clicked     Boolean  @default(false)
+  clickedAt   DateTime? @map("clicked_at")
+
+  @@unique([campaignId, userId])
+  @@index([campaignId])
+  @@index([userId])
+  @@map("campaign_deliveries")
+}
+
+// Also add back-relations to User (virtual — no new columns needed)
+// User.holds, User.notifications, User.collectorNotificationPrefs, User.collectorCardWatchlist
+// are accessed via raw SQL queries using userId — Prisma relations not added to avoid schema migration conflicts

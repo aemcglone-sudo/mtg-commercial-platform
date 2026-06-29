@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { findMany, findOne, run } from '@/lib/db';
 import { randomUUID } from 'crypto';
 import { getRole, getAuthenticatedUserId } from '@/lib/auth';
+import { checkAvailabilityAndNotify } from '@/lib/marketplace/availability-check';
 
 async function getShopId(userId: string): Promise<string | null> {
   const shop = await findOne<{ id: string }>('SELECT id FROM shops WHERE "userId" = ?', [userId]);
@@ -168,6 +169,14 @@ export async function POST(req: NextRequest) {
     );
     added++;
   }
+
+  // Fire availability alerts for matching collectors — non-blocking
+  checkAvailabilityAndNotify(shopId, body.cards.map(c => ({
+    scryfall_id: c.scryfallId,
+    card_name: c.cardName,
+    condition: c.condition,
+    price_cents: c.priceCents,
+  }))).catch(e => console.error('[inventory] availability check failed:', e));
 
   return NextResponse.json({ added });
 }

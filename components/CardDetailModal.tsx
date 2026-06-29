@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import type { CollectionCardData } from './CollectionBrowser';
 
 export interface DeckSummary {
@@ -17,6 +18,7 @@ interface CardDetailModalProps {
 }
 
 interface ScryfallCard {
+  id: string;
   name: string;
   image_uris?: { normal: string; large: string };
   card_faces?: Array<{ name: string; image_uris?: { normal: string; large: string }; oracle_text?: string; mana_cost?: string }>;
@@ -423,6 +425,15 @@ export default function CardDetailModal({ cardName, onClose, collectionCard, dec
                   ) : scryfallCard ? (
                     <p className="text-xs text-zinc-600 px-1">No physical purchase options — this may be a digital-only card.</p>
                   ) : null}
+                  {scryfallCard?.id && (
+                    <Link
+                      href={`/marketplace/card/${scryfallCard.id}`}
+                      className="mt-2 flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-900/30 hover:bg-emerald-900/50 border border-emerald-800/50 text-sm text-emerald-400 hover:text-emerald-300 transition-colors"
+                    >
+                      <span>📍</span>
+                      <span>Find at a Local Store</span>
+                    </Link>
+                  )}
                 </div>
 
               </div>

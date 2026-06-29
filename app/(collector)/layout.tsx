@@ -12,6 +12,9 @@ const NAV = [
   { href: '/?tab=decks',      label: 'Top Decks' },
   { href: '/?tab=news',       label: 'News' },
   { href: '/?tab=chat',       label: 'Ask Khoa', dividerAfter: true },
+  { href: '/marketplace/find', label: 'Find Locally' },
+  { href: '/marketplace/holds', label: 'My Holds' },
+  { href: '/stores',          label: 'Stores', dividerAfter: true },
   { href: '/settings',        label: 'Settings' },
 ];
 

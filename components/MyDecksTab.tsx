@@ -6,6 +6,7 @@ import { CardNameLink } from '@/components/CardNameLink';
 import type { CollectionCardData } from './CollectionBrowser';
 import CardDetailModal from './CardDetailModal';
 import BuyOnTCGPlayer from './BuyOnTCGPlayer';
+import CardAvailabilityBadge from './marketplace/CardAvailabilityBadge';
 
 interface Deck {
   id: string;
@@ -1234,6 +1235,30 @@ function ColorPips({ colors }: { colors?: string[] }) {
   );
 }
 
+// Lazy-loads location + availability for a single card in the missing cards list
+function LocalAvailabilityBadge({ scryfallId }: { scryfallId: string }) {
+  const [state, setState] = useState<{ available: boolean; storeCount: number; lowestPriceCents: number } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/marketplace/preferences')
+      .then(r => r.ok ? r.json() : null)
+      .then((prefs: { lat: number | null; lng: number | null } | null) => {
+        if (cancelled || !prefs?.lat || !prefs?.lng) return;
+        return fetch(`/api/marketplace/availability?cards=${scryfallId}&lat=${prefs.lat}&lng=${prefs.lng}`);
+      })
+      .then(r => r && r.ok ? r.json() : null)
+      .then((data: Record<string, { available: boolean; store_count: number; lowest_price_cents: number }> | null) => {
+        if (cancelled || !data) return;
+        const d = data[scryfallId];
+        if (d?.available) setState({ available: true, storeCount: d.store_count, lowestPriceCents: d.lowest_price_cents });
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [scryfallId]);
+  if (!state) return null;
+  return <CardAvailabilityBadge scryfallId={scryfallId} available storeCount={state.storeCount} lowestPriceCents={state.lowestPriceCents} />;
+}
+
 function DeckDetail({
   deck,
   collection,
@@ -1425,7 +1450,7 @@ function DeckDetail({
           body: JSON.stringify({ identifiers: chunk.map(name => ({ name })) }),
         })
           .then(r => r.ok ? r.json() : { data: [] })
-          .then((d: { data: Array<{ name: string; prices?: { usd?: string }; type_line?: string; cmc?: number; rarity?: string; colors?: string[]; set?: string; collector_number?: string }> }) => d.data ?? [])
+          .then((d: { data: Array<{ id?: string; name: string; prices?: { usd?: string }; type_line?: string; cmc?: number; rarity?: string; colors?: string[]; set?: string; collector_number?: string }> }) => d.data ?? [])
       )
     ).then(results => {
       const updates: Record<string, ReturnType<typeof getCardData>> = {};
@@ -1440,6 +1465,7 @@ function DeckDetail({
             colors: card.colors ?? [],
             set: card.set?.toUpperCase() ?? null,
             collectorNumber: card.collector_number ?? null,
+            scryfallId: card.id ?? null,
           } as NonNullable<ReturnType<typeof getCardData>>;
           updates[card.name.toLowerCase()] = entry;
           // MDFCs return "Front // Back" — also index by front face so deck lookups by short name work
@@ -2032,21 +2058,28 @@ function DeckDetail({
                       const cardData = getCardData(name);
                       const price = isBasicLand(name) ? 0 : (cardData?.priceUsd ?? 0);
                       const hasData = isBasicLand(name) || cardData != null;
+                      const scryfallId = cardData?.scryfallId as string | undefined;
                       return (
-                        <button
-                          key={name}
-                          type="button"
-                          onClick={() => onCardClick?.(name)}
-                          className="w-full flex items-center justify-between text-xs text-left hover:bg-zinc-800 p-2 -mx-2 rounded transition-colors"
-                        >
-                          <span className="flex items-center gap-2 min-w-0">
-                            <ColorPips colors={cardData?.colors} />
-                            <span className="text-zinc-400 truncate">{qty}x {name}</span>
-                          </span>
-                          <span className={`shrink-0 ml-2 ${price > 0 ? 'text-amber-400 font-semibold' : 'text-zinc-600'}`}>
-                            {isBasicLand(name) ? '$0.00' : price > 0 ? `$${(price * qty).toFixed(2)}` : hasData ? '$0.00' : '—'}
-                          </span>
-                        </button>
+                        <div key={name} className="space-y-0.5">
+                          <button
+                            type="button"
+                            onClick={() => onCardClick?.(name)}
+                            className="w-full flex items-center justify-between text-xs text-left hover:bg-zinc-800 p-2 -mx-2 rounded transition-colors"
+                          >
+                            <span className="flex items-center gap-2 min-w-0">
+                              <ColorPips colors={cardData?.colors} />
+                              <span className="text-zinc-400 truncate">{qty}x {name}</span>
+                            </span>
+                            <span className={`shrink-0 ml-2 ${price > 0 ? 'text-amber-400 font-semibold' : 'text-zinc-600'}`}>
+                              {isBasicLand(name) ? '$0.00' : price > 0 ? `$${(price * qty).toFixed(2)}` : hasData ? '$0.00' : '—'}
+                            </span>
+                          </button>
+                          {scryfallId && !isBasicLand(name) && (
+                            <div className="ml-2 pl-2">
+                              <LocalAvailabilityBadge scryfallId={scryfallId} />
+                            </div>
+                          )}
+                        </div>
                       );
                     })}
                   </div>

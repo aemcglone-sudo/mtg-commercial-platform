@@ -4,6 +4,7 @@ import { useState, Suspense } from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import LogoutButton from '@/components/LogoutButton';
+import NotificationBell from '@/components/marketplace/NotificationBell';
 
 export interface NavItem {
   href?: string;
@@ -132,7 +133,10 @@ function NavContent({ items, userName, brandLabel, onNavigate }: NavSidebarProps
       </nav>
 
       <div className="px-4 py-4 border-t border-zinc-800 space-y-1">
-        {userName && <p className="text-xs text-zinc-600 px-1 truncate">{userName}</p>}
+        <div className="flex items-center justify-between px-1 mb-1">
+          {userName && <p className="text-xs text-zinc-600 truncate">{userName}</p>}
+          <NotificationBell />
+        </div>
         <LogoutButton className="block w-full text-left px-3 py-2 rounded-lg text-sm text-zinc-600 hover:text-zinc-400 hover:bg-zinc-900 transition-colors" />
       </div>
     </div>
