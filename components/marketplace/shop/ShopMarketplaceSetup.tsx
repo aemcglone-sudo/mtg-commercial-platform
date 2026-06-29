@@ -6,7 +6,6 @@ interface ShopPrefs {
   marketplaceActive: boolean;
   specialties: string[];
   holdInstructions: string;
-  maxHoldsPerDay: number | null;
   notifyOnHoldRequest: boolean;
   notifyViaSms: boolean;
   smsNumber: string;
@@ -31,7 +30,7 @@ export default function ShopMarketplaceSetup() {
       .then((data: ShopPrefs | null) => {
         setPrefs(data ?? {
           marketplaceActive: false, specialties: [], holdInstructions: '',
-          maxHoldsPerDay: null, notifyOnHoldRequest: true, notifyViaSms: false,
+          notifyOnHoldRequest: true, notifyViaSms: false,
           smsNumber: '', address: '', lat: null, lng: null,
         });
       })
@@ -172,17 +171,6 @@ export default function ShopMarketplaceSetup() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm text-zinc-400 mb-1">Max holds per day <span className="text-zinc-600">(blank = unlimited)</span></label>
-          <input
-            type="number"
-            min={1}
-            value={prefs.maxHoldsPerDay ?? ''}
-            onChange={e => setPrefs({ ...prefs, maxHoldsPerDay: e.target.value ? parseInt(e.target.value) : null })}
-            placeholder="Unlimited"
-            className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
-          />
-        </div>
         <div>
           <label className="block text-sm text-zinc-400 mb-1">SMS for hold notifications</label>
           <input
