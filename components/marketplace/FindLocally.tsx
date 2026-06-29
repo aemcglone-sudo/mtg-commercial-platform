@@ -1,7 +1,10 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import dynamic from 'next/dynamic';
 import HoldRequestModal from './HoldRequestModal';
+
+const MapView = dynamic(() => import('./MapView'), { ssr: false });
 
 interface CardResult {
   inventoryId: string;
@@ -33,6 +36,8 @@ interface SearchResult {
   shopId: string;
   shopName: string;
   shopSlug: string;
+  shopLat: number;
+  shopLng: number;
   distanceMiles: number;
 }
 
@@ -258,6 +263,20 @@ export default function FindLocally({ initialCard }: Props) {
         <div className="bg-emerald-900/30 border border-emerald-800 rounded-xl px-4 py-3 text-sm text-emerald-300">
           ✅ {holdSuccess}
         </div>
+      )}
+
+      {/* Map — shown when we have results with coordinates */}
+      {(results.length > 0 || cardResults.length > 0) && location && (
+        <MapView
+          pins={[
+            { lat: location.lat, lng: location.lng, label: 'You', isUser: true },
+            ...results
+              .filter((r, i, a) => a.findIndex(x => x.shopId === r.shopId) === i)
+              .map(r => ({ lat: r.shopLat, lng: r.shopLng, label: r.shopName, popup: `<strong>${r.shopName}</strong><br/>${r.distanceMiles} mi away` })),
+            ...cardResults.map(r => ({ lat: 0, lng: 0, label: r.shopName })).filter(p => p.lat !== 0),
+          ].filter(p => !isNaN(p.lat) && !isNaN(p.lng))}
+          className="h-52"
+        />
       )}
 
       {/* Card-specific results (from scryfallId deeplink) */}

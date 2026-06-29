@@ -8,6 +8,7 @@ interface ShopRow {
   address: string; city: string; state: string; zip: string;
   phone: string; email: string; website_url: string; logo_url: string; banner_url: string;
   hours: string; specialties: string[]; hold_instructions: string;
+  lat: string | null; lng: string | null;
 }
 
 interface InventoryRow {
@@ -23,7 +24,8 @@ export async function GET(
 
   const shop = await findOne<ShopRow>(
     `SELECT id, name, slug, description, address, city, state, zip, phone, email,
-            website_url, logo_url, banner_url, hours, specialties, hold_instructions
+            website_url, logo_url, banner_url, hours, specialties, hold_instructions,
+            lat::text, lng::text
      FROM shops WHERE slug = ? AND marketplace_active = true AND is_active = true`,
     [slug]
   );
@@ -52,6 +54,8 @@ export async function GET(
       hours: shop.hours,
       specialties: shop.specialties ?? [],
       holdInstructions: shop.hold_instructions,
+      lat: shop.lat ? parseFloat(shop.lat) : null,
+      lng: shop.lng ? parseFloat(shop.lng) : null,
     },
     inventory: inventory.map(i => ({
       scryfallId: i.scryfall_id,

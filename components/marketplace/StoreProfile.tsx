@@ -1,8 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import HoldRequestModal from './HoldRequestModal';
+
+const MapView = dynamic(() => import('./MapView'), { ssr: false });
 
 interface StoreDetail {
   id: string;
@@ -14,6 +17,8 @@ interface StoreDetail {
   hours: string;
   specialties: string[];
   holdInstructions: string;
+  lat: number | null;
+  lng: number | null;
   inventory: InventoryItem[];
 }
 
@@ -72,6 +77,15 @@ export default function StoreProfile({ slug }: { slug: string }) {
           </div>
         )}
       </div>
+
+      {/* Map */}
+      {store.lat && store.lng && (
+        <MapView
+          pins={[{ lat: store.lat, lng: store.lng, label: store.name, popup: `<strong>${store.name}</strong><br/>${store.address}` }]}
+          className="h-56"
+          zoom={15}
+        />
+      )}
 
       {holdSuccess && (
         <div className="bg-emerald-900/30 border border-emerald-800 rounded-xl px-4 py-3 text-sm text-emerald-300">✅ {holdSuccess}</div>

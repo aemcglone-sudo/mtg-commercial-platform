@@ -16,6 +16,8 @@ interface SearchRow {
   shop_id: string;
   shop_name: string;
   shop_slug: string;
+  shop_lat: string;
+  shop_lng: string;
   distance_miles: string;
 }
 
@@ -43,6 +45,8 @@ export async function GET(req: NextRequest) {
       s.id AS shop_id,
       s.name AS shop_name,
       s.slug AS shop_slug,
+      s.lat::text AS shop_lat,
+      s.lng::text AS shop_lng,
       (
         3959 * acos(
           LEAST(1.0, cos(radians(?)) * cos(radians(s.lat::float)) *
@@ -82,6 +86,8 @@ export async function GET(req: NextRequest) {
       shopId: r.shop_id,
       shopName: r.shop_name,
       shopSlug: r.shop_slug,
+      shopLat: parseFloat(r.shop_lat),
+      shopLng: parseFloat(r.shop_lng),
       distanceMiles: parseFloat(parseFloat(r.distance_miles).toFixed(1)),
     })),
   });

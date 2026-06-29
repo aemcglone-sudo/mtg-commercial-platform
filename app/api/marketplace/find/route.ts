@@ -12,6 +12,8 @@ interface ShopMatchRow {
   shop_state: string;
   shop_phone: string;
   hold_instructions: string;
+  shop_lat: string;
+  shop_lng: string;
   distance_miles: string;
   scryfall_id: string;
   inventory_id: string;
@@ -44,6 +46,8 @@ export async function GET(req: NextRequest) {
       s.state AS shop_state,
       s.phone AS shop_phone,
       s.hold_instructions,
+      s.lat::text AS shop_lat,
+      s.lng::text AS shop_lng,
       (
         3959 * acos(
           LEAST(1.0, cos(radians(?)) * cos(radians(s.lat::float)) *
@@ -78,7 +82,7 @@ export async function GET(req: NextRequest) {
   const shopMap = new Map<string, {
     shopId: string; shopName: string; shopSlug: string;
     address: string; phone: string; holdInstructions: string;
-    distanceMiles: number;
+    distanceMiles: number; lat: number; lng: number;
     cardsAvailable: Array<{ scryfallId: string; inventoryId: string; condition: string; foil: boolean; priceCents: number; quantity: number }>;
   }>();
 
@@ -92,6 +96,8 @@ export async function GET(req: NextRequest) {
         phone: row.shop_phone,
         holdInstructions: row.hold_instructions,
         distanceMiles: parseFloat(parseFloat(row.distance_miles).toFixed(1)),
+        lat: parseFloat(row.shop_lat),
+        lng: parseFloat(row.shop_lng),
         cardsAvailable: [],
       });
     }
