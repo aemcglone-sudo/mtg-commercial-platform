@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import HoldRequestModal from './HoldRequestModal';
 
 interface CardResult {
@@ -41,8 +41,15 @@ interface Props {
   initialShop?: string;
 }
 
-export default function FindLocally({ initialCard, initialShop }: Props) {
+const CONDITION_COLOR: Record<string, string> = {
+  NM: 'text-emerald-400', LP: 'text-green-400', MP: 'text-yellow-400',
+  HP: 'text-orange-400', DMG: 'text-red-400',
+};
+
+export default function FindLocally({ initialCard }: Props) {
   const [query, setQuery] = useState('');
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [resolvedName, setResolvedName] = useState(''); // canonical name after selection
   const [results, setResults] = useState<SearchResult[]>([]);
   const [cardResults, setCardResults] = useState<CardResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -52,6 +59,8 @@ export default function FindLocally({ initialCard, initialShop }: Props) {
   const [radius, setRadius] = useState(50);
   const [holdItem, setHoldItem] = useState<CardResult | null>(null);
   const [holdSuccess, setHoldSuccess] = useState('');
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // Load location from prefs
   useEffect(() => {
@@ -67,10 +76,34 @@ export default function FindLocally({ initialCard, initialShop }: Props) {
       .catch(() => {});
   }, []);
 
-  // Search for initial card
+  // Scryfall autocomplete
+  useEffect(() => {
+    if (resolvedName) { setSuggestions([]); return; } // already resolved, no autocomplete
+    if (query.length < 2) { setSuggestions([]); return; }
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`https://api.scryfall.com/cards/autocomplete?q=${encodeURIComponent(query)}`);
+        if (res.ok) {
+          const data = await res.json() as { data: string[] };
+          setSuggestions((data.data ?? []).slice(0, 8));
+        }
+      } catch { /* ignore */ }
+    }, 250);
+  }, [query, resolvedName]);
+
+  // Search for initial card on mount once location is set
   useEffect(() => {
     if (initialCard && location) searchCard(initialCard);
   }, [initialCard, location]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function selectSuggestion(name: string) {
+    setQuery(name);
+    setResolvedName(name);
+    setSuggestions([]);
+    // Auto-search on selection
+    if (location) searchByName(name);
+  }
 
   function requestGPS() {
     navigator.geolocation.getCurrentPosition(
@@ -89,7 +122,6 @@ export default function FindLocally({ initialCard, initialShop }: Props) {
     const data = await res.json() as { lat: number; lng: number };
     setLocation(data);
     setLocationMethod('zip');
-    // Save to prefs
     fetch('/api/marketplace/preferences', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -97,17 +129,25 @@ export default function FindLocally({ initialCard, initialShop }: Props) {
     }).catch(() => {});
   }
 
-  async function search() {
-    if (!location || query.length < 2) return;
+  async function searchByName(name: string) {
+    if (!location) return;
     setLoading(true);
     setResults([]);
     setCardResults([]);
-    const res = await fetch(`/api/marketplace/search?q=${encodeURIComponent(query)}&lat=${location.lat}&lng=${location.lng}&radius=${radius}`);
+    const res = await fetch(`/api/marketplace/search?q=${encodeURIComponent(name)}&lat=${location.lat}&lng=${location.lng}&radius=${radius}`);
     if (res.ok) {
       const data = await res.json() as { results: SearchResult[] };
       setResults(data.results);
     }
     setLoading(false);
+  }
+
+  function handleSearch() {
+    if (!location || query.length < 2) return;
+    // If user typed something without selecting a suggestion, search as-is
+    setResolvedName(query);
+    setSuggestions([]);
+    searchByName(query);
   }
 
   async function searchCard(scryfallId: string) {
@@ -122,9 +162,7 @@ export default function FindLocally({ initialCard, initialShop }: Props) {
     setLoading(false);
   }
 
-  const conditionColor = (c: string) =>
-    ({ NM: 'text-emerald-400', LP: 'text-green-400', MP: 'text-yellow-400', HP: 'text-orange-400', DMG: 'text-red-400' }[c] ?? 'text-zinc-400');
-
+  // Location setup screen
   if (!location) {
     return (
       <div className="max-w-lg mx-auto py-16 text-center space-y-6">
@@ -155,13 +193,7 @@ export default function FindLocally({ initialCard, initialShop }: Props) {
             maxLength={5}
             className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
           />
-          <button
-            type="button"
-            onClick={setByZip}
-            className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-100 rounded-lg text-sm font-medium transition-colors"
-          >
-            Go
-          </button>
+          <button type="button" onClick={setByZip} className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-100 rounded-lg text-sm font-medium transition-colors">Go</button>
         </div>
       </div>
     );
@@ -169,40 +201,58 @@ export default function FindLocally({ initialCard, initialShop }: Props) {
 
   return (
     <div className="space-y-6">
-      {/* Search bar */}
-      <div className="flex gap-2">
-        <input
-          type="text"
-          value={query}
-          onChange={e => setQuery(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && search()}
-          placeholder="Search for a card…"
-          className="flex-1 bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
-        />
-        <select
-          value={radius}
-          onChange={e => setRadius(parseInt(e.target.value))}
-          className="bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-zinc-300 focus:outline-none"
-        >
-          <option value={10}>10 mi</option>
-          <option value={25}>25 mi</option>
-          <option value={50}>50 mi</option>
-          <option value={100}>100 mi</option>
-        </select>
-        <button
-          type="button"
-          onClick={search}
-          disabled={loading || query.length < 2}
-          className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
-        >
-          {loading ? '…' : 'Search'}
-        </button>
+      {/* Search bar with autocomplete */}
+      <div className="space-y-2">
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <input
+              ref={inputRef}
+              type="text"
+              value={query}
+              onChange={e => { setQuery(e.target.value); setResolvedName(''); setResults([]); setCardResults([]); }}
+              onKeyDown={e => { if (e.key === 'Enter') { setSuggestions([]); handleSearch(); } if (e.key === 'Escape') setSuggestions([]); }}
+              placeholder="Search for a card…"
+              className="w-full bg-zinc-800 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
+            />
+            {suggestions.length > 0 && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-zinc-800 border border-zinc-700 rounded-xl overflow-hidden z-50 shadow-xl max-h-52 overflow-y-auto">
+                {suggestions.map(name => (
+                  <button
+                    key={name}
+                    type="button"
+                    onMouseDown={e => { e.preventDefault(); selectSuggestion(name); }}
+                    className="w-full text-left px-4 py-2.5 text-sm text-zinc-200 hover:bg-zinc-700 transition-colors block"
+                  >
+                    {name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <select
+            value={radius}
+            onChange={e => setRadius(parseInt(e.target.value))}
+            className="bg-zinc-800 border border-zinc-700 rounded-xl px-3 py-2 text-sm text-zinc-300 focus:outline-none"
+          >
+            <option value={10}>10 mi</option>
+            <option value={25}>25 mi</option>
+            <option value={50}>50 mi</option>
+            <option value={100}>100 mi</option>
+          </select>
+          <button
+            type="button"
+            onClick={handleSearch}
+            disabled={loading || query.length < 2}
+            className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
+          >
+            {loading ? '…' : 'Search'}
+          </button>
+        </div>
+        <p className="text-xs text-zinc-600">
+          📍 {locationMethod === 'zip' ? `Zip ${zip}` : 'Your location'} · {radius} mile radius
+          <button type="button" onClick={() => setLocation(null)} className="ml-2 text-zinc-500 hover:text-zinc-300 underline">Change</button>
+        </p>
       </div>
-
-      <p className="text-xs text-zinc-600">
-        📍 {locationMethod === 'zip' ? `Zip ${zip}` : 'Your location'} · {radius} mile radius
-        <button type="button" onClick={() => setLocation(null)} className="ml-2 text-zinc-500 hover:text-zinc-300 underline">Change</button>
-      </p>
 
       {holdSuccess && (
         <div className="bg-emerald-900/30 border border-emerald-800 rounded-xl px-4 py-3 text-sm text-emerald-300">
@@ -210,10 +260,10 @@ export default function FindLocally({ initialCard, initialShop }: Props) {
         </div>
       )}
 
-      {/* Card-specific results */}
+      {/* Card-specific results (from scryfallId deeplink) */}
       {cardResults.length > 0 && (
         <div className="space-y-3">
-          <h3 className="font-semibold text-zinc-100">{cardResults[0]?.shopName ? `Results` : ''}</h3>
+          <h3 className="font-semibold text-zinc-100">Available nearby</h3>
           {cardResults.map(r => (
             <div key={r.inventoryId} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex items-center gap-4">
               {r.imageUrl && <img src={r.imageUrl} alt="" className="w-10 h-14 object-cover rounded" />}
@@ -226,18 +276,12 @@ export default function FindLocally({ initialCard, initialShop }: Props) {
                   </div>
                   <div className="text-right shrink-0">
                     <p className="text-amber-400 font-semibold">${(r.priceCents / 100).toFixed(2)}</p>
-                    <p className={`text-xs ${conditionColor(r.condition)}`}>{r.condition}{r.foil ? ' Foil' : ''}</p>
+                    <p className={`text-xs ${CONDITION_COLOR[r.condition] ?? 'text-zinc-400'}`}>{r.condition}{r.foil ? ' Foil' : ''}</p>
                     <p className="text-xs text-zinc-600">Qty: {r.quantity}</p>
                   </div>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => setHoldItem(r)}
-                className="shrink-0 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-medium transition-colors"
-              >
-                Hold
-              </button>
+              <button type="button" onClick={() => setHoldItem(r)} className="shrink-0 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-medium transition-colors">Hold</button>
             </div>
           ))}
         </div>
@@ -246,14 +290,14 @@ export default function FindLocally({ initialCard, initialShop }: Props) {
       {/* Name search results */}
       {results.length > 0 && (
         <div className="space-y-3">
-          <h3 className="font-semibold text-zinc-100">{results.length} result{results.length !== 1 ? 's' : ''}</h3>
+          <h3 className="font-semibold text-zinc-100">{results.length} result{results.length !== 1 ? 's' : ''} for <span className="text-zinc-400 font-normal">"{resolvedName}"</span></h3>
           {results.map(r => (
             <div key={r.inventoryId} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex items-center gap-4">
               {r.imageUrl && <img src={r.imageUrl} alt="" className="w-10 h-14 object-cover rounded" />}
               <div className="flex-1 min-w-0">
                 <p className="font-medium text-zinc-100 text-sm truncate">{r.cardName}</p>
                 <p className="text-xs text-zinc-400">{r.shopName} · {r.distanceMiles} mi</p>
-                <p className={`text-xs ${conditionColor(r.condition)}`}>{r.condition}{r.foil ? ' · Foil' : ''}</p>
+                <p className={`text-xs ${CONDITION_COLOR[r.condition] ?? 'text-zinc-400'}`}>{r.condition}{r.foil ? ' · Foil' : ''}</p>
               </div>
               <div className="text-right shrink-0 space-y-1">
                 <p className="text-amber-400 font-semibold">${(r.priceCents / 100).toFixed(2)}</p>
@@ -276,8 +320,11 @@ export default function FindLocally({ initialCard, initialShop }: Props) {
         </div>
       )}
 
-      {!loading && results.length === 0 && cardResults.length === 0 && query.length >= 2 && (
-        <p className="text-zinc-600 text-sm text-center py-8">No results found within {radius} miles. Try expanding your radius.</p>
+      {!loading && results.length === 0 && cardResults.length === 0 && resolvedName && (
+        <p className="text-zinc-600 text-sm text-center py-8">
+          No results for "{resolvedName}" within {radius} miles.
+          {radius < 100 && <> Try <button type="button" onClick={() => setRadius(r => Math.min(r * 2, 100))} className="underline text-zinc-500 hover:text-zinc-300">expanding your radius</button>.</>}
+        </p>
       )}
 
       {holdItem && (

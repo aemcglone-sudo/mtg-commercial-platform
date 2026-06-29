@@ -10,34 +10,61 @@ interface ShopPrefs {
   notifyOnHoldRequest: boolean;
   notifyViaSms: boolean;
   smsNumber: string;
+  address: string;
+  lat: number | null;
+  lng: number | null;
 }
 
 const SPECIALTIES = ['Commander', 'Modern', 'Legacy', 'Vintage', 'Standard', 'Pioneer', 'Draft', 'Sealed', 'Buylist', 'Foils', 'Signed', 'Alters'];
 
 export default function ShopMarketplaceSetup() {
   const [prefs, setPrefs] = useState<ShopPrefs | null>(null);
+  const [zip, setZip] = useState('');
+  const [geocoding, setGeocoding] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    // Load from shop settings API
     fetch('/api/shops/settings/marketplace')
       .then(r => r.ok ? r.json() : null)
-      .then((data: ShopPrefs | null) => { if (data) setPrefs(data); else setPrefs({ marketplaceActive: false, specialties: [], holdInstructions: '', maxHoldsPerDay: null, notifyOnHoldRequest: true, notifyViaSms: false, smsNumber: '' }); })
-      .catch(() => setPrefs({ marketplaceActive: false, specialties: [], holdInstructions: '', maxHoldsPerDay: null, notifyOnHoldRequest: true, notifyViaSms: false, smsNumber: '' }));
+      .then((data: ShopPrefs | null) => {
+        setPrefs(data ?? {
+          marketplaceActive: false, specialties: [], holdInstructions: '',
+          maxHoldsPerDay: null, notifyOnHoldRequest: true, notifyViaSms: false,
+          smsNumber: '', address: '', lat: null, lng: null,
+        });
+      })
+      .catch(() => {});
   }, []);
+
+  async function geocodeZip() {
+    if (!/^\d{5}$/.test(zip)) { setError('Enter a valid 5-digit zip'); return; }
+    setGeocoding(true);
+    setError('');
+    const res = await fetch(`/api/marketplace/geocode?zip=${zip}`);
+    if (!res.ok) { setError('Zip not found'); setGeocoding(false); return; }
+    const data = await res.json() as { lat: number; lng: number };
+    setPrefs(p => p ? { ...p, lat: data.lat, lng: data.lng } : p);
+    setGeocoding(false);
+  }
 
   async function save() {
     if (!prefs) return;
+    if (prefs.marketplaceActive && (!prefs.lat || !prefs.lng)) {
+      setError('Set your store location (zip code) before enabling the marketplace');
+      return;
+    }
     setSaving(true);
-    await fetch('/api/shops/settings/marketplace', {
+    setError('');
+    const res = await fetch('/api/shops/settings/marketplace', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(prefs),
     });
+    if (!res.ok) setError('Failed to save');
+    else { setSaved(true); setTimeout(() => setSaved(false), 3000); }
     setSaving(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
   }
 
   function toggle(specialty: string) {
@@ -55,15 +82,66 @@ export default function ShopMarketplaceSetup() {
           <h2 className="font-semibold text-zinc-100">Marketplace Settings</h2>
           <p className="text-xs text-zinc-500 mt-0.5">Control how your shop appears to local collectors</p>
         </div>
-        <label className="flex items-center gap-2 cursor-pointer">
-          <span className="text-sm text-zinc-400">{prefs.marketplaceActive ? 'Active' : 'Inactive'}</span>
-          <div
-            onClick={() => setPrefs({ ...prefs, marketplaceActive: !prefs.marketplaceActive })}
-            className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${prefs.marketplaceActive ? 'bg-emerald-600' : 'bg-zinc-700'}`}
-          >
-            <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${prefs.marketplaceActive ? 'translate-x-5.5' : 'translate-x-0.5'}`} />
+        <div
+          onClick={() => setPrefs({ ...prefs, marketplaceActive: !prefs.marketplaceActive })}
+          className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${prefs.marketplaceActive ? 'bg-emerald-600' : 'bg-zinc-700'}`}
+        >
+          <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${prefs.marketplaceActive ? 'translate-x-5.5' : 'translate-x-0.5'}`} />
+        </div>
+      </div>
+
+      {/* Store location — required for search */}
+      <div className="space-y-2">
+        <label className="block text-sm text-zinc-400">Store location <span className="text-red-400">*</span> <span className="text-zinc-600 text-xs">(required for collectors to find you)</span></label>
+        {prefs.lat && prefs.lng ? (
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-emerald-400">📍 Location set ({prefs.lat.toFixed(3)}, {prefs.lng.toFixed(3)})</span>
+            <button type="button" onClick={() => setPrefs({ ...prefs, lat: null, lng: null })} className="text-xs text-zinc-600 hover:text-zinc-400 underline">Change</button>
           </div>
-        </label>
+        ) : (
+          <div className="space-y-2">
+            <div>
+              <input
+                type="text"
+                value={prefs.address}
+                onChange={e => setPrefs({ ...prefs, address: e.target.value })}
+                placeholder="123 Main St, Atlanta, GA 30301"
+                className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
+              />
+              <p className="text-xs text-zinc-600 mt-1">Then set your zip code so collectors can find you by distance:</p>
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={zip}
+                onChange={e => setZip(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && geocodeZip()}
+                placeholder="Store zip code"
+                maxLength={5}
+                className="w-32 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
+              />
+              <button
+                type="button"
+                onClick={geocodeZip}
+                disabled={geocoding}
+                className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-100 rounded-lg text-sm transition-colors disabled:opacity-50"
+              >
+                {geocoding ? 'Looking up…' : 'Set Location'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div>
+        <label className="block text-sm text-zinc-400 mb-1">Store address <span className="text-zinc-600">(shown to collectors)</span></label>
+        <input
+          type="text"
+          value={prefs.address}
+          onChange={e => setPrefs({ ...prefs, address: e.target.value })}
+          placeholder="123 Main St, Atlanta, GA 30301"
+          className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
+        />
       </div>
 
       <div>
@@ -95,7 +173,7 @@ export default function ShopMarketplaceSetup() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm text-zinc-400 mb-1">Max holds per day <span className="text-zinc-600">(leave blank for unlimited)</span></label>
+          <label className="block text-sm text-zinc-400 mb-1">Max holds per day <span className="text-zinc-600">(blank = unlimited)</span></label>
           <input
             type="number"
             min={1}
@@ -116,6 +194,8 @@ export default function ShopMarketplaceSetup() {
           />
         </div>
       </div>
+
+      {error && <p className="text-sm text-red-400">{error}</p>}
 
       <div className="flex justify-end">
         <button
