@@ -11,10 +11,12 @@ const NAV = [
   { href: '/?tab=mydecks',    label: 'My Decks & Lists' },
   { href: '/?tab=decks',      label: 'Top Decks' },
   { href: '/?tab=news',       label: 'News' },
-  { href: '/?tab=chat',       label: 'Ask Khoa', dividerAfter: true },
-  { href: '/marketplace/find', label: 'Find Locally' },
-  { href: '/marketplace/holds', label: 'My Holds' },
-  { href: '/stores',          label: 'Stores', dividerAfter: true },
+  { href: '/?tab=chat',       label: 'Ask Khoa' },
+  { label: 'Shop', dividerAfter: true, children: [
+    { href: '/stores',            label: 'Nearby Shops' },
+    { href: '/marketplace/find',  label: 'Card Finder' },
+    { href: '/products',          label: 'MTG Products' },
+  ]},
   { href: '/settings',        label: 'Settings' },
 ];
 

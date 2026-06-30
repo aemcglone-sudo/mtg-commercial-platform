@@ -16,6 +16,11 @@ interface InventoryRow {
   foil: boolean; price_cents: string; quantity: string; image_url: string; set_code: string;
 }
 
+interface ProductRow {
+  id: string; name: string; category: string; image_url: string | null;
+  price_cents: string; quantity: string; fulfillment_type: string; notes: string | null;
+}
+
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ slug: string }> }
@@ -39,6 +44,15 @@ export async function GET(
     [shop.id]
   );
 
+  const products = await findMany<ProductRow>(
+    `SELECT sp.id, p.name, p.category, p.image_url,
+            sp."priceCents"::text AS price_cents, sp.quantity::text, sp.fulfillment_type, sp.notes
+     FROM shop_products sp JOIN mtg_products p ON p.id = sp."productId"
+     WHERE sp."shopId" = ? AND sp.is_active = true AND sp.quantity > 0
+     ORDER BY p.name ASC`,
+    [shop.id]
+  );
+
   return NextResponse.json({
     shop: {
       id: shop.id,
@@ -57,6 +71,16 @@ export async function GET(
       lat: shop.lat ? parseFloat(shop.lat) : null,
       lng: shop.lng ? parseFloat(shop.lng) : null,
     },
+    products: products.map(p => ({
+      id: p.id,
+      name: p.name,
+      category: p.category,
+      imageUrl: p.image_url,
+      priceCents: parseInt(p.price_cents),
+      quantity: parseInt(p.quantity),
+      fulfillmentType: p.fulfillment_type,
+      notes: p.notes,
+    })),
     inventory: inventory.map(i => ({
       scryfallId: i.scryfall_id,
       cardName: i.card_name,

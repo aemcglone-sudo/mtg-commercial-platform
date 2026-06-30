@@ -24,6 +24,10 @@ interface CardResult {
   setName?: string;
   collectorNumber?: string;
   distanceMiles: number;
+  shopLat?: number;
+  shopLng?: number;
+  collectorLat?: number;
+  collectorLng?: number;
 }
 
 interface SearchResult {
@@ -73,6 +77,7 @@ export default function FindLocally({ initialCard }: Props) {
   const [radius, setRadius] = useState(50);
   const [holdItem, setHoldItem] = useState<CardResult | null>(null);
   const [holdSuccess, setHoldSuccess] = useState('');
+  const [activeShopName, setActiveShopName] = useState<string | undefined>(undefined);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const setNameCache = useRef<Record<string, string>>({});
@@ -291,92 +296,142 @@ export default function FindLocally({ initialCard }: Props) {
         </div>
       )}
 
-      {/* Map — shown when we have results with coordinates */}
-      {(results.length > 0 || cardResults.length > 0) && location && (
-        <MapView
-          pins={[
-            { lat: location.lat, lng: location.lng, label: 'You', isUser: true },
-            ...results
-              .filter((r, i, a) => a.findIndex(x => x.shopId === r.shopId) === i)
-              .map(r => ({ lat: r.shopLat, lng: r.shopLng, label: r.shopName, popup: `<strong>${r.shopName}</strong><br/>${r.distanceMiles} mi away` })),
-            ...cardResults.map(r => ({ lat: 0, lng: 0, label: r.shopName })).filter(p => p.lat !== 0),
-          ].filter(p => !isNaN(p.lat) && !isNaN(p.lng))}
-          className="h-52"
-        />
-      )}
+      {/* Side-by-side: cards left, map right */}
+      {(results.length > 0 || cardResults.length > 0) && location ? (
+        <div className="flex flex-col lg:flex-row gap-4 items-start">
 
-      {/* Card-specific results (from scryfallId deeplink) */}
-      {cardResults.length > 0 && (
-        <div className="space-y-3">
-          <h3 className="font-semibold text-zinc-100">Available nearby</h3>
-          {cardResults.map(r => (
-            <div key={r.inventoryId} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex items-center gap-4">
-              {r.imageUrl && <img src={r.imageUrl} alt="" className="w-10 h-14 object-cover rounded" />}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <p className="font-medium text-zinc-100 text-sm">{r.shopName}</p>
-                    <p className="text-xs text-zinc-500">{r.address}</p>
-                    <p className="text-xs text-zinc-600">{r.distanceMiles} miles away</p>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-amber-400 font-semibold">${(r.priceCents / 100).toFixed(2)}</p>
-                    <p className={`text-xs ${CONDITION_COLOR[r.condition] ?? 'text-zinc-400'}`}>{CONDITION_LABEL[r.condition] ?? r.condition}{r.foil ? ' · Foil' : ' · Non-foil'}</p>
-                    {r.setName && <p className="text-xs text-zinc-600">{r.setName}{r.collectorNumber ? ` #${r.collectorNumber}` : ''}</p>}
-                    <p className="text-xs text-zinc-600">Qty: {r.quantity}</p>
-                  </div>
-                </div>
-              </div>
-              <button type="button" onClick={() => setHoldItem(r)} className="shrink-0 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-medium transition-colors">Hold</button>
-            </div>
-          ))}
-        </div>
-      )}
+          {/* Card results list */}
+          <div className="flex-1 min-w-0 space-y-3">
 
-      {/* Name search results */}
-      {results.length > 0 && (
-        <div className="space-y-3">
-          <h3 className="font-semibold text-zinc-100">{results.length} result{results.length !== 1 ? 's' : ''} for <span className="text-zinc-400 font-normal">"{resolvedName}"</span></h3>
-          {results.map(r => (
-            <div key={r.inventoryId} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex items-center gap-4">
-              {r.imageUrl && <img src={r.imageUrl} alt="" className="w-10 h-14 object-cover rounded" />}
-              <div className="flex-1 min-w-0">
-                <p className="font-medium text-zinc-100 text-sm truncate">{r.cardName}</p>
-                {r.setName && <p className="text-xs text-zinc-500">{r.setName}{r.collectorNumber ? ` #${r.collectorNumber}` : ''}</p>}
-                <p className="text-xs text-zinc-400">{r.shopName} · {r.distanceMiles} mi</p>
-                <p className={`text-xs ${CONDITION_COLOR[r.condition] ?? 'text-zinc-400'}`}>{CONDITION_LABEL[r.condition] ?? r.condition}{r.foil ? ' · Foil' : ' · Non-foil'}</p>
-              </div>
-              <div className="text-right shrink-0 space-y-1">
-                <p className="text-amber-400 font-semibold">${(r.priceCents / 100).toFixed(2)}</p>
-                <button
-                  type="button"
-                  onClick={() => setHoldItem({
-                    inventoryId: r.inventoryId, shopId: r.shopId, shopName: r.shopName,
-                    shopSlug: r.shopSlug, address: '', phone: '', holdInstructions: '',
-                    cardName: r.cardName, condition: r.condition, foil: r.foil,
-                    quantity: r.quantity, priceCents: r.priceCents, imageUrl: r.imageUrl,
-                    setCode: '', distanceMiles: r.distanceMiles,
-                  })}
-                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-medium transition-colors"
-                >
-                  Hold
-                </button>
-              </div>
-            </div>
-          ))}
+            {/* Card-specific results (scryfallId deeplink) */}
+            {cardResults.length > 0 && (
+              <>
+                <h3 className="font-semibold text-zinc-100">Available nearby</h3>
+                {cardResults.map(r => (
+                  <div
+                    key={r.inventoryId}
+                    onMouseEnter={() => setActiveShopName(r.shopName)}
+                    onMouseLeave={() => setActiveShopName(undefined)}
+                    className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex items-center gap-4 transition-colors hover:border-zinc-600 cursor-default"
+                  >
+                    {r.imageUrl && <img src={r.imageUrl} alt="" className="w-10 h-14 object-cover rounded shrink-0" />}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-emerald-400 truncate">📍 {r.shopName}</p>
+                      {r.address && <p className="text-xs text-zinc-500 truncate">{r.address}</p>}
+                      <p className="text-xs text-zinc-500">{r.distanceMiles} mi away</p>
+                      <p className={`text-xs mt-0.5 ${CONDITION_COLOR[r.condition] ?? 'text-zinc-400'}`}>{CONDITION_LABEL[r.condition] ?? r.condition}{r.foil ? ' · Foil' : ' · Non-foil'}</p>
+                      {r.setName && <p className="text-xs text-zinc-600">{r.setName}{r.collectorNumber ? ` #${r.collectorNumber}` : ''}</p>}
+                    </div>
+                    <div className="shrink-0 text-right space-y-1.5">
+                      <p className="text-amber-400 font-semibold">${(r.priceCents / 100).toFixed(2)}</p>
+                      <p className="text-xs text-zinc-600">Qty: {r.quantity}</p>
+                      <button type="button" onClick={() => setHoldItem({ ...r, collectorLat: location?.lat, collectorLng: location?.lng })} className="block px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-medium transition-colors">Hold</button>
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
+
+            {/* Name search results */}
+            {results.length > 0 && (
+              <>
+                <h3 className="font-semibold text-zinc-100">{results.length} result{results.length !== 1 ? 's' : ''} for <span className="text-zinc-400 font-normal">"{resolvedName}"</span></h3>
+                {results.map(r => (
+                  <div
+                    key={r.inventoryId}
+                    onMouseEnter={() => setActiveShopName(r.shopName)}
+                    onMouseLeave={() => setActiveShopName(undefined)}
+                    className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex items-center gap-3 transition-colors hover:border-zinc-600 cursor-default"
+                  >
+                    {r.imageUrl && <img src={r.imageUrl} alt="" className="w-10 h-14 object-cover rounded shrink-0" />}
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-zinc-100 text-sm truncate">{r.cardName}</p>
+                      {r.setName && <p className="text-xs text-zinc-500">{r.setName}{r.collectorNumber ? ` #${r.collectorNumber}` : ''}</p>}
+                      <p className="text-sm font-semibold text-emerald-400 truncate mt-0.5">📍 {r.shopName}</p>
+                      <p className="text-xs text-zinc-500">{r.distanceMiles} mi away</p>
+                      <p className={`text-xs ${CONDITION_COLOR[r.condition] ?? 'text-zinc-400'}`}>{CONDITION_LABEL[r.condition] ?? r.condition}{r.foil ? ' · Foil' : ' · Non-foil'}</p>
+                    </div>
+                    <div className="text-right shrink-0 space-y-1">
+                      <p className="text-amber-400 font-semibold">${(r.priceCents / 100).toFixed(2)}</p>
+                      <button
+                        type="button"
+                        onClick={() => setHoldItem({
+                          inventoryId: r.inventoryId, shopId: r.shopId, shopName: r.shopName,
+                          shopSlug: r.shopSlug, address: '', phone: '', holdInstructions: '',
+                          cardName: r.cardName, condition: r.condition, foil: r.foil,
+                          quantity: r.quantity, priceCents: r.priceCents, imageUrl: r.imageUrl,
+                          setCode: r.setCode, setName: r.setName, distanceMiles: r.distanceMiles,
+                          shopLat: r.shopLat, shopLng: r.shopLng,
+                          collectorLat: location?.lat, collectorLng: location?.lng,
+                        })}
+                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-medium transition-colors"
+                      >
+                        Hold
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
+
+          {/* Sticky map on the right */}
+          <div className="w-full lg:w-80 lg:sticky lg:top-4 shrink-0">
+            <MapView
+              activePinLabel={activeShopName}
+              pins={[
+                { lat: location.lat, lng: location.lng, label: 'You', isUser: true },
+                ...results
+                  .filter((r, i, a) => a.findIndex(x => x.shopId === r.shopId) === i)
+                  .filter(r => !isNaN(r.shopLat) && !isNaN(r.shopLng))
+                  .map(r => ({ lat: r.shopLat, lng: r.shopLng, label: r.shopName, popup: `<strong>${r.shopName}</strong><br/>${r.distanceMiles} mi away` })),
+                ...cardResults
+                  .filter(r => r.address)
+                  .map(r => ({ lat: 0, lng: 0, label: r.shopName }))
+                  .filter(p => p.lat !== 0),
+              ].filter(p => !isNaN(p.lat) && !isNaN(p.lng))}
+              className="h-64 lg:h-96"
+            />
+            {activeShopName && (
+              <p className="text-xs text-center text-zinc-500 mt-2">📍 {activeShopName}</p>
+            )}
+          </div>
         </div>
-      )}
+      ) : null}
 
       {!loading && results.length === 0 && cardResults.length === 0 && resolvedName && (
-        <p className="text-zinc-600 text-sm text-center py-8">
-          No results for "{resolvedName}" within {radius} miles.
-          {radius < 100 && <> Try <button type="button" onClick={() => setRadius(r => Math.min(r * 2, 100))} className="underline text-zinc-500 hover:text-zinc-300">expanding your radius</button>.</>}
-        </p>
+        <div className="text-center py-8 space-y-4">
+          <p className="text-zinc-500 text-sm">
+            No local shops have <span className="text-zinc-300">&ldquo;{resolvedName}&rdquo;</span> within {radius} miles.
+            {radius < 100 && <> <button type="button" onClick={() => setRadius(r => Math.min(r * 2, 100))} className="underline text-zinc-400 hover:text-zinc-200">Expand radius</button>.</>}
+          </p>
+          <div className="border border-zinc-800 rounded-xl p-5 space-y-3 max-w-sm mx-auto text-left">
+            <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Buy it online instead</p>
+            <a
+              href={`https://www.tcgplayer.com/search/magic/product?q=${encodeURIComponent(resolvedName)}&view=grid`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-between w-full px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors group"
+            >
+              <span className="text-sm text-zinc-200 font-medium">TCGplayer</span>
+              <span className="text-xs text-zinc-500 group-hover:text-zinc-300">Search →</span>
+            </a>
+            <a
+              href={`https://www.cardkingdom.com/catalog/search?search=header&filter[name]=${encodeURIComponent(resolvedName)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-between w-full px-4 py-2.5 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors group"
+            >
+              <span className="text-sm text-zinc-200 font-medium">Card Kingdom</span>
+              <span className="text-xs text-zinc-500 group-hover:text-zinc-300">Search →</span>
+            </a>
+          </div>
+        </div>
       )}
 
       {holdItem && (
         <HoldRequestModal
-          item={{ inventoryId: holdItem.inventoryId, shopId: holdItem.shopId, shopName: holdItem.shopName, cardName: holdItem.cardName, condition: holdItem.condition, foil: holdItem.foil, priceCents: holdItem.priceCents, holdInstructions: holdItem.holdInstructions }}
+          item={{ inventoryId: holdItem.inventoryId, shopId: holdItem.shopId, shopName: holdItem.shopName, cardName: holdItem.cardName, condition: holdItem.condition, foil: holdItem.foil, priceCents: holdItem.priceCents, holdInstructions: holdItem.holdInstructions, setName: holdItem.setName, shopLat: holdItem.shopLat, shopLng: holdItem.shopLng, collectorLat: holdItem.collectorLat, collectorLng: holdItem.collectorLng }}
           onClose={() => setHoldItem(null)}
           onSuccess={() => {
             setHoldItem(null);
