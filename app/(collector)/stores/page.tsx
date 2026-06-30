@@ -1,35 +1,67 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import StoreDiscovery from '@/components/marketplace/StoreDiscovery';
+
+interface Store {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  address: string;
+  phone: string;
+  websiteUrl: string;
+  inventoryCount: number;
+}
 
 export default function StoresPage() {
+  const [stores, setStores] = useState<Store[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch('/api/marketplace/stores')
+      .then(r => r.json())
+      .then((d: { stores: Store[] }) => setStores(d.stores ?? []))
+      .finally(() => setLoading(false));
+  }, []);
+
   return (
     <div className="min-h-screen">
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+      <div className="max-w-2xl mx-auto px-4 sm:px-6 py-6 space-y-4">
         <div>
-          <h1 className="text-xl font-bold">Local Game Stores</h1>
-          <p className="text-zinc-500 text-sm mt-0.5">Find shops near you on Grimoire</p>
+          <h1 className="text-xl font-bold">Nearby Shops</h1>
+          <p className="text-zinc-500 text-sm mt-0.5">Local game stores on Grimoire</p>
         </div>
 
-        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-2">
-          <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">About this directory</p>
-          <ul className="text-sm text-zinc-400 leading-relaxed space-y-1 list-disc list-inside">
-            <li>These are local game stores that have joined Grimoire and made their single card inventory searchable.</li>
-            <li>Click a store to browse their in-stock singles, see prices and conditions, and request holds.</li>
-            <li>Use <Link href="/marketplace/find" className="text-zinc-300 underline underline-offset-2">Find Locally</Link> to search across all nearby stores at once for a specific card.</li>
-          </ul>
-          <div className="pt-1">
-            <Link
-              href="/marketplace/find"
-              className="text-sm text-zinc-300 hover:text-zinc-100 underline underline-offset-2 transition-colors"
-            >
-              Search for a specific card →
-            </Link>
+        {loading ? (
+          <p className="text-zinc-600 text-sm py-8 text-center">Loading…</p>
+        ) : stores.length === 0 ? (
+          <p className="text-zinc-600 text-sm py-8 text-center">No shops have joined Grimoire yet.</p>
+        ) : (
+          <div className="space-y-2">
+            {stores.map(s => (
+              <Link
+                key={s.id}
+                href={`/stores/${s.slug}`}
+                className="block bg-zinc-900 border border-zinc-800 hover:border-zinc-600 rounded-xl px-5 py-4 transition-colors group"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-zinc-100 group-hover:text-white leading-snug">{s.name}</p>
+                    {s.address && <p className="text-sm text-zinc-500 mt-0.5">{s.address}</p>}
+                    {s.websiteUrl && (
+                      <p className="text-xs text-emerald-500 mt-1 truncate">{s.websiteUrl.replace(/^https?:\/\//, '')}</p>
+                    )}
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-xs text-zinc-600">{s.inventoryCount} singles</p>
+                    <p className="text-xs text-zinc-700 mt-0.5 group-hover:text-zinc-500">View →</p>
+                  </div>
+                </div>
+              </Link>
+            ))}
           </div>
-        </div>
-
-        <StoreDiscovery />
+        )}
       </div>
     </div>
   );

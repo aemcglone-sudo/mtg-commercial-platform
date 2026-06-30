@@ -3,18 +3,24 @@
 import NavSidebar from '@/components/NavSidebar';
 
 const NAV = [
-  { href: '/shop/dashboard',                  label: 'Dashboard', exact: true },
-  { href: '/shop/orders',                     label: 'Orders' },
-  { href: '/shop/holds',                      label: 'Hold Queue' },
-  { href: '/shop/campaigns',                  label: 'Campaigns' },
-  { href: '/shop/marketplace',                label: 'Local Marketplace', dividerAfter: true },
-  { label: 'Pricing', children: [
-      { href: '/shop/pricing?tab=sale',     label: 'Sale Pricing' },
-      { href: '/shop/pricing?tab=purchase', label: 'Purchase Pricing' },
+  { href: '/shop/dashboard', label: 'Dashboard', exact: true },
+  { href: '/shop/dashboard?tab=insights', label: 'Insights' },
+  { label: 'Catalog', children: [
+      { href: '/shop/collection?tab=inventory', label: 'Inventory' },
+      { href: '/shop/products',                 label: 'Products' },
+      { href: '/shop/pricing?tab=sale',         label: 'Sale Pricing' },
+      { href: '/shop/pricing?tab=purchase',     label: 'Purchase Pricing' },
   ]},
-  { href: '/shop/collection?tab=inventory',   label: 'Inventory' },
-  { href: '/shop/collection?tab=chat',        label: 'Ask Khoa', dividerAfter: true },
-  { href: '/shop/settings',                   label: 'Settings' },
+  { label: 'Orders', children: [
+      { href: '/shop/holds',  label: 'Hold Queue' },
+      { href: '/shop/orders', label: 'Orders' },
+  ]},
+  { label: 'Marketing', children: [
+      { href: '/shop/campaigns',   label: 'Campaigns' },
+      { href: '/shop/marketplace', label: 'Local Marketplace' },
+  ]},
+  { href: '/shop/collection?tab=chat', label: 'Ask Khoa' },
+  { href: '/shop/settings', label: 'Settings' },
 ];
 
 export default function ShopOwnerLayout({ children }: { children: React.ReactNode }) {
