@@ -79,7 +79,7 @@ export default function ProductPage() {
           Grimoire is a Magic: The Gathering platform that connects two types of users: <strong className="text-zinc-100">collectors</strong> who own cards and want to build decks with them, and <strong className="text-zinc-100">local card shops</strong> that buy and sell singles. Collectors are the core user — they own physical cards, track their collection, and want to build the best decks they can from what they have, filling gaps by buying singles from local stores.
         </p>
         <p className="text-zinc-400 leading-relaxed">
-          The platform launched June 4, 2026. In its first three weeks it shipped collection management, AI-powered deck building, a full shop owner storefront, role-based authentication for three user types, an admin console, and a guided deck wizard with AI card suggestions. A local store discovery and hold-request feature is in planning.
+          The platform launched June 4, 2026. It shipped collection management, AI-powered deck building, a full shop owner storefront, role-based authentication for three user types, an admin console, a guided deck wizard with AI card suggestions, and — as of late June — a complete local marketplace connecting collectors to nearby shops for singles, sealed product, and accessories, with SMS/in-app notifications, a card watchlist, and shop-run promotional campaigns.
         </p>
       </section>
 
@@ -142,6 +142,14 @@ export default function ProductPage() {
             <h3 className="text-sm font-semibold text-amber-400 uppercase tracking-widest mb-2">Shop Insights</h3>
             <p className="text-zinc-400 leading-relaxed">Four analytics dashboards give store owners a real-time view of business performance. <strong className="text-zinc-300">Overview</strong> surfaces total inventory value, cost basis, units sold, and margin by rarity. <strong className="text-zinc-300">Performance</strong> tracks revenue, cost, and profit month-over-month with a rolling trend chart. <strong className="text-zinc-300">Pricing Intelligence</strong> identifies underpriced cards (vs TCGPlayer market) and cards that have gained value since acquisition — so owners know what to reprice. <strong className="text-zinc-300">Velocity</strong> shows top-selling cards, recently sold items, and dead-stock cards that have sat idle, helping owners make restocking and markdown decisions.</p>
           </div>
+          <div>
+            <h3 className="text-sm font-semibold text-amber-400 uppercase tracking-widest mb-2">Pricing Rules Engine</h3>
+            <p className="text-zinc-400 leading-relaxed">A rule-based pricing system separate from one-off offer links. Owners build ordered sell-pricing rules (condition multipliers against market price) and buy-pricing rules (buylist offer percentages), with a pricing matrix for combined condition/rarity logic and configurable price floors so cards never sell below cost. A wizard previews the effect of a rule change across the live inventory before it&apos;s applied, and bulk repricing pushes updated prices across the whole store in one action.</p>
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold text-amber-400 uppercase tracking-widest mb-2">Orders &amp; Purchases</h3>
+            <p className="text-zinc-400 leading-relaxed">Dedicated pages track marketplace orders (fulfilled holds) and buylist purchases (cards bought from collectors) separately from the general transaction history, giving owners a clear ledger of what came in vs. what went out.</p>
+          </div>
         </div>
       </section>
 
@@ -160,14 +168,11 @@ export default function ProductPage() {
         </div>
       </section>
 
-      {/* Local Marketplace — Planned */}
+      {/* Local Marketplace */}
       <section>
-        <h2 className="text-xl font-semibold text-zinc-100 mb-1 pb-2 border-b border-zinc-800">
-          Local Marketplace
-          <span className="ml-3 text-xs font-normal text-amber-500 bg-amber-500/10 border border-amber-700/40 rounded-full px-2.5 py-0.5">Planned</span>
-        </h2>
+        <h2 className="text-xl font-semibold text-zinc-100 mb-1 pb-2 border-b border-zinc-800">Local Marketplace</h2>
         <p className="text-zinc-400 leading-relaxed mb-6">
-          Connects collectors who need specific cards to local stores that have them in stock — closing the loop between deck building and card acquisition.
+          Connects collectors who need specific cards, sealed product, or accessories to local stores that have them in stock — closing the loop between deck building and acquisition.
         </p>
         <div className="space-y-6">
           <div>
@@ -176,11 +181,11 @@ export default function ProductPage() {
           </div>
           <div>
             <h3 className="text-sm font-semibold text-amber-400 uppercase tracking-widest mb-2">Find Locally</h3>
-            <p className="text-zinc-400 leading-relaxed">After building a deck — or viewing any saved deck — the collector sees which cards they&apos;re missing from their collection. They click &ldquo;Find Locally&rdquo; and Grimoire shows which nearby stores have those exact cards in stock, with price and condition.</p>
+            <p className="text-zinc-400 leading-relaxed">After building a deck — or viewing any saved deck — the collector sees which cards they&apos;re missing from their collection. They click &ldquo;Find Locally&rdquo; and Grimoire shows which nearby stores have those exact cards in stock, with price and condition. Search supports Scryfall autocomplete, GPS or manual location entry, an adjustable search radius, and an interactive map (Leaflet/OpenStreetMap) showing pinned shop locations alongside the list view, with hover-sync between the list and the map. A card can also be deep-linked straight to its local-availability results from anywhere in the app.</p>
           </div>
           <div>
             <h3 className="text-sm font-semibold text-amber-400 uppercase tracking-widest mb-2">Hold Workflow</h3>
-            <p className="text-zinc-400 leading-relaxed mb-2">The collector requests a hold and adds a note about when they can pick up. The store gets notified immediately — in-app, email, or SMS. The owner confirms availability and sets a pickup window. The collector gets notified with the store&apos;s address and hours. When the collector picks up, the owner marks it complete. Holds expire automatically if unclaimed.</p>
+            <p className="text-zinc-400 leading-relaxed mb-2">The collector requests a hold and adds a note about when they can pick up. The store gets notified immediately — in-app and SMS. The owner confirms availability and sets a pickup window. The collector gets notified with the store&apos;s address, hours, and any shop-specific pickup instructions. When the collector picks up, the owner marks it complete. Holds expire automatically via a scheduled job: requested holds expire after 24 hours unconfirmed, confirmed holds expire after a 72-hour pickup window, and the card is returned to available inventory.</p>
             <div className="flex items-center gap-2 text-xs text-zinc-500 mt-2">
               <span className="bg-zinc-800 border border-zinc-700 rounded px-2 py-1">Requested</span>
               <span>→</span>
@@ -195,7 +200,31 @@ export default function ProductPage() {
           </div>
           <div>
             <h3 className="text-sm font-semibold text-amber-400 uppercase tracking-widest mb-2">Store Discovery</h3>
-            <p className="text-zinc-400 leading-relaxed">A <code className="text-zinc-300 bg-zinc-800 px-1.5 py-0.5 rounded text-xs">/stores</code> page lists all participating shops with address, hours, specialties, and live inventory. Shops are public by default with opt-out available to the store owner.</p>
+            <p className="text-zinc-400 leading-relaxed">A <code className="text-zinc-300 bg-zinc-800 px-1.5 py-0.5 rounded text-xs">/stores</code> page lists all participating shops with address, hours, specialties, and live inventory. Each shop has a public profile page with hours, contact info, hold instructions, a location map, and a searchable view of its sellable inventory with condition badges and hold buttons on individual cards. Shops are public by default with opt-out available to the store owner.</p>
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold text-amber-400 uppercase tracking-widest mb-2">Sealed Products &amp; Accessories</h3>
+            <p className="text-zinc-400 leading-relaxed">Beyond singles, collectors can browse sealed product (booster boxes, collector boxes, bundles, commander precons, prerelease kits) and accessories (sleeves, deck boxes, playmats, dice, binders, storage) carried by local shops, filtered by type and category, with MSRP shown and nearby-shop availability and distance. The collector view only ever shows what a shop has actually listed — never an unfiltered catalog. Shop owners add listings by searching a built-in product catalog (drawn from real product/MSRP data) or, for anything not in the catalog, entering it manually with a name and category. If a collector wants something a shop doesn&apos;t currently have, they can send a product request with an optional note; the shop owner sees it in a Requests queue and responds available or declined, which notifies the collector back.</p>
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold text-amber-400 uppercase tracking-widest mb-2">Notifications</h3>
+            <p className="text-zinc-400 leading-relaxed">A notification bell in the header shows an unread-count badge and opens a drawer listing hold and marketplace activity (confirmed, declined, completed, cancelled, expired, card-available, shop campaigns) with relative timestamps and per-item or mark-all-read controls, auto-refreshing every 60 seconds. The same events are mirrored to SMS (via Twilio) for collectors and shop owners who opt in, covering hold requested/confirmed/declined/cancelled and watchlist card-available alerts.</p>
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold text-amber-400 uppercase tracking-widest mb-2">Card Watchlist</h3>
+            <p className="text-zinc-400 leading-relaxed">Collectors can watch specific cards manually, and cards missing from any saved deck are auto-added to the watchlist via a scheduled sync job. When a watched card shows up in a nearby shop&apos;s inventory within the collector&apos;s radius and price ceiling, they get notified (in-app and SMS), with a per-card cooldown to avoid repeat alerts and respect for any shops the collector has muted.</p>
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold text-amber-400 uppercase tracking-widest mb-2">Marketplace Preferences</h3>
+            <p className="text-zinc-400 leading-relaxed">Collectors set a home address (geocoded automatically or via GPS), a search radius, SMS opt-in with phone number, and separate toggles for card-availability alerts vs. shop campaigns/promotions. Individual shops can be muted to stop their campaign messages without losing hold or watchlist notifications.</p>
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold text-amber-400 uppercase tracking-widest mb-2">Shop Marketplace Campaigns</h3>
+            <p className="text-zinc-400 leading-relaxed">Shop owners can message opted-in nearby collectors directly — general announcements, sales, new arrivals, buylist updates, or event/tournament promos — with a subject and short message, sent as in-app notifications and SMS. Campaigns are capped at 3 sends per week per shop, show an estimated recipient count before sending, and keep a history of drafts and sent campaigns.</p>
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold text-amber-400 uppercase tracking-widest mb-2">Shop Setup &amp; Marketplace Settings</h3>
+            <p className="text-zinc-400 leading-relaxed">A guided setup flow captures store name, description, address (with auto-geocoding), and contact info, then routes into inventory upload. A separate marketplace settings tab lets owners configure hold mechanics and visibility for the local marketplace independent of their core storefront settings.</p>
           </div>
         </div>
       </section>
@@ -227,6 +256,12 @@ export default function ProductPage() {
 
 // Historical entries live in /api/admin/changelog (PUT to seed)
 const _UNUSED: { date: string; type: 'feature' | 'fix' | 'infra'; description: string }[] = [
+  // June 30
+  { date: '2026-06-30', type: 'feature', description: 'Shop owners: Add Product modal now searches the real sealed-product/accessory catalog (661 items) with a live scrollable results list, plus a manual fallback for anything not in the catalog' },
+  { date: '2026-06-30', type: 'fix',     description: 'Shop owner product add was 403ing for accounts with a stale collector-role session cookie — role now refreshed by re-login' },
+  { date: '2026-06-30', type: 'fix',     description: 'Marketplace product queries referenced a non-existent shops.marketplaceEnabled column — corrected to marketplace_active across 3 routes, fixing collector Products page and nearby-shop lookups' },
+  { date: '2026-06-30', type: 'feature', description: 'Collector Products page sourced strictly from shop-listed inventory (shop_products), not the full catalog — categories filter reflects only what local shops actually carry' },
+  { date: '2026-06-30', type: 'feature', description: 'Admin product overview page brought up to date with full Local Marketplace feature set (previously marked "Planned" despite being shipped) and shop pricing rules / orders / purchases sections' },
   // June 28
   { date: '2026-06-28', type: 'fix',     description: 'Theme recommendations now instant static lookup (~70ms) — replaced 25s NVIDIA NIM call for archetype-based flows' },
   { date: '2026-06-28', type: 'fix',     description: 'ThemeSelector now self-fetches recommendations — no longer dependent on parent state timing' },

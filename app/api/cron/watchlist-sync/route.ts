@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
   // Missing cards are those not in the user's collection
   // For now, sync all cards in all decks into the watchlist as deck_missing entries
   const decks = await findMany<{ user_id: string; id: string; cards: string }>(
-    `SELECT user_id, id, cards FROM decks WHERE cards IS NOT NULL AND cards != '{}'`,
+    `SELECT "userId" AS user_id, id, cards FROM decks WHERE cards IS NOT NULL AND cards != '{}'`,
     []
   );
 
@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
 
     // Resolve scryfall IDs from shop_inventory (best effort — card_name match)
     const resolved = await findMany<{ card_name: string; scryfall_id: string }>(
-      `SELECT DISTINCT card_name, scryfall_id FROM shop_inventory WHERE card_name = ANY(?)`,
+      `SELECT DISTINCT "cardName" AS card_name, "scryfallId" AS scryfall_id FROM shop_inventory WHERE "cardName" = ANY(?)`,
       [cardNames]
     );
 
@@ -75,7 +75,6 @@ export async function GET(req: NextRequest) {
     []
   );
 
-  // @ts-expect-error — pg QueryResult has rowCount
   deactivated = result?.rowCount ?? 0;
 
   return NextResponse.json({ upserted, deactivated });

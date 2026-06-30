@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { analyzeForChat, extractDeckFromContext, formatCardsForStream } from '@/lib/magic-agent/chat-integration';
-import { findOne } from '@/lib/db';
+import { findOne, findMany } from '@/lib/db';
 import { getRole, getAuthenticatedUserId } from '@/lib/auth';
 import { isDemoMode, chatWithClaude } from '@/lib/demo-llm';
 
@@ -157,12 +157,25 @@ export async function POST(req: NextRequest) {
   if (role === 'shop_owner') {
     const userId = getAuthenticatedUserId(req);
     if (userId) {
-      const shop = await findOne<{ buy_matrix: unknown; margin_targets: unknown; name: string }>(
-        'SELECT buy_matrix, margin_targets, name FROM shops WHERE "userId" = ?',
+      const shop = await findOne<{ id: string; buy_matrix: unknown; margin_targets: unknown; name: string }>(
+        'SELECT id, buy_matrix, margin_targets, name FROM shops WHERE "userId" = ?',
         [userId]
       ).catch(() => null);
       if (shop) {
-        shopBuyContext = `\n\n═══════════════════════════════════════════\n## SHOP OWNER MODE — ${shop.name}\n\nYou are also assisting a shop owner. You have access to their buy pricing configuration:\n- Buy matrix (% of TCG market paid per condition): ${JSON.stringify(shop.buy_matrix ?? { NM: 60, LP: 51, MP: 42, HP: 30, DMG: 15 })}\n- Margin targets by card value: ${JSON.stringify(shop.margin_targets ?? { under_1: 60, '1_to_10': 45, '10_to_50': 40, over_50: 35 })}\n\nWhen the shop owner asks about buying cards, you can:\n- Calculate fair buy prices: tcgPrice × (matrix[condition] / 100)\n- Flag risky buys (cards trending down, upcoming rotation, power level bans)\n- Evaluate whether a collection offer is fair\n- Suggest counter-offers when a seller's ask is above market\n\nNever reveal the exact buy matrix percentages to non-owners. Only use this info when the user is the shop owner asking about purchasing.\n═══════════════════════════════════════════`;
+        interface SealedRow { product_name: string; quantity: number; price_cents: string }
+        const sealedProducts = await findMany<SealedRow>(
+          `SELECT p.name AS product_name, sp.quantity, sp."priceCents"::text AS price_cents
+           FROM shop_products sp JOIN mtg_products p ON p.id = sp."productId"
+           WHERE sp."shopId" = ? AND sp.is_active = true AND sp.quantity > 0
+           ORDER BY sp.quantity DESC LIMIT 20`,
+          [shop.id]
+        ).catch(() => [] as SealedRow[]);
+
+        const sealedLines = sealedProducts.length > 0
+          ? sealedProducts.map(s => `  • ${s.product_name} — qty ${s.quantity} @ $${(parseInt(s.price_cents) / 100).toFixed(2)}`).join('\n')
+          : '  (none listed)';
+
+        shopBuyContext = `\n\n═══════════════════════════════════════════\n## SHOP OWNER MODE — ${shop.name}\n\nYou are also assisting a shop owner. You have access to their buy pricing configuration:\n- Buy matrix (% of TCG market paid per condition): ${JSON.stringify(shop.buy_matrix ?? { NM: 60, LP: 51, MP: 42, HP: 30, DMG: 15 })}\n- Margin targets by card value: ${JSON.stringify(shop.margin_targets ?? { under_1: 60, '1_to_10': 45, '10_to_50': 40, over_50: 35 })}\n\nWhen the shop owner asks about buying cards, you can:\n- Calculate fair buy prices: tcgPrice × (matrix[condition] / 100)\n- Flag risky buys (cards trending down, upcoming rotation, power level bans)\n- Evaluate whether a collection offer is fair\n- Suggest counter-offers when a seller's ask is above market\n\nNever reveal the exact buy matrix percentages to non-owners. Only use this info when the user is the shop owner asking about purchasing.\n\n## Sealed Products & Accessories in Stock\n${sealedLines}\n\nWhen the shop owner asks about their sealed products or accessories, reference this list. You can discuss sell-through, pricing strategy, and what products to reorder.\n═══════════════════════════════════════════`;
       }
     }
   }

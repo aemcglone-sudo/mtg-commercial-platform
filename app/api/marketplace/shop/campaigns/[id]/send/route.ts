@@ -33,7 +33,7 @@ export async function POST(
   const role = getRole(req);
   if (!userId || role !== 'shop_owner') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
-  const shop = await findOne<ShopRow>(`SELECT id, name FROM shops WHERE user_id = ?`, [userId]);
+  const shop = await findOne<ShopRow>(`SELECT id, name FROM shops WHERE "userId" = ?`, [userId]);
   if (!shop) return NextResponse.json({ error: 'Shop not found' }, { status: 404 });
 
   const { id } = await params;

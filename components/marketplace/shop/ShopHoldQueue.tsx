@@ -6,10 +6,10 @@ interface Hold {
   id: string;
   status: string;
   cardName: string;
+  scryfallId: string;
   condition: string;
   foil: boolean;
   priceCents: number;
-  imageUrl: string;
   collectorName: string;
   collectorEmail: string;
   pickupWindow: string;
@@ -54,8 +54,12 @@ export default function ShopHoldQueue() {
     setLoading(true);
     const res = await fetch('/api/marketplace/shop/holds');
     if (res.ok) {
-      const data = await res.json() as GroupedHolds;
-      setGrouped(data);
+      const data = await res.json() as { holds: GroupedHolds };
+      const g = data.holds ?? data;
+      setGrouped(g);
+      // Switch to first tab that has holds
+      const firstWithHolds = STATUS_ORDER.find(s => (g[s]?.length ?? 0) > 0);
+      if (firstWithHolds) setActiveTab(firstWithHolds);
     }
     setLoading(false);
   }
@@ -64,7 +68,7 @@ export default function ShopHoldQueue() {
     if (!confirmModal) return;
     setSubmitting(true);
     await fetch(`/api/marketplace/holds/${confirmModal.id}/confirm`, {
-      method: 'POST',
+      method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ shopNote }),
     });
@@ -78,7 +82,7 @@ export default function ShopHoldQueue() {
     if (!declineModal) return;
     setSubmitting(true);
     await fetch(`/api/marketplace/holds/${declineModal.id}/decline`, {
-      method: 'POST',
+      method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ shopNote }),
     });
@@ -90,7 +94,7 @@ export default function ShopHoldQueue() {
 
   async function completeHold(id: string) {
     if (!confirm('Mark this hold as completed (card picked up)?')) return;
-    await fetch(`/api/marketplace/holds/${id}/complete`, { method: 'POST' });
+    await fetch(`/api/marketplace/holds/${id}/complete`, { method: 'PATCH' });
     await load();
   }
 
@@ -146,7 +150,6 @@ export default function ShopHoldQueue() {
           {currentHolds.map(h => (
             <div key={h.id} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-3">
               <div className="flex items-start gap-4">
-                {h.imageUrl && <img src={h.imageUrl} alt="" className="w-10 h-14 object-cover rounded shrink-0" />}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-start justify-between gap-2">
                     <div>

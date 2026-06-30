@@ -14,6 +14,7 @@ const US_STATES = [
 interface ShopData {
   name: string;
   description: string;
+  address: string;
   city: string;
   state: string;
   phone: string;
@@ -29,6 +30,7 @@ export default function ShopSetupPage() {
   const [form, setForm] = useState<ShopData>({
     name: '',
     description: '',
+    address: '',
     city: '',
     state: '',
     phone: '',
@@ -45,6 +47,7 @@ export default function ShopSetupPage() {
         setForm({
           name: s.name === 'My Shop' ? '' : (s.name ?? ''),
           description: s.description ?? '',
+          address: s.address ?? '',
           city: s.city ?? '',
           state: s.state ?? '',
           phone: s.phone ?? '',
@@ -66,17 +69,38 @@ export default function ShopSetupPage() {
     setSaving(true);
     setError('');
     try {
+      let lat: number | null = null;
+      let lng: number | null = null;
+      const fullAddress = [form.address.trim(), form.city.trim(), form.state, 'USA'].filter(Boolean).join(', ');
+      if (form.address.trim() && form.city.trim() && form.state) {
+        try {
+          const geoRes = await fetch(
+            `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(fullAddress)}`,
+            { headers: { 'Accept-Language': 'en' } }
+          );
+          const geoData = await geoRes.json() as Array<{ lat: string; lon: string }>;
+          if (geoData[0]) {
+            lat = parseFloat(geoData[0].lat);
+            lng = parseFloat(geoData[0].lon);
+          }
+        } catch {
+          // Geocoding is best-effort; save the rest of the form even if it fails
+        }
+      }
+
       const res = await fetch('/api/shops/me', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: form.name.trim(),
           description: form.description.trim(),
+          address: form.address.trim(),
           city: form.city.trim(),
           state: form.state,
           phone: form.phone.trim(),
           email: form.email.trim(),
           websiteUrl: form.websiteUrl.trim(),
+          ...(lat !== null && lng !== null ? { lat, lng } : {}),
         }),
       });
       if (!res.ok) throw new Error('Save failed');
@@ -149,6 +173,17 @@ export default function ShopSetupPage() {
           {/* Location */}
           <section className="space-y-4">
             <h2 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Location</h2>
+            <div>
+              <label className="block text-sm font-medium text-zinc-300 mb-1.5">Street address</label>
+              <input
+                type="text"
+                placeholder="e.g. 123 Main St"
+                value={form.address}
+                onChange={e => set('address', e.target.value)}
+                className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-amber-500 transition-colors"
+              />
+              <p className="text-xs text-zinc-600 mt-1.5 px-1">Used to place your shop on the map for nearby collectors. Not shown publicly unless you add it to your description.</p>
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-sm font-medium text-zinc-300 mb-1.5">City</label>

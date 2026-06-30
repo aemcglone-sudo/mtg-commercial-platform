@@ -84,7 +84,7 @@ export async function notifyShopOwner(
     await createNotification(ownerUserId, type, payload);
   }
 
-  if (smsBody && (!prefs || prefs.sms_enabled) && prefs?.sms_number) {
+  if (smsBody && prefs?.sms_enabled && prefs?.sms_number) {
     await sendSms(prefs.sms_number, smsBody).catch(e =>
       console.error('[notify] SMS to shop owner failed:', e)
     );

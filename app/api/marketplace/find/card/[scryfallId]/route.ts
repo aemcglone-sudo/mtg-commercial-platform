@@ -13,6 +13,8 @@ interface ShopCardRow {
   shop_state: string;
   shop_phone: string;
   hold_instructions: string;
+  shop_lat: string;
+  shop_lng: string;
   condition: string;
   foil: boolean;
   quantity: string;
@@ -48,6 +50,8 @@ export async function GET(
       s.state AS shop_state,
       s.phone AS shop_phone,
       s.hold_instructions,
+      s.lat::text AS shop_lat,
+      s.lng::text AS shop_lng,
       si.condition,
       si.foil,
       si.quantity::text,
@@ -96,6 +100,8 @@ export async function GET(
       setCode: r.set_code,
       collectorNumber: r.collector_number,
       distanceMiles: parseFloat(parseFloat(r.distance_miles).toFixed(1)),
+      shopLat: parseFloat(r.shop_lat),
+      shopLng: parseFloat(r.shop_lng),
     })),
   });
 }

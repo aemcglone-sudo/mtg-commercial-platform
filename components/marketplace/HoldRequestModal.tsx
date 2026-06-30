@@ -1,6 +1,9 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import dynamic from 'next/dynamic';
+
+const MapView = dynamic(() => import('./MapView'), { ssr: false });
 
 const CONDITION_LABEL: Record<string, string> = {
   NM: 'Near Mint',
@@ -20,6 +23,10 @@ interface InventoryItem {
   priceCents: number;
   holdInstructions?: string;
   setName?: string;
+  shopLat?: number;
+  shopLng?: number;
+  collectorLat?: number;
+  collectorLng?: number;
 }
 
 interface Props {
@@ -38,6 +45,14 @@ export default function HoldRequestModal({ item, sourceDeckId, sourceListId, sou
   const [pickupDays, setPickupDays] = useState<string[]>([]);
   const [pickupTimes, setPickupTimes] = useState<string[]>([]);
   const [collectorNote, setCollectorNote] = useState('');
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = ''; };
+  }, []);
+
+  const collectorLoc = item.collectorLat && item.collectorLng
+    ? { lat: item.collectorLat, lng: item.collectorLng }
+    : null;
 
   const pickupWindow = useMemo(() => {
     if (!pickupDays.length && !pickupTimes.length) return undefined;
@@ -75,8 +90,8 @@ export default function HoldRequestModal({ item, sourceDeckId, sourceListId, sou
   }
 
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-md p-6 space-y-5" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 overflow-hidden" onClick={onClose}>
+      <div className="bg-zinc-900 border border-zinc-700 rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto p-6 space-y-5" onClick={e => e.stopPropagation()}>
         <div className="flex items-start justify-between">
           <div>
             <h2 className="text-lg font-semibold text-zinc-100">Request a Hold</h2>
@@ -94,6 +109,17 @@ export default function HoldRequestModal({ item, sourceDeckId, sourceListId, sou
           </p>
           <p className="text-sm text-zinc-500">{item.shopName}</p>
         </div>
+
+        {/* Map: collector → shop */}
+        {item.shopLat && item.shopLng && (
+          <MapView
+            className="h-40"
+            pins={[
+              ...(collectorLoc ? [{ lat: collectorLoc.lat, lng: collectorLoc.lng, label: 'You', isUser: true }] : []),
+              { lat: item.shopLat, lng: item.shopLng, label: item.shopName, popup: `<strong>${item.shopName}</strong>` },
+            ]}
+          />
+        )}
 
         {item.holdInstructions && (
           <div className="bg-blue-900/20 border border-blue-800/40 rounded-lg px-3 py-2 text-xs text-blue-300">

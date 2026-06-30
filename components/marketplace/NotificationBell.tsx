@@ -1,12 +1,16 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import NotificationDrawer from './NotificationDrawer';
 
 export default function NotificationBell() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [open, setOpen] = useState(false);
+  const [drawerPos, setDrawerPos] = useState<{ top: number; left: number } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const drawerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetchCount();
@@ -26,17 +30,29 @@ export default function NotificationBell() {
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      const inBell = ref.current?.contains(target);
+      const inDrawer = drawerRef.current?.contains(target);
+      if (!inBell && !inDrawer) setOpen(false);
     }
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
+  function toggleOpen() {
+    if (!open && btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect();
+      setDrawerPos({ top: rect.top - 8, left: rect.right + 8 });
+    }
+    setOpen(o => !o);
+  }
+
   return (
     <div ref={ref} className="relative">
       <button
+        ref={btnRef}
         type="button"
-        onClick={() => setOpen(o => !o)}
+        onClick={toggleOpen}
         className="relative p-2 rounded-lg text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors"
         aria-label="Notifications"
       >
@@ -51,12 +67,16 @@ export default function NotificationBell() {
         )}
       </button>
 
-      {open && (
+      {open && drawerPos && typeof document !== 'undefined' && createPortal(
         <NotificationDrawer
+          ref={drawerRef}
+          top={drawerPos.top}
+          left={drawerPos.left}
           onRead={() => setUnreadCount(c => Math.max(0, c - 1))}
           onReadAll={() => setUnreadCount(0)}
           onClose={() => setOpen(false)}
-        />
+        />,
+        document.body
       )}
     </div>
   );

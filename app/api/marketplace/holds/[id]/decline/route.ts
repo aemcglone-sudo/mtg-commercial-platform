@@ -21,7 +21,7 @@ export async function PATCH(
 
   const hold = await findOne<HoldRow>(
     `SELECT h.id, h.status, h.collector_user_id, h.card_name, h.shop_id, s.name AS shop_name
-     FROM holds h JOIN shops s ON s.id = h.shop_id WHERE h.id = ? AND s.user_id = ?`,
+     FROM holds h JOIN shops s ON s.id = h.shop_id WHERE h.id = ? AND "userId" = ?`,
     [id, userId]
   );
 

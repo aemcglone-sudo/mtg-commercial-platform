@@ -29,7 +29,7 @@ export async function PATCH(
      FROM holds h
      JOIN shops s ON s.id = h.shop_id
      LEFT JOIN shop_notification_prefs snp ON snp.shop_id = h.shop_id
-     WHERE h.id = ? AND s.user_id = ?`,
+     WHERE h.id = ? AND "userId" = ?`,
     [id, userId]
   );
 

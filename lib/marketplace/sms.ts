@@ -2,15 +2,25 @@ const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
 const fromNumber = process.env.TWILIO_FROM_NUMBER;
 
+function normalizePhone(raw: string): string | null {
+  const digits = raw.replace(/\D/g, '');
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`;
+  if (digits.length > 8) return `+${digits}`;
+  return null;
+}
+
 export async function sendSms(to: string, body: string): Promise<void> {
   if (!accountSid || !authToken || !fromNumber) {
     console.warn('[sms] Twilio not configured — skipping SMS');
     return;
   }
-  if (!to.startsWith('+')) {
-    console.warn('[sms] Invalid phone number format (must be E.164):', to);
+  const normalized = normalizePhone(to);
+  if (!normalized) {
+    console.warn('[sms] Invalid phone number format:', to);
     return;
   }
+  to = normalized;
 
   const credentials = Buffer.from(`${accountSid}:${authToken}`).toString('base64');
   const res = await fetch(
@@ -21,7 +31,7 @@ export async function sendSms(to: string, body: string): Promise<void> {
         Authorization: `Basic ${credentials}`,
         'Content-Type': 'application/x-www-form-urlencoded',
       },
-      body: new URLSearchParams({ To: to, From: fromNumber, Body: body }),
+      body: new URLSearchParams({ To: `whatsapp:${to}`, From: `whatsapp:${fromNumber}`, Body: body }),
     }
   );
 
@@ -41,17 +51,15 @@ interface HoldSmsContext {
   holdId: string;
 }
 
-export function holdRequestedSms(ctx: HoldSmsContext, shopName: string): string {
+export function holdRequestedSms(ctx: HoldSmsContext, shopName: string, shopAddress?: string): string {
   const price = `$${(ctx.priceCents / 100).toFixed(2)}`;
   const card = `${ctx.cardName} (${ctx.condition}${ctx.foil ? ' Foil' : ''})`;
   return [
-    `Grimoire Hold — ${shopName}`,
-    `Card: ${card}`,
-    `Price: ${price}`,
-    ctx.pickupWindow ? `Pickup: ${ctx.pickupWindow}` : null,
-    ctx.collectorNote ? `Note: ${ctx.collectorNote}` : null,
-    ``,
-    `Confirm: grimoire.gg/shop/holds/${ctx.holdId}`,
+    `New hold request — ${shopName}`,
+    `Card: ${card} · ${price}`,
+    ctx.pickupWindow ? `Pickup window: ${ctx.pickupWindow}` : null,
+    ctx.collectorNote ? `Note: "${ctx.collectorNote}"` : null,
+    shopAddress ? `📍 ${shopAddress}` : null,
   ].filter(l => l !== null).join('\n');
 }
 

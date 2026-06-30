@@ -4,7 +4,6 @@ import NavSidebar from '@/components/NavSidebar';
 
 const NAV = [
   { href: '/shop/dashboard', label: 'Dashboard', exact: true },
-  { href: '/shop/dashboard?tab=insights', label: 'Insights' },
   { label: 'Catalog', children: [
       { href: '/shop/collection?tab=inventory', label: 'Inventory' },
       { href: '/shop/products',                 label: 'Products' },

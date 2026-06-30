@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
   // Expire unresponded requests (24h no shop response)
   const expiredRequests = await findMany<HoldRow>(`
     SELECT h.id, h.collector_user_id, h.shop_id, h.card_name, h.condition,
-           s.user_id AS shop_owner_user_id, s.name AS shop_name
+           s."userId" AS shop_owner_user_id, s.name AS shop_name
     FROM holds h
     JOIN shops s ON s.id = h.shop_id
     WHERE h.status = 'requested' AND h.request_expires_at < NOW()
@@ -50,7 +50,7 @@ export async function GET(req: NextRequest) {
   // Expire confirmed holds past pickup window (72h no pickup)
   const expiredPickups = await findMany<HoldRow>(`
     SELECT h.id, h.collector_user_id, h.shop_id, h.card_name, h.condition,
-           s.user_id AS shop_owner_user_id, s.name AS shop_name
+           s."userId" AS shop_owner_user_id, s.name AS shop_name
     FROM holds h
     JOIN shops s ON s.id = h.shop_id
     WHERE h.status = 'confirmed' AND h.pickup_expires_at < NOW()

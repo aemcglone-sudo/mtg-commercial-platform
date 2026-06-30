@@ -1,31 +1,15 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback, FormEvent, Suspense } from 'react';
+import { useState, useEffect, useCallback, FormEvent, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import ShopMarketplaceSetup from '@/components/marketplace/shop/ShopMarketplaceSetup';
 
-const US_STATES = [
-  'AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA',
-  'KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ',
-  'NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT',
-  'VA','WA','WV','WI','WY','DC',
-];
-
-interface ReviewCard {
-  found: boolean; qty: number; name: string;
-  scryfallId?: string; cardName?: string; setCode?: string;
-  collectorNumber?: string; imageUrl?: string | null;
-  marketPriceCents?: number | null; priceCents: number;
-  condition: string; foil: boolean; include: boolean;
-  typeLine?: string | null; colors?: string[]; cmc?: number | null; rarity?: string | null;
-}
-
-const fmt = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 
 function ShopSettingsContent() {
   const router = useRouter();
   const params = useSearchParams();
-  const tab = (params.get('tab') ?? 'account') as 'account' | 'shop' | 'inventory';
+  const tab = (params.get('tab') ?? 'account') as 'account' | 'shop' | 'inventory' | 'marketplace';
 
   // ─── Account state ────────────────────────────────────────────────
   const [accountForm, setAccountForm] = useState({ name: '', email: '' });
@@ -35,23 +19,24 @@ function ShopSettingsContent() {
   const [accountSuccess, setAccountSuccess] = useState('');
 
   // ─── Shop state ───────────────────────────────────────────────────
-  const [shopForm, setShopForm] = useState({ name: '', description: '', city: '', state: '', phone: '', email: '', websiteUrl: '' });
+  const [shopForm, setShopForm] = useState({ name: '', description: '', phone: '', email: '', websiteUrl: '' });
   const [shopLoading, setShopLoading] = useState(true);
   const [shopSaving, setShopSaving] = useState(false);
   const [shopError, setShopError] = useState('');
   const [shopSuccess, setShopSuccess] = useState('');
 
   // ─── Inventory upload state ───────────────────────────────────────
-  const [pasteText, setPasteText] = useState('');
-  const [parseLoading, setParseLoading] = useState(false);
-  const [reviewCards, setReviewCards] = useState<ReviewCard[]>([]);
-  const [notFoundCount, setNotFoundCount] = useState(0);
-  const [adding, setAdding] = useState(false);
-  const [addResult, setAddResult] = useState<string | null>(null);
+  const [text, setText] = useState('');
+  const [fileName, setFileName] = useState('');
+  const [dragOver, setDragOver] = useState(false);
+  const [mergeMode, setMergeMode] = useState<'replace' | 'add'>('add');
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadError, setUploadError] = useState('');
+  const [uploadSuccess, setUploadSuccess] = useState('');
   const [inventoryCount, setInventoryCount] = useState<number | null>(null);
   const [clearing, setClearing] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetch('/api/auth/account')
@@ -67,8 +52,6 @@ function ShopSettingsContent() {
         setShopForm({
           name: s.name === 'My Shop' ? '' : (s.name ?? ''),
           description: s.description ?? '',
-          city: s.city ?? '',
-          state: s.state ?? '',
           phone: s.phone ?? '',
           email: s.email ?? '',
           websiteUrl: s.websiteUrl ?? '',
@@ -94,52 +77,53 @@ function ShopSettingsContent() {
     if (!shopForm.name.trim()) { setShopError('Store name is required.'); return; }
     setShopError(''); setShopSuccess(''); setShopSaving(true);
     try {
-      const res = await fetch('/api/shops/me', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: shopForm.name.trim(), description: shopForm.description.trim(), city: shopForm.city.trim(), state: shopForm.state, phone: shopForm.phone.trim(), email: shopForm.email.trim(), websiteUrl: shopForm.websiteUrl.trim() }) });
+      const res = await fetch('/api/shops/me', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: shopForm.name.trim(), description: shopForm.description.trim(), phone: shopForm.phone.trim(), email: shopForm.email.trim(), websiteUrl: shopForm.websiteUrl.trim() }) });
       if (!res.ok) throw new Error('Save failed');
       setShopSuccess('Shop details saved.');
     } catch { setShopError('Something went wrong. Please try again.'); } finally { setShopSaving(false); }
   }
 
   // ─── Inventory upload ─────────────────────────────────────────────
-  const parseText = useCallback(async (text: string) => {
+  async function handleUpload() {
     if (!text.trim()) return;
-    setParseLoading(true);
-    setReviewCards([]);
-    setNotFoundCount(0);
-    setAddResult(null);
+    setUploading(true);
+    setUploadProgress(0);
+    setUploadError('');
+    setUploadSuccess('');
+    const startTime = Date.now();
+    const interval = setInterval(() => setUploadProgress(Math.round((Date.now() - startTime) / 1000)), 500);
     try {
-      const res = await fetch('/api/shops/parse-list', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
-      const data = await res.json() as { results: ReviewCard[]; notFoundCount: number };
-      setReviewCards((data.results ?? []).map(r => ({ ...r, include: r.found })));
-      setNotFoundCount(data.notFoundCount ?? 0);
-    } catch { /* ignore */ } finally { setParseLoading(false); }
-  }, []);
-
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = ev => parseText(ev.target?.result as string);
-    reader.readAsText(file);
-    e.target.value = '';
-  }
-
-  async function confirmAdd() {
-    const toAdd = reviewCards.filter(c => c.include && c.found && c.scryfallId);
-    if (!toAdd.length) return;
-    setAdding(true); setAddResult(null);
-    try {
-      const res = await fetch('/api/shops/inventory', {
+      const res = await fetch('/api/shops/inventory/upload', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cards: toAdd.map(c => ({ scryfallId: c.scryfallId!, cardName: c.cardName ?? c.name, setCode: c.setCode ?? '', collectorNumber: c.collectorNumber, condition: c.condition, foil: c.foil, quantity: c.qty, priceCents: c.priceCents, imageUrl: c.imageUrl, typeLine: c.typeLine, colors: c.colors, cmc: c.cmc, rarity: c.rarity })) }),
+        body: JSON.stringify({ text, mergeMode }),
       });
-      const data = await res.json() as { added: number };
-      setAddResult(`Added ${data.added} card${data.added !== 1 ? 's' : ''} to inventory.`);
-      setReviewCards([]);
-      setPasteText('');
-      setInventoryCount(prev => (prev ?? 0) + data.added);
-    } catch { /* ignore */ } finally { setAdding(false); }
+      const text2 = await res.text();
+      const data = text2 ? JSON.parse(text2) as { added?: number; skipped?: number; error?: string } : {};
+      if (!res.ok) throw new Error(data.error ?? `Upload failed (${res.status})`);
+      setUploadSuccess(`Added ${data.added?.toLocaleString()} card${data.added !== 1 ? 's' : ''} to inventory${data.skipped ? ` · ${data.skipped} not found` : ''}.`);
+      setInventoryCount(prev => mergeMode === 'replace' ? (data.added ?? 0) : (prev ?? 0) + (data.added ?? 0));
+      setText('');
+      setFileName('');
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : 'Something went wrong');
+    } finally {
+      clearInterval(interval);
+      setUploading(false);
+      setUploadProgress(0);
+    }
+  }
+
+  const handleFile = useCallback((file: File) => {
+    setFileName(file.name);
+    file.text().then(t => setText(t));
+  }, []);
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file) handleFile(file);
   }
 
   async function clearInventory() {
@@ -150,15 +134,9 @@ function ShopSettingsContent() {
     } finally { setClearing(false); setConfirmClear(false); }
   }
 
-  function updateReview(i: number, patch: Partial<ReviewCard>) {
-    setReviewCards(prev => { const next = [...prev]; next[i] = { ...next[i], ...patch }; return next; });
-  }
-
-  const includedCount = reviewCards.filter(c => c.include && c.found).length;
-
   const navItems = [
     { id: 'account', label: 'Account Settings' },
-    { id: 'shop', label: 'Shop Details' },
+    { id: 'marketplace', label: 'Shop Details' },
     { id: 'inventory', label: 'Inventory Upload' },
   ] as const;
 
@@ -196,13 +174,107 @@ function ShopSettingsContent() {
             </section>
           )}
 
-          {/* ─── SHOP ────────────────────────────────────────────────── */}
-          {tab === 'shop' && (
+          {/* ─── INVENTORY UPLOAD ────────────────────────────────────── */}
+          {tab === 'inventory' && (
             <section className="space-y-6">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h2 className="text-base font-semibold">Inventory Upload</h2>
+                  <p className="text-sm text-zinc-500 mt-1">
+                    Upload your inventory export. We detect the format automatically.
+                    {inventoryCount !== null && <span className="ml-2 text-zinc-600">{inventoryCount.toLocaleString()} cards currently in stock.</span>}
+                  </p>
+                </div>
+                {inventoryCount !== null && inventoryCount > 0 && (
+                  <div className="flex items-center gap-2 shrink-0">
+                    {confirmClear ? (
+                      <>
+                        <span className="text-xs text-zinc-400">Clear all {inventoryCount.toLocaleString()} cards?</span>
+                        <button type="button" onClick={() => setConfirmClear(false)} className="px-3 py-1.5 text-xs rounded-lg border border-zinc-700 text-zinc-400 hover:text-zinc-200 transition-colors">Cancel</button>
+                        <button type="button" onClick={clearInventory} disabled={clearing} className="px-3 py-1.5 text-xs rounded-lg bg-red-600 hover:bg-red-500 text-white font-semibold transition-colors disabled:opacity-50">{clearing ? 'Clearing…' : 'Yes, clear all'}</button>
+                      </>
+                    ) : (
+                      <button type="button" onClick={() => setConfirmClear(true)} className="px-3 py-1.5 text-xs rounded-lg border border-zinc-700 text-zinc-500 hover:text-red-400 hover:border-red-700 transition-colors">Clear Inventory</button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-3">
+                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+                  <label className="block text-sm text-zinc-400 mb-3">When uploading:</label>
+                  <div className="flex gap-4">
+                    {(['add', 'replace'] as const).map(m => (
+                      <label key={m} className="flex items-center gap-2 cursor-pointer">
+                        <input type="radio" name="mergeMode" value={m} checked={mergeMode === m} onChange={() => setMergeMode(m)} className="w-4 h-4" />
+                        <span className="text-sm text-zinc-200">{m === 'replace' ? '🔄 Replace inventory' : '➕ Add to inventory'}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div
+                  className={`relative border-2 border-dashed rounded-xl p-8 text-center transition-colors ${dragOver ? 'border-amber-400 bg-amber-950/20' : 'border-zinc-700 hover:border-zinc-600'}`}
+                  onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+                  onDragLeave={() => setDragOver(false)}
+                  onDrop={handleDrop}
+                >
+                  <input
+                    type="file"
+                    accept=".txt,.csv,.dek,.rtf"
+                    title="Upload inventory file"
+                    onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ''; }}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  />
+                  <div className="pointer-events-none space-y-1">
+                    <p className="text-zinc-300 font-medium text-sm">{fileName || 'Drop your inventory file here'}</p>
+                    <p className="text-zinc-600 text-xs">MTGO, Moxfield, ManaBox, Deckbox, or TCGPlayer · or paste below</p>
+                  </div>
+                </div>
+
+                <textarea
+                  className="w-full h-28 bg-zinc-900 border border-zinc-700 rounded-xl p-4 text-sm text-zinc-200 placeholder-zinc-600 resize-none focus:outline-none focus:border-amber-500 font-mono"
+                  placeholder={`4 Lightning Bolt\n4 Counterspell\n20 Island`}
+                  value={text}
+                  onChange={e => { setText(e.target.value); setFileName(''); setUploadSuccess(''); setUploadError(''); }}
+                />
+
+                {uploadError && <p className="text-red-400 text-sm">{uploadError}</p>}
+                {uploadSuccess && <p className="text-emerald-400 text-sm">{uploadSuccess}</p>}
+
+                {uploading && (
+                  <div className="flex items-center gap-3 px-4 py-3 bg-zinc-900 border border-zinc-800 rounded-xl">
+                    <svg className="animate-spin h-4 w-4 shrink-0 text-amber-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    <div>
+                      <p className="text-sm text-zinc-200">{uploadProgress < 3 ? 'Parsing…' : uploadProgress < 10 ? 'Looking up cards…' : 'Enriching card data…'}</p>
+                      <p className="text-xs text-zinc-500">{uploadProgress}s elapsed · large lists take 60–90s</p>
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  disabled={!text.trim() || uploading}
+                  onClick={handleUpload}
+                  className="w-full py-2.5 rounded-xl font-semibold text-sm text-black bg-amber-400 hover:bg-amber-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  {uploading ? 'Processing…' : mergeMode === 'replace' ? '🔄 Replace inventory' : '➕ Add to inventory'}
+                </button>
+              </div>
+            </section>
+          )}
+
+          {/* ─── SHOP DETAILS + MARKETPLACE SETUP ──────────────────── */}
+          {tab === 'marketplace' && (
+            <section className="space-y-8">
               <div>
                 <h2 className="text-base font-semibold">Shop Details</h2>
-                <p className="text-sm text-zinc-500 mt-1">Update your storefront information.</p>
+                <p className="text-sm text-zinc-500 mt-1">Your storefront information and marketplace settings.</p>
               </div>
+
               {shopLoading ? <p className="text-sm text-zinc-500">Loading…</p> : (
                 <form onSubmit={handleShopSave} className="space-y-6 max-w-lg">
                   <section className="space-y-4">
@@ -214,22 +286,6 @@ function ShopSettingsContent() {
                     <div>
                       <label className="block text-sm font-medium text-zinc-300 mb-1.5">Description</label>
                       <textarea rows={3} placeholder="What makes your store special?" value={shopForm.description} onChange={e => setShopForm(p => ({ ...p, description: e.target.value }))} className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-amber-500 transition-colors resize-none" />
-                    </div>
-                  </section>
-                  <section className="space-y-4">
-                    <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Location</h3>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-sm font-medium text-zinc-300 mb-1.5">City</label>
-                        <input type="text" placeholder="e.g. Austin" value={shopForm.city} onChange={e => setShopForm(p => ({ ...p, city: e.target.value }))} className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-amber-500 transition-colors" />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-zinc-300 mb-1.5">State</label>
-                        <select title="State" value={shopForm.state} onChange={e => setShopForm(p => ({ ...p, state: e.target.value }))} className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3 text-sm text-zinc-200 focus:outline-none focus:border-amber-500 transition-colors">
-                          <option value="">Select…</option>
-                          {US_STATES.map(s => <option key={s} value={s}>{s}</option>)}
-                        </select>
-                      </div>
                     </div>
                   </section>
                   <section className="space-y-4">
@@ -251,142 +307,13 @@ function ShopSettingsContent() {
                   </section>
                   {shopError && <p className="text-red-400 text-sm">{shopError}</p>}
                   {shopSuccess && <p className="text-emerald-400 text-sm">{shopSuccess}</p>}
-                  <button type="submit" disabled={shopSaving} className="px-6 py-3 rounded-xl font-semibold text-black bg-amber-400 hover:bg-amber-300 disabled:opacity-50 transition-colors text-sm">{shopSaving ? 'Saving…' : 'Save Shop Details'}</button>
+                  <button type="submit" disabled={shopSaving} className="px-6 py-3 rounded-xl font-semibold text-black bg-amber-400 hover:bg-amber-300 disabled:opacity-50 transition-colors text-sm">{shopSaving ? 'Saving…' : 'Save'}</button>
                 </form>
               )}
-            </section>
-          )}
 
-          {/* ─── INVENTORY UPLOAD ────────────────────────────────────── */}
-          {tab === 'inventory' && (
-            <section className="space-y-6">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h2 className="text-base font-semibold">Inventory Upload</h2>
-                  <p className="text-sm text-zinc-500 mt-1">
-                    Paste or upload a card list to add to your inventory.
-                    {inventoryCount !== null && <span className="ml-2 text-zinc-600">{inventoryCount.toLocaleString()} cards currently in stock.</span>}
-                  </p>
-                </div>
-                {inventoryCount !== null && inventoryCount > 0 && (
-                  <div className="flex items-center gap-2 shrink-0">
-                    {confirmClear ? (
-                      <>
-                        <span className="text-xs text-zinc-400">Clear all {inventoryCount.toLocaleString()} cards?</span>
-                        <button type="button" onClick={() => setConfirmClear(false)} className="px-3 py-1.5 text-xs rounded-lg border border-zinc-700 text-zinc-400 hover:text-zinc-200 transition-colors">Cancel</button>
-                        <button type="button" onClick={clearInventory} disabled={clearing} className="px-3 py-1.5 text-xs rounded-lg bg-red-600 hover:bg-red-500 text-white font-semibold transition-colors disabled:opacity-50">{clearing ? 'Clearing…' : 'Yes, clear all'}</button>
-                      </>
-                    ) : (
-                      <button type="button" onClick={() => setConfirmClear(true)} className="px-3 py-1.5 text-xs rounded-lg border border-zinc-700 text-zinc-500 hover:text-red-400 hover:border-red-700 transition-colors">Clear Inventory</button>
-                    )}
-                  </div>
-                )}
+              <div className="border-t border-zinc-800 pt-8">
+                <ShopMarketplaceSetup />
               </div>
-
-              {/* Paste area */}
-              <div className="space-y-3">
-                <label className="text-xs text-zinc-400 uppercase tracking-wide">Paste card list</label>
-                <textarea
-                  rows={8}
-                  placeholder={'1 Black Lotus\n4 Brainstorm\n2x Lightning Bolt\n…'}
-                  value={pasteText}
-                  onChange={e => { setPasteText(e.target.value); setReviewCards([]); setAddResult(null); }}
-                  className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-amber-500 transition-colors font-mono resize-none"
-                />
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => parseText(pasteText)}
-                    disabled={!pasteText.trim() || parseLoading}
-                    className="px-5 py-2.5 rounded-xl text-sm font-semibold text-black bg-amber-400 hover:bg-amber-300 disabled:opacity-40 transition-colors"
-                  >
-                    {parseLoading ? 'Parsing…' : 'Parse List'}
-                  </button>
-                  <label className="px-5 py-2.5 rounded-xl text-sm font-medium border border-zinc-700 text-zinc-300 hover:border-zinc-500 hover:text-zinc-100 cursor-pointer transition-colors">
-                    Upload File
-                    <input ref={fileRef} type="file" accept=".txt,.csv,.dek,.rtf" className="hidden" onChange={handleFileChange} />
-                  </label>
-                </div>
-              </div>
-
-              {/* Parsing spinner */}
-              {parseLoading && (
-                <div className="flex items-center gap-3 py-6 text-zinc-400 text-sm">
-                  <svg className="w-5 h-5 animate-spin text-amber-400 shrink-0" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-                  </svg>
-                  Looking up cards on Scryfall…
-                </div>
-              )}
-
-              {/* Review cards */}
-              {!parseLoading && reviewCards.length > 0 && (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm text-zinc-400">
-                      {includedCount} card{includedCount !== 1 ? 's' : ''} ready to add
-                      {notFoundCount > 0 && <span className="text-zinc-600 ml-2">· {notFoundCount} not found</span>}
-                    </p>
-                    <button
-                      type="button"
-                      onClick={confirmAdd}
-                      disabled={adding || includedCount === 0}
-                      className="px-5 py-2 rounded-xl text-sm font-semibold text-black bg-amber-400 hover:bg-amber-300 disabled:opacity-40 transition-colors"
-                    >
-                      {adding ? 'Adding…' : `Add ${includedCount} to Inventory`}
-                    </button>
-                  </div>
-
-                  <div className="border border-zinc-800 rounded-xl overflow-hidden divide-y divide-zinc-800/60">
-                    {reviewCards.map((card, i) => (
-                      <div key={i} className={`flex items-center gap-3 px-4 py-3 text-sm ${!card.found ? 'opacity-40' : ''}`}>
-                        <input
-                          type="checkbox"
-                          aria-label={`Include ${card.cardName ?? card.name ?? ''}`}
-                          checked={card.include && card.found}
-                          disabled={!card.found}
-                          onChange={e => updateReview(i, { include: e.target.checked })}
-                          className="shrink-0 accent-amber-400"
-                        />
-                        {card.imageUrl && (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={card.imageUrl} alt="" className="w-7 h-9 object-cover rounded shrink-0" />
-                        )}
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium truncate">{card.cardName ?? card.name}</p>
-                          <p className="text-xs text-zinc-500">{card.setCode?.toUpperCase()} {card.found ? '' : '— not found'}</p>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <input
-                            type="number" min={1}
-                            title="Quantity"
-                            placeholder="1"
-                            value={card.qty}
-                            onChange={e => updateReview(i, { qty: parseInt(e.target.value) || 1 })}
-                            className="w-14 bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 text-xs text-center text-zinc-200 focus:outline-none focus:border-amber-500"
-                          />
-                          <select
-                            title="Condition"
-                            value={card.condition}
-                            onChange={e => updateReview(i, { condition: e.target.value })}
-                            className="bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 text-xs text-zinc-200 focus:outline-none focus:border-amber-500"
-                          >
-                            {['NM','LP','MP','HP','DMG'].map(c => <option key={c} value={c}>{c}</option>)}
-                          </select>
-                          {card.marketPriceCents != null && (
-                            <span className="text-xs text-amber-400 w-14 text-right">{fmt(card.priceCents)}</span>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {addResult && (
-                <p className="text-emerald-400 text-sm">{addResult}</p>
-              )}
             </section>
           )}
         </div>

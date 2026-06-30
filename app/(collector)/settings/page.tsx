@@ -15,7 +15,7 @@ interface SavedInfo {
 function SettingsContent() {
   const router = useRouter();
   const params = useSearchParams();
-  const tab = (params.get('tab') ?? 'account') as 'account' | 'upload';
+  const tab = (params.get('tab') ?? 'account') as 'account' | 'upload' | 'location';
 
   // Account state
   const [accountForm, setAccountForm] = useState({ name: '', email: '' });
@@ -23,6 +23,12 @@ function SettingsContent() {
   const [accountSaving, setAccountSaving] = useState(false);
   const [accountError, setAccountError] = useState('');
   const [accountSuccess, setAccountSuccess] = useState('');
+
+  // Location state
+  const [locForm, setLocForm] = useState({ street: '', city: '', state: '', zip: '' });
+  const [locationStatus, setLocationStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [locationMsg, setLocationMsg] = useState('');
+  const [locCoords, setLocCoords] = useState<{ lat: number; lng: number } | null>(null);
 
   // Upload state
   const [saved, setSaved] = useState<SavedInfo | null>(null);
@@ -42,6 +48,12 @@ function SettingsContent() {
       .then(r => r.json())
       .then(d => { if (d.name !== undefined) setAccountForm({ name: d.name ?? '', email: d.email ?? '' }); })
       .finally(() => setAccountLoading(false));
+    fetch('/api/marketplace/preferences')
+      .then(r => r.ok ? r.json() : null)
+      .then((p: { lat: number | null; lng: number | null } | null) => {
+        if (p?.lat && p?.lng) setLocCoords({ lat: p.lat, lng: p.lng });
+      })
+      .catch(() => {});
     fetch('/api/collection/saved')
       .then(r => r.json())
       .then(d => { if (d) setSaved(d); })
@@ -67,6 +79,55 @@ function SettingsContent() {
     } finally {
       setAccountSaving(false);
     }
+  }
+
+  async function saveLocation(lat: number, lng: number) {
+    setLocationStatus('saving');
+    setLocationMsg('');
+    try {
+      const res = await fetch('/api/marketplace/preferences', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lat, lng }),
+      });
+      if (!res.ok) throw new Error('Save failed');
+      setLocCoords({ lat, lng });
+      setLocationStatus('saved');
+      setLocationMsg('Location saved. It\'s only visible to you.');
+    } catch {
+      setLocationStatus('error');
+      setLocationMsg('Could not save location. Please try again.');
+    }
+  }
+
+  async function handleAddressSave() {
+    if (!locForm.city.trim() || !locForm.state.trim()) {
+      setLocationStatus('error');
+      setLocationMsg('City and state are required.');
+      return;
+    }
+    setLocationStatus('saving');
+    setLocationMsg('Validating address…');
+    try {
+      const q = [locForm.street, locForm.city, locForm.state, locForm.zip, 'USA'].filter(Boolean).join(', ');
+      const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q)}`;
+      const res = await fetch(url, { headers: { 'Accept-Language': 'en' } });
+      const data = await res.json() as Array<{ lat: string; lon: string }>;
+      if (!data.length) { setLocationStatus('error'); setLocationMsg('Address not found. Double-check city, state, and zip.'); return; }
+      await saveLocation(parseFloat(data[0].lat), parseFloat(data[0].lon));
+    } catch {
+      setLocationStatus('error');
+      setLocationMsg('Could not validate address. Check your connection.');
+    }
+  }
+
+  function handleGPS() {
+    setLocationStatus('saving');
+    setLocationMsg('Getting GPS location…');
+    navigator.geolocation.getCurrentPosition(
+      pos => saveLocation(pos.coords.latitude, pos.coords.longitude),
+      () => { setLocationStatus('error'); setLocationMsg('Could not get GPS location. Try entering your address.'); }
+    );
   }
 
   const handleFile = useCallback((file: File) => {
@@ -142,6 +203,7 @@ function SettingsContent() {
   const navItems = [
     { id: 'account', label: 'Account Settings' },
     { id: 'upload', label: 'Upload Collection' },
+    { id: 'location', label: 'My Location' },
   ] as const;
 
   return (
@@ -197,6 +259,107 @@ function SettingsContent() {
                 >
                   Change password →
                 </Link>
+              </div>
+            </section>
+          )}
+
+          {tab === 'location' && (
+            <section className="space-y-6 max-w-sm">
+              <div>
+                <h2 className="text-base font-semibold">My Location</h2>
+                <p className="text-sm text-zinc-500 mt-1">
+                  Set your home neighborhood so we can surface the closest local game stores when you search for cards.
+                </p>
+              </div>
+
+              <div className="bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 space-y-1">
+                <p className="text-sm font-medium text-zinc-200">🔒 Your location is completely private</p>
+                <p className="text-sm text-zinc-500">
+                  It is never shared with store owners, other collectors, or any third party. We use it only on your device to sort nearby stores by distance and to place your marker on hold request maps — nothing else.
+                </p>
+              </div>
+
+              {locCoords && (
+                <div className="bg-emerald-900/20 border border-emerald-800/40 rounded-xl px-4 py-3 text-sm text-emerald-300">
+                  ✅ Location set · {locCoords.lat.toFixed(4)}, {locCoords.lng.toFixed(4)}
+                </div>
+              )}
+
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <label className="text-xs text-zinc-400 uppercase tracking-wide">Street address</label>
+                  <input
+                    type="text"
+                    value={locForm.street}
+                    onChange={e => { setLocForm(f => ({ ...f, street: e.target.value })); setLocationStatus('idle'); setLocationMsg(''); }}
+                    placeholder="123 Main St"
+                    className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-amber-500 transition-colors"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs text-zinc-400 uppercase tracking-wide">City <span className="text-red-400">*</span></label>
+                    <input
+                      type="text"
+                      value={locForm.city}
+                      onChange={e => { setLocForm(f => ({ ...f, city: e.target.value })); setLocationStatus('idle'); setLocationMsg(''); }}
+                      placeholder="Atlanta"
+                      className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-amber-500 transition-colors"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs text-zinc-400 uppercase tracking-wide">State <span className="text-red-400">*</span></label>
+                    <input
+                      type="text"
+                      value={locForm.state}
+                      onChange={e => { setLocForm(f => ({ ...f, state: e.target.value })); setLocationStatus('idle'); setLocationMsg(''); }}
+                      placeholder="GA"
+                      maxLength={2}
+                      className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-amber-500 transition-colors uppercase"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-zinc-400 uppercase tracking-wide">Zip code</label>
+                  <input
+                    type="text"
+                    value={locForm.zip}
+                    onChange={e => { setLocForm(f => ({ ...f, zip: e.target.value })); setLocationStatus('idle'); setLocationMsg(''); }}
+                    placeholder="30002"
+                    maxLength={10}
+                    className="w-40 bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-amber-500 transition-colors"
+                  />
+                </div>
+
+                {locationMsg && (
+                  <p className={`text-sm ${locationStatus === 'error' ? 'text-red-400' : locationStatus === 'saved' ? 'text-emerald-400' : 'text-zinc-400'}`}>
+                    {locationMsg}
+                  </p>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handleAddressSave}
+                  disabled={!locForm.city.trim() || !locForm.state.trim() || locationStatus === 'saving'}
+                  className="w-full py-2.5 rounded-xl font-semibold text-sm text-black bg-amber-400 hover:bg-amber-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  {locationStatus === 'saving' ? 'Validating & saving…' : 'Save Location'}
+                </button>
+
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 h-px bg-zinc-800" />
+                  <span className="text-xs text-zinc-600">or</span>
+                  <div className="flex-1 h-px bg-zinc-800" />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleGPS}
+                  disabled={locationStatus === 'saving'}
+                  className="w-full py-2.5 rounded-xl text-sm font-medium border border-zinc-700 text-zinc-300 hover:border-zinc-500 hover:text-zinc-100 disabled:opacity-40 transition-colors"
+                >
+                  📍 Use my current GPS location
+                </button>
               </div>
             </section>
           )}

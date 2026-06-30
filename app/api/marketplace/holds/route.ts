@@ -13,7 +13,7 @@ interface InventoryRow {
 }
 
 interface ShopRow {
-  id: string; name: string; user_id: string; request_expiry_hours: string; max_active_holds: string;
+  id: string; name: string; user_id: string; request_expiry_hours: string; max_active_holds: string; address: string | null;
 }
 
 interface HoldRow {
@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
   let rows: HoldRow[];
 
   if (role === 'shop_owner') {
-    const shop = await findOne<{ id: string }>(`SELECT id FROM shops WHERE user_id = ?`, [userId]);
+    const shop = await findOne<{ id: string }>(`SELECT id FROM shops WHERE "userId" = ?`, [userId]);
     if (!shop) return NextResponse.json({ holds: [] });
 
     rows = await findMany<HoldRow>(
@@ -104,7 +104,7 @@ export async function POST(req: NextRequest) {
 
   // Get shop + prefs
   const shop = await findOne<ShopRow>(
-    `SELECT s.id, s.name, s.user_id,
+    `SELECT s.id, s.name, s."userId" AS user_id, s.address,
             COALESCE(snp.request_expiry_hours, 24)::text AS request_expiry_hours,
             COALESCE(snp.max_active_holds, 50)::text AS max_active_holds
      FROM shops s
@@ -150,14 +150,15 @@ export async function POST(req: NextRequest) {
       priceCents: parseInt(item.price_cents), pickupWindow: body.pickupWindow,
       collectorNote: body.collectorNote, holdId,
     },
-    shop.name
+    shop.name,
+    shop.address ?? undefined
   );
 
   await notifyShopOwner(shop.id, shop.user_id, 'hold_requested', {
     title: 'New hold request',
     body: `${item.card_name} (${item.condition}) · $${(parseInt(item.price_cents) / 100).toFixed(2)}${body.pickupWindow ? ` · ${body.pickupWindow}` : ''}`,
     holdId,
-    ctaUrl: `/shop/holds/${holdId}`,
+    ctaUrl: `/shop/holds`,
   }, smsBody);
 
   await run(`UPDATE holds SET shop_notified_app_at = NOW(), shop_notified_sms_at = NOW() WHERE id = ?`, [holdId]);

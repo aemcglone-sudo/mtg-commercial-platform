@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
   if (!userId || role !== 'shop_owner') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   const shop = await findOne<{ id: string; lat: string; lng: string }>(
-    `SELECT id, lat::text, lng::text FROM shops WHERE user_id = ?`, [userId]
+    `SELECT id, lat::text, lng::text FROM shops WHERE "userId" = ?`, [userId]
   );
   if (!shop) return NextResponse.json({ estimatedRecipients: 0 });
 

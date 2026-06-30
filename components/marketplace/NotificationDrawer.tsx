@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, forwardRef } from 'react';
 import Link from 'next/link';
 
 interface Notification {
@@ -17,9 +17,11 @@ interface Props {
   onRead: () => void;
   onReadAll: () => void;
   onClose: () => void;
+  top?: number;
+  left?: number;
 }
 
-export default function NotificationDrawer({ onRead, onReadAll, onClose }: Props) {
+const NotificationDrawer = forwardRef<HTMLDivElement, Props>(function NotificationDrawer({ onRead, onReadAll, onClose, top, left }, ref) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -69,7 +71,13 @@ export default function NotificationDrawer({ onRead, onReadAll, onClose }: Props
   const unread = notifications.filter(n => !n.read);
 
   return (
-    <div className="absolute right-0 top-10 w-80 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl z-50 overflow-hidden">
+    <div
+      ref={ref}
+      className="fixed w-80 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl z-[200] overflow-hidden"
+      style={top !== undefined && left !== undefined
+        ? { top: `${top}px`, left: `${left}px`, transform: 'translateY(-100%)' }
+        : { bottom: '4rem', left: '4rem' }}
+    >
       <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
         <span className="font-semibold text-zinc-100 text-sm">Notifications</span>
         <div className="flex items-center gap-2">
@@ -122,4 +130,6 @@ export default function NotificationDrawer({ onRead, onReadAll, onClose }: Props
       </div>
     </div>
   );
-}
+});
+
+export default NotificationDrawer;

@@ -71,7 +71,10 @@ export default function StoreProfile({ slug }: { slug: string }) {
   useEffect(() => {
     fetch(`/api/marketplace/stores/${slug}`)
       .then(r => r.ok ? r.json() : null)
-      .then((data: StoreDetail | null) => { setStore(data); setLoading(false); })
+      .then((data: { shop: Omit<StoreDetail, 'inventory' | 'products'>; inventory: StoreDetail['inventory']; products: StoreDetail['products'] } | null) => {
+        if (data?.shop) setStore({ ...data.shop, inventory: data.inventory ?? [], products: data.products ?? [] });
+        setLoading(false);
+      })
       .catch(() => setLoading(false));
   }, [slug]);
 

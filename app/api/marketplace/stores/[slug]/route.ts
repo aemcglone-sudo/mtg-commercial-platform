@@ -31,7 +31,7 @@ export async function GET(
     `SELECT id, name, slug, description, address, city, state, zip, phone, email,
             website_url, logo_url, banner_url, hours, specialties, hold_instructions,
             lat::text, lng::text
-     FROM shops WHERE slug = ? AND marketplace_active = true AND is_active = true`,
+     FROM shops WHERE slug = ? AND marketplace_active = true AND "isActive" = true`,
     [slug]
   );
   if (!shop) return NextResponse.json({ error: 'Store not found' }, { status: 404 });

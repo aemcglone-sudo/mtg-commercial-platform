@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
   const role = getRole(req);
   if (!userId || role !== 'shop_owner') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
-  const shop = await findOne<{ id: string }>(`SELECT id FROM shops WHERE user_id = ?`, [userId]);
+  const shop = await findOne<{ id: string }>(`SELECT id FROM shops WHERE "userId" = ?`, [userId]);
   if (!shop) return NextResponse.json({ used: 0, limit: 3, resetsAt: null });
 
   const { week, year } = isoWeek(new Date());

@@ -52,11 +52,11 @@ export function parseCardList(text: string): ParsedCardLine[] {
 
     let parsed: ParsedCardLine | null = null;
 
-    // MTGA/Moxfield format: "1 Card Name (SET) 123"
-    const mtgaMatch = normalized.match(/^(\d+)\s+(.+?)\s+\(([A-Za-z0-9]+)\)\s+(\S+)$/);
+    // MTGA/Moxfield format: "1 Card Name (SET) 123" or "Card Name (SET) 123" (no qty = 1)
+    const mtgaMatch = normalized.match(/^(?:(\d+)\s+)?(.+?)\s+\(([A-Za-z0-9]+)\)\s+(\S+)$/);
     if (mtgaMatch) {
       parsed = {
-        qty: parseInt(mtgaMatch[1], 10),
+        qty: mtgaMatch[1] ? parseInt(mtgaMatch[1], 10) : 1,
         name: mtgaMatch[2].trim(),
         set: mtgaMatch[3].toLowerCase(),
         collectorNumber: mtgaMatch[4],
