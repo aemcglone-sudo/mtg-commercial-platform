@@ -11,8 +11,8 @@ export async function POST(req: NextRequest) {
   const { deckId } = await req.json() as { deckId: string };
   if (!deckId) return NextResponse.json({ error: 'Missing deckId' }, { status: 400 });
 
-  const deck = await findOne<{ id: string; cards: string; commander: string | null; format: string | null; archetype: string | null }>(
-    `SELECT id, cards, commander, format, archetype FROM decks WHERE id = ?`,
+  const deck = await findOne<{ id: string; cards: string; commander: string | null; format: string | null }>(
+    `SELECT id, cards, commander, format FROM decks WHERE id = ?`,
     [deckId]
   );
   if (!deck) return NextResponse.json({ error: 'Not found' }, { status: 404 });
@@ -23,7 +23,6 @@ export async function POST(req: NextRequest) {
     commander: deck.commander ?? undefined,
     commanderColorIdentity: [],
     format: deck.format ?? 'commander',
-    archetype: deck.archetype ?? undefined,
   });
 
   if (!result) return NextResponse.json({ error: 'Scoring failed' }, { status: 502 });
