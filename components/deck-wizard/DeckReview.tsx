@@ -36,11 +36,6 @@ const DEFAULT_NAME = (commander: string | null, format: string) => {
   return `My ${fmt.charAt(0).toUpperCase() + fmt.slice(1)} Deck`;
 };
 
-const DECK_SIZES: Record<string, number> = {
-  commander: 100, brawl: 100, oathbreaker: 60, tiny_leaders: 50,
-  standard: 60, pioneer: 60, modern: 60, legacy: 60, vintage: 60,
-  pauper: 60, historic: 60, timeless: 60, penny_dreadful: 60, canadian_highlander: 100,
-};
 
 export function DeckReview({ sessionId, format, commander, commanderColorIdentity, cards, archetype, themes, tribalType, psychographic, budgetCents, ownedCardNames = [], collectionOnly = false, roleTargets = null, deckColors = [], onBack }: Props) {
   const router = useRouter();
@@ -55,8 +50,6 @@ export function DeckReview({ sessionId, format, commander, commanderColorIdentit
   const [deckScore, setDeckScore] = useState<DeckScore | null>(null);
   const [scoring, setScoring] = useState(true);
   const [validating, setValidating] = useState(false);
-  const [rebuilding, setRebuilding] = useState(false);
-  const [rebuildAttempt, setRebuildAttempt] = useState(0);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [overrideLegal, setOverrideLegal] = useState(false);
@@ -131,94 +124,8 @@ export function DeckReview({ sessionId, format, commander, commanderColorIdentit
     }
   }, [format, commanderColorIdentity]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const MAX_REBUILD_ATTEMPTS = 3;
-  const SCORE_THRESHOLD = 75;
-
-  const rebuild = useCallback(async (currentCards: Record<string, number>, score: DeckScore, attempt: number) => {
-    if (attempt >= MAX_REBUILD_ATTEMPTS) return;
-    setRebuilding(true);
-    setRebuildAttempt(attempt + 1);
-
-    const feedback = score.recommendations
-      .filter(r => r.priority === 'CRITICAL' || r.priority === 'MAJOR')
-      .map(r => `- ${r.issue}${r.action ? `: ${r.action}` : ''}`)
-      .join('\n');
-
-    try {
-      const suggestRes = await fetch('/api/deck-wizard/suggest-cards', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sessionId, format, commander, commanderColorIdentity, archetype, themes,
-          tribalType, psychographic, budgetCents,
-          currentCards: commander ? { [commander]: 1 } : {},
-          ownedCardNames, roleTargets, deckColors, collectionOnly,
-          rubricFeedback: feedback,
-        }),
-      });
-      if (!suggestRes.ok) return;
-      const suggestData = await suggestRes.json() as { roles: Array<{ role: string; target: number; cards: Array<{ name: string; suggestedQuantity?: number }> }> };
-
-      const deckSize = DECK_SIZES[format] ?? 60;
-      const isCommander = ['commander','brawl','oathbreaker'].includes(format);
-      const nonLandRoles = (suggestData.roles ?? []).filter(g => g.role.toLowerCase() !== 'lands');
-      const landsRole = (suggestData.roles ?? []).find(g => g.role.toLowerCase() === 'lands');
-      const minLands = landsRole?.target ?? (deckSize === 100 ? 35 : 22);
-      const nonLandBudget = deckSize - minLands;
-
-      const base = commander ? { [commander]: 1 } : {};
-      const rebuilt: Record<string, number> = { ...base };
-      let count = Object.values(base).reduce((s, q) => s + q, 0);
-
-      for (const group of nonLandRoles) {
-        for (const card of group.cards) {
-          if (card.name in rebuilt) continue;
-          const qty = isCommander ? 1 : (card.suggestedQuantity ?? 1);
-          if (count + qty > nonLandBudget) continue;
-          rebuilt[card.name] = qty;
-          count += qty;
-        }
-      }
-
-      // Add utility lands from the lands role
-      if (landsRole) {
-        for (const card of landsRole.cards) {
-          if (!(card.name in rebuilt)) rebuilt[card.name] = 1;
-        }
-      }
-
-      // Fill basics
-      const basicsRes = await fetch('/api/deck-wizard/fill-basics', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          cards: Object.entries(rebuilt).map(([name, quantity]) => ({ name, quantity })),
-          deckSize,
-          colorIdentity: commanderColorIdentity.length ? commanderColorIdentity : deckColors,
-          minLands,
-        }),
-      });
-      if (basicsRes.ok) {
-        const basicsData = await basicsRes.json() as { basics: Record<string, number> };
-        if (basicsData.basics) Object.assign(rebuilt, basicsData.basics);
-      }
-
-      setLocalCards(rebuilt);
-      const newScore = await validate(rebuilt);
-      if (newScore && newScore.totalScore < SCORE_THRESHOLD && attempt + 1 < MAX_REBUILD_ATTEMPTS) {
-        await rebuild(rebuilt, newScore, attempt + 1);
-      }
-    } catch { /* best effort */ } finally {
-      setRebuilding(false);
-    }
-  }, [sessionId, format, commander, commanderColorIdentity, archetype, themes, tribalType, psychographic, budgetCents, ownedCardNames, roleTargets, deckColors, collectionOnly, validate]); // eslint-disable-line react-hooks/exhaustive-deps
-
   useEffect(() => {
-    validate(cards).then(score => {
-      if (score && score.totalScore < SCORE_THRESHOLD) {
-        rebuild(cards, score, 0);
-      }
-    });
+    validate(cards);
     generateName();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -272,8 +179,7 @@ export function DeckReview({ sessionId, format, commander, commanderColorIdentit
   }
 
   const isLegal = violations.length === 0;
-  const scoreFails = deckScore !== null && deckScore.totalScore < SCORE_THRESHOLD;
-  const canSave = (isLegal || overrideLegal) && !scoreFails && !rebuilding && deckName.trim().length > 0;
+  const canSave = (isLegal || overrideLegal) && deckName.trim().length > 0;
 
   // Group by role (lands vs non-lands)
   const lands = cardEntries.filter(([n]) => BASIC_LANDS.has(n));
@@ -281,15 +187,6 @@ export function DeckReview({ sessionId, format, commander, commanderColorIdentit
 
   return (
     <div className="max-w-3xl mx-auto">
-      {rebuilding && (
-        <div className="mb-4 rounded-xl border border-amber-700/40 bg-amber-900/10 px-4 py-3 flex items-center gap-3">
-          <svg className="w-4 h-4 animate-spin text-amber-400 shrink-0" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
-          <div>
-            <p className="text-sm font-medium text-amber-400">Improving deck quality… (attempt {rebuildAttempt}/{MAX_REBUILD_ATTEMPTS})</p>
-            <p className="text-xs text-zinc-500 mt-0.5">Khoa is rebuilding based on the rubric feedback. This may take a minute.</p>
-          </div>
-        </div>
-      )}
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-zinc-100 mb-1">Review Your Deck</h2>
         <p className="text-zinc-500 text-sm">
@@ -442,16 +339,6 @@ export function DeckReview({ sessionId, format, commander, commanderColorIdentit
                 </div>
               )}
 
-              {/* Rebuild status */}
-              {rebuilding && (
-                <div className="mt-3 flex items-center gap-2 text-xs text-amber-400 animate-pulse">
-                  <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
-                  Optimizing deck based on rubric… attempt {rebuildAttempt}/{MAX_REBUILD_ATTEMPTS}
-                </div>
-              )}
-              {scoreFails && !rebuilding && rebuildAttempt >= MAX_REBUILD_ATTEMPTS && (
-                <p className="mt-3 text-xs text-zinc-500">Best score after {MAX_REBUILD_ATTEMPTS} attempts. This deck cannot be saved — go back and adjust the themes or commander.</p>
-              )}
             </>
           )}
         </div>
