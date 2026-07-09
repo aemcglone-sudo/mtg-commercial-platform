@@ -265,6 +265,18 @@ export async function POST(req: NextRequest) {
     sessionId?: string;
   };
 
+  // Fetch owned cards from DB server-side — don't trust the client array (may be empty due to timing)
+  let resolvedOwnedCardNames = ownedCardNames;
+  if (collectionOnly) {
+    try {
+      const rows = await findMany<{ name: string }>(
+        `SELECT DISTINCT name FROM inventory_items WHERE "userId" = ? AND "itemType" = 'cards'`,
+        [userId]
+      );
+      if (rows.length > 0) resolvedOwnedCardNames = rows.map(r => r.name);
+    } catch { /* fall back to client-provided list */ }
+  }
+
   const isCommander = ['commander', 'brawl', 'oathbreaker'].includes(format);
   const deckSize = isCommander ? 100 : 60;
   const colorStr = commanderColorIdentity.join('') || 'WUBRG';
@@ -283,8 +295,8 @@ export async function POST(req: NextRequest) {
   } catch { /* best effort */ }
 
   const budgetStr = budgetCents ? `$${(budgetCents / 100).toFixed(0)} total budget — stay under this` : 'no budget constraint';
-  const collectionNote = collectionOnly && ownedCardNames.length > 0
-    ? `COLLECTION MODE (HARD CONSTRAINT): You MUST use ONLY cards from the user's collection. Do NOT suggest any card not on this list. Every single non-land card in the final deck must appear in this owned list:\n${ownedCardNames.slice(0, 600).join(', ')}`
+  const collectionNote = collectionOnly && resolvedOwnedCardNames.length > 0
+    ? `COLLECTION MODE (HARD CONSTRAINT): You MUST use ONLY cards from the user's collection. Do NOT suggest any card not on this list. Every single non-land card in the final deck must appear in this owned list:\n${resolvedOwnedCardNames.slice(0, 600).join(', ')}`
     : '';
 
   const systemPrompt = `You are Khoa, an expert Magic: The Gathering deck builder with deep knowledge of Commander strategy.
@@ -395,7 +407,7 @@ Think step by step. Research first, then build the engine, then support, then la
                   commanderColorIdentity,
                   format,
                   collectionOnly,
-                  ownedCardNames,
+                  ownedCardNames: resolvedOwnedCardNames,
                 );
                 send(sseEvent('tool_result', { tool: block.name, summary }));
                 toolResults.push({
@@ -443,8 +455,8 @@ Think step by step. Research first, then build the engine, then support, then la
         } catch { /* best effort */ }
 
         // Enforce collection filter: strip any non-owned cards (basic lands exempt)
-        if (collectionOnly && ownedCardNames.length > 0) {
-          const ownedSet = new Set(ownedCardNames.map(n => n.toLowerCase()));
+        if (collectionOnly && resolvedOwnedCardNames.length > 0) {
+          const ownedSet = new Set(resolvedOwnedCardNames.map(n => n.toLowerCase()));
           const filtered: Record<string, number> = {};
           for (const [name, qty] of Object.entries(finalDeck)) {
             if (BASIC_LANDS.has(name) || ownedSet.has(name.toLowerCase())) {
