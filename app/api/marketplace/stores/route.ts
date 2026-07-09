@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
     SELECT
       s.id, s.name, s.slug, s.description,
       s.address, s.city, s.state, s.zip,
-      s.phone, s.website_url,
+      s.phone, s."websiteUrl" AS website_url,
       s.lat::text AS lat, s.lng::text AS lng,
       COUNT(DISTINCT si.id)::text AS inventory_count
       ${hasLocation ? `, (3959 * acos(LEAST(1.0, cos(radians(${lat})) * cos(radians(s.lat::float)) * cos(radians(s.lng::float) - radians(${lng})) + sin(radians(${lat})) * sin(radians(s.lat::float)))))::text AS distance_miles` : ''}
@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
       name: r.name,
       slug: r.slug,
       description: r.description,
-      address: [r.address, r.city, r.state, r.zip].filter(Boolean).join(', '),
+      address: r.address ?? [r.city, r.state, r.zip].filter(Boolean).join(', '),
       phone: r.phone,
       websiteUrl: r.website_url,
       lat: r.lat ? parseFloat(r.lat) : null,

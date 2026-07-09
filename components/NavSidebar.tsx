@@ -65,7 +65,7 @@ function NavContent({ items, userName, brandLabel, onNavigate }: NavSidebarProps
         <span className="text-lg font-black text-amber-400">{brandLabel ?? 'Grimoire'}</span>
       </div>
 
-      <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
+      <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto min-h-0">
         {items.map((item, i) => {
           const active = groupActive(item);
           const isGroup = !!item.children;

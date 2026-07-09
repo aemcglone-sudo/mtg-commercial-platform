@@ -7,6 +7,10 @@ const NAV = [
   { href: '/admin/users', label: 'Users' },
   { href: '/admin/shops', label: 'Shops' },
   { href: '/admin/mtg-rules', label: 'MTG Rules' },
+  { href: '/admin/deck-rules', label: 'Deck Rules' },
+  { href: '/admin/deck-feedback', label: 'Deck Feedback' },
+  { href: '/admin/deck-log', label: 'Deck Log' },
+  { href: '/admin/store-claims', label: 'Store Claims' },
   { href: '/admin/product', label: 'Product' },
 ];
 

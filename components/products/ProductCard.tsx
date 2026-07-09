@@ -34,9 +34,10 @@ interface ProductCardProps {
   msrp_cents?: number | null;
   image_url?: string | null;
   nearby_count?: number;
+  shop_names?: string | null;
 }
 
-export default function ProductCard({ id, name, category, set_code, set_name, msrp_cents, image_url, nearby_count }: ProductCardProps) {
+export default function ProductCard({ id, name, category, set_code, set_name, msrp_cents, image_url, nearby_count, shop_names }: ProductCardProps) {
   const emoji = CATEGORY_EMOJI[category] ?? '📦';
   const isNearby = (nearby_count ?? 0) > 0;
   const setIconUrl = set_code
@@ -75,6 +76,9 @@ export default function ProductCard({ id, name, category, set_code, set_name, ms
         <p className="text-xs text-zinc-500 mt-1">{set_name ?? category.replace(/_/g, ' ')}</p>
         {msrp_cents && (
           <p className="text-xs text-zinc-400 mt-1">MSRP ${(msrp_cents / 100).toFixed(2)}</p>
+        )}
+        {shop_names && (
+          <p className="text-xs text-emerald-500 mt-1 truncate">{shop_names}</p>
         )}
       </div>
     </Link>

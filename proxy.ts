@@ -15,6 +15,7 @@ const PUBLIC_PREFIXES = [
   '/register',
   '/api/auth/register',
   '/api/background/',
+  '/api/cron/',
   '/storefront/',
   '/api/collection/dashboard',
   '/api/expensive-cards',

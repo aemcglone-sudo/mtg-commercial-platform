@@ -13,6 +13,7 @@ interface ProductRow {
   msrp_cents: number | null;
   image_url: string | null;
   nearby_count: string;
+  shop_names: string;
 }
 
 export async function GET(req: NextRequest) {
@@ -54,7 +55,8 @@ export async function GET(req: NextRequest) {
   const rows = await findMany<ProductRow>(
     `SELECT p.id, p.name, p.category, p.product_type, p.set_code, p.set_name,
             p.msrp_cents, p.image_url,
-            COUNT(DISTINCT sp."shopId")::text AS nearby_count
+            COUNT(DISTINCT sp."shopId")::text AS nearby_count,
+            STRING_AGG(DISTINCT s.name, ', ' ORDER BY s.name) AS shop_names
      FROM shop_products sp
      JOIN mtg_products p ON p.id = sp."productId"
      JOIN shops s ON s.id = sp."shopId"
@@ -65,5 +67,5 @@ export async function GET(req: NextRequest) {
     params
   );
 
-  return NextResponse.json({ products: rows });
+  return NextResponse.json({ products: rows.map(r => ({ ...r, nearby_count: parseInt(r.nearby_count) })) });
 }

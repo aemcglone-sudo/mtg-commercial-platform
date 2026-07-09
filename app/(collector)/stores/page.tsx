@@ -21,11 +21,17 @@ interface Store {
 
 export default function StoresPage() {
   const [stores, setStores] = useState<Store[]>([]);
+  const [favorites, setFavorites] = useState<Store[]>([]);
   const [loading, setLoading] = useState(true);
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [activeShop, setActiveShop] = useState<string | undefined>(undefined);
 
   useEffect(() => {
+    fetch('/api/marketplace/stores/favorites')
+      .then(r => r.ok ? r.json() : { stores: [] })
+      .then((d: { stores: Store[] }) => setFavorites(d.stores ?? []))
+      .catch(() => {});
+
     // Load all shops immediately so the page isn't blank
     loadStores(null);
 
@@ -52,11 +58,16 @@ export default function StoresPage() {
 
   async function loadStores(loc: { lat: number; lng: number } | null) {
     setLoading(true);
-    const params = loc ? `?lat=${loc.lat}&lng=${loc.lng}&radius=50` : '';
-    const res = await fetch(`/api/marketplace/stores${params}`);
-    const d = await res.json() as { stores: Store[] };
-    setStores(d.stores ?? []);
-    setLoading(false);
+    try {
+      const params = loc ? `?lat=${loc.lat}&lng=${loc.lng}&radius=50` : '';
+      const res = await fetch(`/api/marketplace/stores${params}`);
+      const d = await res.json() as { stores: Store[] };
+      setStores(d.stores ?? []);
+    } catch {
+      setStores([]);
+    } finally {
+      setLoading(false);
+    }
   }
 
   const mappableShops = stores.filter(s => s.lat && s.lng);
@@ -69,8 +80,8 @@ export default function StoresPage() {
           <p className="text-zinc-500 text-sm mt-0.5">Local game stores on Grimoire{location ? ' within 50 miles' : ''}</p>
         </div>
 
-        {/* Map */}
-        {!loading && mappableShops.length > 0 && location && (
+        {/* Map — show whenever we have a location, with or without nearby shops */}
+        {!loading && location && (
           <MapView
             activePinLabel={activeShop}
             pins={[
@@ -86,20 +97,37 @@ export default function StoresPage() {
           />
         )}
 
+        {/* Favorites */}
+        {favorites.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Your favorites</p>
+            {favorites.map(s => (
+              <Link key={s.id} href={`/stores/${s.slug}`}
+                className="flex items-center gap-3 bg-zinc-900 border border-red-900/40 hover:border-red-800/60 rounded-xl px-4 py-3 transition-colors group"
+              >
+                <span className="text-red-400 text-lg shrink-0">♥</span>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-zinc-100 group-hover:text-white text-sm">{s.name}</p>
+                  {s.address && <p className="text-xs text-zinc-500 truncate">{s.address}</p>}
+                </div>
+                <p className="text-xs text-zinc-600 shrink-0">{s.inventoryCount} singles →</p>
+              </Link>
+            ))}
+          </div>
+        )}
+
         {loading ? (
           <p className="text-zinc-600 text-sm py-8 text-center">Loading…</p>
         ) : stores.length === 0 ? (
           <div className="text-center py-8 space-y-2">
-            <p className="text-zinc-500 text-sm">No shops found{location ? ' within 50 miles' : ''}.</p>
-            {location && (
-              <button
-                type="button"
-                onClick={() => loadStores(null)}
-                className="text-xs text-zinc-500 underline hover:text-zinc-300"
-              >
-                Show all shops
-              </button>
-            )}
+            <p className="text-zinc-500 text-sm">No shops found within 50 miles.</p>
+            <button
+              type="button"
+              onClick={() => { setLocation(null); loadStores(null); }}
+              className="text-sm text-emerald-500 hover:text-emerald-400 underline"
+            >
+              Show all shops on Grimoire
+            </button>
           </div>
         ) : (
           <div className="space-y-2">

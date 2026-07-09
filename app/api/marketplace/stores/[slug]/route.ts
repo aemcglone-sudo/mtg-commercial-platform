@@ -12,7 +12,7 @@ interface ShopRow {
 }
 
 interface InventoryRow {
-  scryfall_id: string; card_name: string; condition: string;
+  id: string; scryfall_id: string; card_name: string; condition: string;
   foil: boolean; price_cents: string; quantity: string; image_url: string; set_code: string;
 }
 
@@ -29,15 +29,15 @@ export async function GET(
 
   const shop = await findOne<ShopRow>(
     `SELECT id, name, slug, description, address, city, state, zip, phone, email,
-            website_url, logo_url, banner_url, hours, specialties, hold_instructions,
-            lat::text, lng::text
+            "websiteUrl" AS website_url, "logoUrl" AS logo_url, "bannerUrl" AS banner_url,
+            hours, specialties, hold_instructions, lat::text, lng::text
      FROM shops WHERE slug = ? AND marketplace_active = true AND "isActive" = true`,
     [slug]
   );
   if (!shop) return NextResponse.json({ error: 'Store not found' }, { status: 404 });
 
   const inventory = await findMany<InventoryRow>(
-    `SELECT "scryfallId" AS scryfall_id, "cardName" AS card_name, condition, foil,
+    `SELECT id, "scryfallId" AS scryfall_id, "cardName" AS card_name, condition, foil,
             "priceCents"::text AS price_cents, quantity::text, "imageUrl" AS image_url, "setCode" AS set_code
      FROM shop_inventory WHERE "shopId" = ? AND quantity > 0
      ORDER BY "cardName" ASC LIMIT 200`,
@@ -59,7 +59,7 @@ export async function GET(
       name: shop.name,
       slug: shop.slug,
       description: shop.description,
-      address: [shop.address, shop.city, shop.state, shop.zip].filter(Boolean).join(', '),
+      address: shop.address ?? [shop.city, shop.state, shop.zip].filter(Boolean).join(', '),
       phone: shop.phone,
       email: shop.email,
       websiteUrl: shop.website_url,
@@ -82,6 +82,7 @@ export async function GET(
       notes: p.notes,
     })),
     inventory: inventory.map(i => ({
+      id: i.id,
       scryfallId: i.scryfall_id,
       cardName: i.card_name,
       condition: i.condition,

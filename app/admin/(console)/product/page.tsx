@@ -79,7 +79,7 @@ export default function ProductPage() {
           Grimoire is a Magic: The Gathering platform that connects two types of users: <strong className="text-zinc-100">collectors</strong> who own cards and want to build decks with them, and <strong className="text-zinc-100">local card shops</strong> that buy and sell singles. Collectors are the core user — they own physical cards, track their collection, and want to build the best decks they can from what they have, filling gaps by buying singles from local stores.
         </p>
         <p className="text-zinc-400 leading-relaxed">
-          The platform launched June 4, 2026. It shipped collection management, AI-powered deck building, a full shop owner storefront, role-based authentication for three user types, an admin console, a guided deck wizard with AI card suggestions, and — as of late June — a complete local marketplace connecting collectors to nearby shops for singles, sealed product, and accessories, with SMS/in-app notifications, a card watchlist, and shop-run promotional campaigns.
+          The platform launched June 4, 2026. It shipped collection management, AI-powered deck building, a full shop owner storefront, role-based authentication for three user types, an admin console, a guided deck wizard with AI card suggestions, and — as of late June — a complete local marketplace connecting collectors to nearby shops for singles, sealed product, and accessories, with SMS/in-app notifications, a card watchlist, and shop-run promotional campaigns. As of July 2026, the next major feature under spec is the <strong className="text-zinc-300">Grimoire Shop Storefront & Site Builder</strong> — every shop gets a public website at grimoire.gg/store/[slug] with custom domain support, three templates, branding controls, and a drag-to-reorder section system.
         </p>
       </section>
 
@@ -256,6 +256,20 @@ export default function ProductPage() {
 
 // Historical entries live in /api/admin/changelog (PUT to seed)
 const _UNUSED: { date: string; type: 'feature' | 'fix' | 'infra'; description: string }[] = [
+  // July 1
+  { date: '2026-07-01', type: 'feature', description: 'Nearby Shops: geo-filtered map view with GPS detection — shows user location pin + shop pins, shops sorted by distance with mileage label' },
+  { date: '2026-07-01', type: 'feature', description: 'Collector favorites: heart button on store profile saves a shop as a favorite; favorites shown at top of Nearby Shops list with red border' },
+  { date: '2026-07-01', type: 'feature', description: 'Store profile redesigned: top 4 highest-value singles featured as card grid, full searchable card grid below, products section above singles — no tabs' },
+  { date: '2026-07-01', type: 'feature', description: 'Clicking any card in a store profile opens the full CardDetailModal (card text, EDHREC, TCGPlayer links, pricing) — consistent with collection view' },
+  { date: '2026-07-01', type: 'feature', description: 'Hold button appears on card hover in store grid — passes correct inventory row id so holds no longer return "out of stock"' },
+  { date: '2026-07-01', type: 'feature', description: 'Product cards on /products now show which shop(s) carry each item in green text' },
+  { date: '2026-07-01', type: 'fix',     description: 'Stores API was returning 500 — shops.website_url, logo_url, banner_url columns are camelCase in DB ("websiteUrl" etc) — corrected in both /stores and /stores/[slug] routes' },
+  { date: '2026-07-01', type: 'fix',     description: 'Store profile was showing "Store not found" — same camelCase column issue in slug route fixed' },
+  { date: '2026-07-01', type: 'fix',     description: 'Address was duplicating city/state/zip — shops.address already contains formatted full address; removed redundant concatenation' },
+  { date: '2026-07-01', type: 'fix',     description: 'Hold requests returned "item not found or out of stock" because scryfallId was passed as inventoryItemId — now passes actual shop_inventory.id' },
+  { date: '2026-07-01', type: 'fix',     description: 'Shop settings had duplicate city/state fields — removed Location section from Shop Details tab; address lives exclusively in Marketplace Setup' },
+  { date: '2026-07-01', type: 'fix',     description: 'Shop settings consolidated Shop Details + Marketplace Setup into a single tab — removes duplication of store name, description, and contact fields' },
+  { date: '2026-07-01', type: 'infra',   description: 'Added collector_favorite_shops table (userId, shopId, unique constraint) with API routes for GET/POST/DELETE favorites per store slug' },
   // June 30
   { date: '2026-06-30', type: 'feature', description: 'Shop owners: Add Product modal now searches the real sealed-product/accessory catalog (661 items) with a live scrollable results list, plus a manual fallback for anything not in the catalog' },
   { date: '2026-06-30', type: 'fix',     description: 'Shop owner product add was 403ing for accounts with a stale collector-role session cookie — role now refreshed by re-login' },
