@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthenticatedUserId } from '@/lib/auth';
-import { nimChat, extractJson } from '@/lib/nvidia-nim';
+import { geminiChat, extractJson } from '@/lib/gemini';
 
 export async function POST(req: NextRequest) {
   const userId = getAuthenticatedUserId(req);
@@ -46,7 +46,7 @@ Rules:
 - confidence: overall confidence 0-1.`;
 
   try {
-    const raw = await nimChat(extractionPrompt, 0.2);
+    const raw = await geminiChat(extractionPrompt, 0.2);
     if (!raw) throw new Error('no response');
     const parsed = JSON.parse(extractJson(raw));
     return NextResponse.json(parsed);

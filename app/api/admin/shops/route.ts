@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { findMany } from '@/lib/db';
+import { findMany, run } from '@/lib/db';
 import { getSession } from '@/lib/session';
 
 export async function GET(req: NextRequest) {
@@ -29,4 +29,16 @@ export async function GET(req: NextRequest) {
   `, []);
 
   return NextResponse.json({ shops: shops.map(s => ({ ...s, inventoryCount: Number(s.inventoryCount) })) });
+}
+
+export async function DELETE(req: NextRequest) {
+  const session = getSession(req);
+  if (session?.role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const { id } = await req.json() as { id: string };
+  if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
+  // Delete child records with RESTRICT FK before deleting the shop
+  await run(`DELETE FROM shop_order_items WHERE "orderId" IN (SELECT id FROM shop_orders WHERE "shopId" = ?)`, [id]);
+  await run(`DELETE FROM shop_orders WHERE "shopId" = ?`, [id]);
+  await run(`DELETE FROM shops WHERE id = ?`, [id]);
+  return NextResponse.json({ ok: true });
 }

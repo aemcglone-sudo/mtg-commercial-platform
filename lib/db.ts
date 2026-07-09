@@ -3,7 +3,7 @@ import { Pool } from 'pg';
 const g = globalThis as { _pool?: Pool };
 if (!g._pool) g._pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  max: 5,
+  max: 8,
   idleTimeoutMillis: 10000,
   connectionTimeoutMillis: 5000,
   keepAlive: true,
@@ -52,4 +52,16 @@ export async function run(
   args: Arg[] = []
 ): Promise<import('pg').QueryResult> {
   return query(sql, args);
+}
+
+// Use for long-running batch operations — checks out one connection,
+// runs all queries on it, then releases it so the pool stays free.
+export async function withClient<T>(fn: (q: (sql: string, args?: Arg[]) => Promise<import('pg').QueryResult>) => Promise<T>): Promise<T> {
+  const client = await pool.connect();
+  try {
+    const q = (sql: string, args: Arg[] = []) => client.query(toPostgres(sql), args);
+    return await fn(q);
+  } finally {
+    client.release();
+  }
 }

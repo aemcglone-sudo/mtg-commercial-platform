@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { nimChat, extractJson } from '@/lib/nvidia-nim';
+import { geminiChat, extractJson } from '@/lib/gemini';
 
 export const maxDuration = 30;
 export const dynamic = 'force-dynamic';
@@ -86,7 +86,9 @@ elves, zombies, vampires, humans, angels, goblins, dinosaurs, wizards, pirates, 
 PSYCHOGRAPHICS — pick exactly 1:
 spike (competitive optimizer), johnny (creative combo builder), timmy (big splashy plays), vorthos (flavor and story), melvin (elegant mechanical synergy)
 
-Also include a brief "whyThese" explanation (2-3 sentences) telling the player in plain language why these themes suit this commander — reference the commander's specific abilities.
+Also include:
+- "whyThese": 2-3 sentences explaining why these themes fit this commander, referencing their specific abilities
+- "winCondition": 1-2 sentences describing HOW this deck actually wins the game — the specific mechanism (e.g. "Win by connecting Ninjas with combat damage to trigger Yuriko's ability, draining opponents for the CMC of top-deck reveals while refilling your hand each attack.")
 
 Return exactly:
 {
@@ -94,19 +96,21 @@ Return exactly:
   "archetypes": [],
   "tribal": [],
   "psychographics": ["johnny"],
-  "whyThese": "Two or three sentences explaining why these themes fit this commander."
+  "whyThese": "Two or three sentences explaining why these themes fit this commander.",
+  "winCondition": "One or two sentences describing the specific win mechanism."
 }`;
 
   try {
-    const raw = await nimChat(prompt, 0.4);
+    const raw = await geminiChat(prompt, 0.4);
     if (!raw) return NextResponse.json(EMPTY);
-    const parsed = JSON.parse(extractJson(raw)) as { themes?: string[]; archetypes?: string[]; tribal?: string[]; psychographics?: string[]; whyThese?: string };
+    const parsed = JSON.parse(extractJson(raw)) as { themes?: string[]; archetypes?: string[]; tribal?: string[]; psychographics?: string[]; whyThese?: string; winCondition?: string };
     return NextResponse.json({
       themes: parsed.themes ?? [],
       archetypes: parsed.archetypes ?? [],
       tribal: parsed.tribal ?? [],
       psychographics: parsed.psychographics ?? [],
       whyThese: parsed.whyThese ?? null,
+      winCondition: parsed.winCondition ?? null,
     });
   } catch (e) {
     console.error('[themes/recommend] error:', e);

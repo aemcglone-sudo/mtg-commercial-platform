@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { nimChat, stripThinkTags } from '@/lib/nvidia-nim';
+import { geminiChat, stripThinkTags } from '@/lib/gemini';
 
 export const maxDuration = 30;
 export const dynamic = 'force-dynamic';
@@ -37,7 +37,7 @@ Return ONLY valid JSON:
 { "explanation": "Two or three sentences here." }`;
 
   try {
-    const raw = await nimChat(prompt, 0.8);
+    const raw = await geminiChat(prompt, 0.8);
     if (!raw) return NextResponse.json({ explanation: null });
     const clean = stripThinkTags(raw);
     // Extract JSON if present, otherwise use prose directly

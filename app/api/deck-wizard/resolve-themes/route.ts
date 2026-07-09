@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthenticatedUserId } from '@/lib/auth';
-import { nimChat, extractJson } from '@/lib/nvidia-nim';
+import { geminiChat, extractJson } from '@/lib/gemini';
 
 export async function POST(req: NextRequest) {
   const userId = getAuthenticatedUserId(req);
@@ -46,7 +46,7 @@ Adjust roleTargets based on the selected themes. A Ramp theme needs more ramp; a
 Only list actual conflicts — most theme combinations are fine.`;
 
   try {
-    const raw = await nimChat(prompt, 0.3);
+    const raw = await geminiChat(prompt, 0.3);
     if (!raw) throw new Error('no response');
     const parsed = JSON.parse(extractJson(raw));
     return NextResponse.json(parsed);

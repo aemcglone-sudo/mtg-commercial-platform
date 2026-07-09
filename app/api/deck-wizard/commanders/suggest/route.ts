@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthenticatedUserId } from '@/lib/auth';
-import { nimChat, extractJson } from '@/lib/nvidia-nim';
+import { geminiChat, extractJson } from '@/lib/gemini';
 
 export const maxDuration = 30;
 
@@ -37,7 +37,7 @@ Rules:
 - Order by how well they fit the stated themes`;
 
   try {
-    const raw = await nimChat(prompt, 0.8);
+    const raw = await geminiChat(prompt, 0.8);
     if (!raw) return NextResponse.json({ commanders: [] });
     const parsed = JSON.parse(extractJson(raw)) as { commanders: Array<{ name: string; reason: string; colorIdentity: string[]; style: string }> };
     return NextResponse.json(parsed);

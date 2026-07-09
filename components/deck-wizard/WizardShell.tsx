@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { FormatSelector } from './FormatSelector';
 import { CommanderSearch } from './CommanderSearch';
 import { ArchetypeSelector } from './ArchetypeSelector';
@@ -16,6 +16,7 @@ export interface ThemeRecs {
   tribal: string[];
   psychographics: string[];
   whyThese: string | null;
+  winCondition: string | null;
 }
 
 export interface WizardState {
@@ -31,6 +32,7 @@ export interface WizardState {
   budgetCents: number | null;
   cards: Record<string, number>;
   roleTargets: Record<string, number> | null;
+  deckColors: string[]; // for non-commander formats: W/U/B/R/G chosen by user
   ownedCardNames: string[];
   currentStep: number;
   entryMode: 'guided' | 'natural_language';
@@ -52,6 +54,7 @@ const INITIAL_STATE: WizardState = {
   budgetCents: null,
   cards: {},
   roleTargets: null,
+  deckColors: [],
   ownedCardNames: [],
   currentStep: 1,
   entryMode: 'guided',
@@ -82,6 +85,35 @@ export function WizardShell({ initialState, sessionId }: Props) {
     ...initialState,
     sessionId: sessionId ?? null,
   });
+  const [collectionOnly, setCollectionOnly] = useState(false);
+  const [collectionLoading, setCollectionLoading] = useState(false);
+  const collectionFetched = useRef(false);
+
+  const fetchCollection = useCallback(async () => {
+    if (collectionFetched.current) return;
+    collectionFetched.current = true;
+    setCollectionLoading(true);
+    try {
+      const res = await fetch('/api/collection/names');
+      if (res.ok) {
+        const data = await res.json() as { names?: string[] };
+        if (data.names?.length) {
+          setState(prev => ({ ...prev, ownedCardNames: data.names! }));
+          // Default to collection-only when the user has cards — they expect the deck to use what they own.
+          setCollectionOnly(true);
+        }
+      }
+    } catch { /* best effort */ }
+    setCollectionLoading(false);
+  }, []);
+
+  // Eagerly fetch collection on mount so the toggle defaults correctly.
+  useEffect(() => { fetchCollection(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleToggleCollectionOnly = useCallback((value: boolean) => {
+    setCollectionOnly(value);
+    if (value) fetchCollection();
+  }, [fetchCollection]);
 
   const update = useCallback((patch: Partial<WizardState>) => {
     setState(prev => {
@@ -190,8 +222,10 @@ export function WizardShell({ initialState, sessionId }: Props) {
             {state.currentStep === 1 && (
               <FormatSelector
                 selected={state.format}
+                collectionOnly={collectionOnly}
                 onSelect={(format) => advance({ format })}
                 onNaturalLanguage={() => update({ entryMode: 'natural_language' })}
+                onToggleCollectionOnly={handleToggleCollectionOnly}
               />
             )}
             {state.currentStep === 2 && isCommanderFormat && (
@@ -264,8 +298,8 @@ export function WizardShell({ initialState, sessionId }: Props) {
                 selectedArchetype={state.archetype}
                 tribalType={state.tribalType}
                 recommendations={state.themeRecs}
-                onConfirm={(themes, tribalType, psychographic, roleTargets) => {
-                  advance({ themes, tribalType, psychographic, roleTargets: roleTargets as Record<string, number> | null });
+                onConfirm={(themes, tribalType, psychographic, roleTargets, deckColors) => {
+                  advance({ themes, tribalType, psychographic, roleTargets: roleTargets as Record<string, number> | null, deckColors: deckColors ?? [] });
                 }}
                 onBack={back}
               />
@@ -289,7 +323,9 @@ export function WizardShell({ initialState, sessionId }: Props) {
                 psychographic={state.psychographic}
                 budgetCents={state.budgetCents}
                 roleTargets={state.roleTargets}
-                ownedCardNames={[]}
+                deckColors={state.deckColors}
+                ownedCardNames={state.ownedCardNames}
+                collectionOnly={collectionOnly}
                 initialCards={state.cards}
                 onConfirm={(cards) => advance({ cards })}
                 onBack={back}

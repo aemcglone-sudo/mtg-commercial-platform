@@ -66,13 +66,14 @@ export function CommanderSearch({ format, commanderExplanation, onCommanderHover
       colorIdentity: card.color_identity,
       imageUrl: card.image_uris?.normal ?? card.card_faces?.[0]?.image_uris?.normal ?? null,
       typeLine: card.type_line,
-      oracleText: card.oracle_text,
+      oracleText: card.oracle_text ?? card.card_faces?.map(f => (f as { oracle_text?: string }).oracle_text ?? '').join('\n---\n'),
       priceUsd: card.prices?.usd ? parseFloat(card.prices.usd) : null,
     };
     setSelected(commander);
     setResults([]);
     setQuery('');
-    onCommanderHover(card.name, card.oracle_text ?? '');
+    const oracleText = card.oracle_text ?? card.card_faces?.map(f => (f as { oracle_text?: string }).oracle_text ?? '').join('\n---\n') ?? '';
+    onCommanderHover(card.name, oracleText);
   }
 
   return (
@@ -163,7 +164,7 @@ export function CommanderSearch({ format, commanderExplanation, onCommanderHover
           )}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
-              <span className="font-bold text-amber-400">{selected.name}</span>
+              <span className="font-bold text-amber-400">{selected.name.includes(' // ') ? selected.name.split(' // ')[0] : selected.name}</span>
               <span className="text-sm">{selected.colorIdentity.map(c => COLOR_SYMBOLS[c] ?? c).join('')}</span>
             </div>
             <p className="text-xs text-zinc-500 mb-2">{selected.typeLine}</p>

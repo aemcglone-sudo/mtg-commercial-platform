@@ -14,8 +14,10 @@ interface FormatInfo {
 
 interface Props {
   selected: string;
+  collectionOnly: boolean;
   onSelect: (format: string) => void;
   onNaturalLanguage: () => void;
+  onToggleCollectionOnly: (value: boolean) => void;
 }
 
 const CATEGORY_ORDER = ['constructed', 'commander', 'limited', 'other'];
@@ -26,7 +28,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   other: 'Specialty',
 };
 
-export function FormatSelector({ selected, onSelect, onNaturalLanguage }: Props) {
+export function FormatSelector({ selected, collectionOnly, onSelect, onNaturalLanguage, onToggleCollectionOnly }: Props) {
   const [formats, setFormats] = useState<FormatInfo[]>([]);
   const [expanded, setExpanded] = useState<string | null>(null);
 
@@ -49,20 +51,39 @@ export function FormatSelector({ selected, onSelect, onNaturalLanguage }: Props)
         <p className="text-zinc-500">Select the format you want to build for, or describe your deck in natural language.</p>
       </div>
 
-      <button
-        type="button"
-        onClick={onNaturalLanguage}
-        className="w-full mb-8 rounded-xl border border-dashed border-amber-700/50 bg-amber-400/5 hover:bg-amber-400/10 hover:border-amber-600 p-4 text-left transition-all group"
-      >
-        <div className="flex items-center gap-3">
-          <span className="text-2xl">✨</span>
-          <div>
-            <div className="font-semibold text-amber-400 group-hover:text-amber-300">Natural Language</div>
-            <div className="text-sm text-zinc-500">Describe your deck idea and let Khoa configure everything</div>
+      <div className="flex gap-3 mb-8">
+        <button
+          type="button"
+          onClick={onNaturalLanguage}
+          className="flex-1 rounded-xl border border-dashed border-amber-700/50 bg-amber-400/5 hover:bg-amber-400/10 hover:border-amber-600 p-4 text-left transition-all group"
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">✨</span>
+            <div>
+              <div className="font-semibold text-amber-400 group-hover:text-amber-300">Natural Language</div>
+              <div className="text-sm text-zinc-500">Describe your deck idea and let Khoa configure everything</div>
+            </div>
+            <span className="ml-auto text-zinc-600 group-hover:text-zinc-400">→</span>
           </div>
-          <span className="ml-auto text-zinc-600 group-hover:text-zinc-400">→</span>
-        </div>
-      </button>
+        </button>
+        <button
+          type="button"
+          onClick={() => onToggleCollectionOnly(!collectionOnly)}
+          className={`rounded-xl border p-4 text-left transition-all min-w-48 ${
+            collectionOnly
+              ? 'bg-green-900/30 border-green-600 text-green-400'
+              : 'border-zinc-700 bg-zinc-900 hover:border-zinc-500 text-zinc-400 hover:text-zinc-200'
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">{collectionOnly ? '✅' : '📦'}</span>
+            <div>
+              <div className="font-semibold text-sm">From My Collection</div>
+              <div className="text-xs text-zinc-500 mt-0.5">Only use cards you own</div>
+            </div>
+          </div>
+        </button>
+      </div>
 
       <div className="space-y-6">
         {CATEGORY_ORDER.filter(cat => (byCategory[cat]?.length ?? 0) > 0).map(cat => (

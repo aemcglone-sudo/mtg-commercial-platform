@@ -39,7 +39,9 @@ interface Props {
   psychographic: string | null;
   budgetCents: number | null;
   roleTargets: Record<string, number> | null;
+  deckColors: string[];
   ownedCardNames: string[];
+  collectionOnly: boolean;
   initialCards: Record<string, number>;
   onConfirm: (cards: Record<string, number>) => void;
   onBack: () => void;
@@ -90,7 +92,7 @@ function shortType(typeLine: string): string {
 
 export function CardSelectionPanel({
   sessionId, format, commander, commanderColorIdentity, archetype, themes, tribalType,
-  psychographic, budgetCents, roleTargets, ownedCardNames, initialCards, onConfirm, onBack
+  psychographic, budgetCents, roleTargets, deckColors, ownedCardNames, collectionOnly, initialCards, onConfirm, onBack
 }: Props) {
   const [roles, setRoles] = useState<RoleGroup[]>([]);
   const [loading, setLoading] = useState(true); // start true — fetch fires immediately
@@ -132,7 +134,7 @@ export function CardSelectionPanel({
         body: JSON.stringify({
           sessionId, format, commander, commanderColorIdentity, archetype, themes,
           tribalType, psychographic, budgetCents, currentCards: initialCards,
-          ownedCardNames, roleTargets,
+          ownedCardNames, roleTargets, deckColors, collectionOnly,
         }),
       });
       const data = await res.json() as { roles: RoleGroup[]; summary?: string };
@@ -147,37 +149,45 @@ export function CardSelectionPanel({
       // Auto-populate the deck with all non-land suggestions so the curve
       // is immediately meaningful. Users can remove cards they don't want.
       const nonLandRoles = fetchedRoles.filter(g => g.role.toLowerCase() !== 'lands');
+      const landsRole = fetchedRoles.find(g => g.role.toLowerCase() === 'lands');
+      // Reserve slots for lands — non-land cards must not crowd them out.
+      // For non-commander formats, cards use 4x/3x/2x quantities so totals can easily hit 60 before basics are added.
+      const minLands = landsRole?.target ?? (deckSize === 100 ? 35 : 22);
+      const nonLandBudget = deckSize - minLands;
+
       // Read current deck directly from initialCards (closure is stale-safe here
       // since this only runs once on mount)
       const autoAdded: Record<string, number> = {};
+      let autoAddedCount = Object.values(initialCards).reduce((s, q) => s + q, 0);
       for (const group of nonLandRoles) {
         for (const card of group.cards) {
           if (!(card.name in initialCards) && !(card.name in autoAdded)) {
-            autoAdded[card.name] = card.suggestedQuantity ?? 1;
+            const qty = card.suggestedQuantity ?? 1;
+            if (autoAddedCount + qty > nonLandBudget) continue; // don't crowd out lands
+            autoAdded[card.name] = qty;
+            autoAddedCount += qty;
           }
         }
       }
       const newDeck = { ...initialCards, ...autoAdded };
       setDeck(newDeck);
 
-      // Fill basics if deck is short
-      const newCount = Object.values(newDeck).reduce((s, q) => s + q, 0);
-      if (newCount < deckSize) {
-        fetch('/api/deck-wizard/fill-basics', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            cards: Object.entries(newDeck).map(([name, quantity]) => ({ name, quantity })),
-            deckSize,
-            colorIdentity: commanderColorIdentity,
-          }),
+      // Always fill basics up to at least minLands
+      fetch('/api/deck-wizard/fill-basics', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cards: Object.entries(newDeck).map(([name, quantity]) => ({ name, quantity })),
+          deckSize,
+          colorIdentity: commanderColorIdentity.length ? commanderColorIdentity : deckColors,
+          minLands,
+        }),
+      })
+        .then(r => r.ok ? r.json() : null)
+        .then((d: { basics: Record<string, number> } | null) => {
+          if (d?.basics) setDeck(p => ({ ...p, ...d.basics }));
         })
-          .then(r => r.ok ? r.json() : null)
-          .then((d: { basics: Record<string, number> } | null) => {
-            if (d?.basics) setDeck(p => ({ ...p, ...d.basics }));
-          })
-          .catch(() => {});
-      }
+        .catch(() => {});
     } catch {
       setLoadError(true);
     } finally {
@@ -267,7 +277,7 @@ export function CardSelectionPanel({
           body: JSON.stringify({
             cards: Object.entries(nextDeck).map(([name, quantity]) => ({ name, quantity })),
             deckSize,
-            colorIdentity: commanderColorIdentity,
+            colorIdentity: commanderColorIdentity.length ? commanderColorIdentity : deckColors,
           }),
         });
         const data = await res.json() as { basics: Record<string, number> };
@@ -318,7 +328,12 @@ export function CardSelectionPanel({
         {/* Left: Suggestions */}
         <div className="flex-1 flex flex-col min-w-0">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-bold text-zinc-100">Khoa's Suggestions</h2>
+            <div>
+              <h2 className="text-lg font-bold text-zinc-100">Khoa's Suggestions</h2>
+              {collectionOnly && (
+                <span className="text-xs text-green-400 font-medium">📦 From your collection only</span>
+              )}
+            </div>
             <div className="flex items-center gap-3">
               {roles.length > 0 && !loading && (
                 <button

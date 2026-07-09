@@ -18,6 +18,16 @@ export default function AdminShopsPage() {
   const [shops, setShops] = useState<Shop[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  async function handleDelete(id: string) {
+    setDeleting(true);
+    await fetch('/api/admin/shops', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
+    setShops(prev => prev.filter(s => s.id !== id));
+    setConfirmDeleteId(null);
+    setDeleting(false);
+  }
 
   useEffect(() => {
     fetch('/api/admin/shops').then(r => r.json()).then(d => setShops(d.shops ?? [])).finally(() => setLoading(false));
@@ -58,6 +68,7 @@ export default function AdminShopsPage() {
                 <th className="text-left px-5 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Location</th>
                 <th className="text-left px-5 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Inventory</th>
                 <th className="text-left px-5 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Created</th>
+                <th className="px-5 py-3 sr-only">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800">
@@ -79,6 +90,21 @@ export default function AdminShopsPage() {
                   </td>
                   <td className="px-5 py-3.5 text-zinc-500">
                     {new Date(s.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </td>
+                  <td className="px-5 py-3.5 text-right">
+                    {confirmDeleteId === s.id ? (
+                      <span className="flex items-center justify-end gap-2 text-xs">
+                        <span className="text-zinc-400">Delete {s.name}?</span>
+                        <button type="button" onClick={() => handleDelete(s.id)} disabled={deleting}
+                          className="text-red-400 hover:text-red-300 font-medium disabled:opacity-50">Yes</button>
+                        <button type="button" onClick={() => setConfirmDeleteId(null)} className="text-zinc-500 hover:text-zinc-300">Cancel</button>
+                      </span>
+                    ) : (
+                      <button type="button" onClick={() => setConfirmDeleteId(s.id)} title="Delete shop"
+                        className="text-zinc-600 hover:text-red-400 transition-colors">
+                        🗑
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}

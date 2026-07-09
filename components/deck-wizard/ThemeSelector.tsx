@@ -31,7 +31,7 @@ interface Props {
   selectedArchetype: string | null;
   tribalType: string | null;
   recommendations: Recommendations | null;
-  onConfirm: (themes: string[], tribalType: string | null, psychographic: string | null, roleTargets: RoleTargets | null) => void;
+  onConfirm: (themes: string[], tribalType: string | null, psychographic: string | null, roleTargets: RoleTargets | null, deckColors?: string[]) => void;
   onBack: () => void;
 }
 
@@ -40,13 +40,24 @@ interface Recommendations {
   archetypes: string[];
   tribal: string[];
   psychographics: string[];
+  winCondition?: string | null;
 }
 
+const COLOR_OPTIONS = [
+  { id: 'W', label: 'White', symbol: 'W', bg: 'bg-yellow-100 dark:bg-yellow-900/30', ring: 'ring-yellow-400', text: 'text-yellow-800 dark:text-yellow-200' },
+  { id: 'U', label: 'Blue',  symbol: 'U', bg: 'bg-blue-100 dark:bg-blue-900/30',   ring: 'ring-blue-400',   text: 'text-blue-800 dark:text-blue-200' },
+  { id: 'B', label: 'Black', symbol: 'B', bg: 'bg-zinc-200 dark:bg-zinc-800',       ring: 'ring-zinc-400',   text: 'text-zinc-800 dark:text-zinc-200' },
+  { id: 'R', label: 'Red',   symbol: 'R', bg: 'bg-red-100 dark:bg-red-900/30',     ring: 'ring-red-400',    text: 'text-red-800 dark:text-red-200' },
+  { id: 'G', label: 'Green', symbol: 'G', bg: 'bg-green-100 dark:bg-green-900/30', ring: 'ring-green-400',  text: 'text-green-800 dark:text-green-200' },
+];
+
 export function ThemeSelector({ format, commanderName, selectedThemes, selectedArchetype, tribalType, recommendations: recsProp, onConfirm, onBack }: Props) {
+  const isCommanderFormat = ['commander', 'brawl', 'oathbreaker'].includes(format?.toLowerCase() ?? '');
   const [data, setData] = useState<ThemeData | null>(null);
   const [themes, setThemes] = useState<string[]>(selectedThemes);
   const [tribal, setTribal] = useState<string | null>(tribalType);
   const [psychographic, setPsychographic] = useState<string | null>(null);
+  const [deckColors, setDeckColors] = useState<string[]>([]);
   const [resolving, setResolving] = useState(false);
   const [conflicts, setConflicts] = useState<Array<{ themes: string[]; message: string }>>([]);
   const [localRecs, setLocalRecs] = useState<(Recommendations & { whyThese?: string }) | null>(recsProp);
@@ -93,7 +104,7 @@ export function ThemeSelector({ format, commanderName, selectedThemes, selectedA
 
   function handleConfirm() {
     // Navigate immediately — resolve-themes runs in background and conflicts are non-blocking
-    onConfirm(themes, tribal, psychographic, null);
+    onConfirm(themes, tribal, psychographic, null, isCommanderFormat ? undefined : deckColors);
     // Fire-and-forget conflict detection (result is informational only)
     fetch('/api/deck-wizard/resolve-themes', {
       method: 'POST',
@@ -110,7 +121,8 @@ export function ThemeSelector({ format, commanderName, selectedThemes, selectedA
     );
   }
 
-  const isRec = (section: keyof Recommendations, id: string) =>
+  type ArraySection = 'themes' | 'archetypes' | 'tribal' | 'psychographics';
+  const isRec = (section: ArraySection, id: string) =>
     !!recommendations?.[section]?.some((r: string) => r.toLowerCase() === id.toLowerCase());
 
   const whyThese = (recommendations as (Recommendations & { whyThese?: string | null }) | null)?.whyThese ?? null;
@@ -124,10 +136,21 @@ export function ThemeSelector({ format, commanderName, selectedThemes, selectedA
         <p className="text-zinc-500">Mix and match themes to define your deck's identity. Pick 1–3 for best results.</p>
       </div>
 
+      {/* Win condition — shown prominently when available */}
+      {recommendations?.winCondition && (
+        <div className="mb-6 rounded-xl border border-amber-600/40 bg-amber-400/5 px-5 py-4">
+          <div className="flex items-center gap-2 mb-1.5">
+            <span className="text-amber-400">⚡</span>
+            <span className="text-xs font-semibold text-amber-400 uppercase tracking-widest">Win Condition</span>
+          </div>
+          <p className="text-sm text-amber-100 leading-relaxed">{recommendations.winCondition}</p>
+        </div>
+      )}
+
       {recommendations && (
-        <div className="mb-6 rounded-xl border border-amber-700/40 bg-amber-400/5 px-4 py-3 flex items-center gap-2 text-sm">
+        <div className="mb-6 rounded-xl border border-zinc-800 bg-zinc-900/50 px-4 py-3 flex items-center gap-2 text-sm">
           <span className="text-amber-400">✦</span>
-          <span className="text-amber-300 font-medium">Highlighted options are recommended for {commanderName ? commanderName.split(',')[0] : selectedArchetype}</span>
+          <span className="text-zinc-400">Highlighted options are recommended for <span className="text-amber-300 font-medium">{commanderName ? commanderName.split(',')[0] : selectedArchetype}</span></span>
         </div>
       )}
 
@@ -241,6 +264,34 @@ export function ThemeSelector({ format, commanderName, selectedThemes, selectedA
           })}
         </div>
       </div>
+
+      {/* Color picker — only for non-commander formats */}
+      {!isCommanderFormat && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold text-zinc-300">Deck Colors <span className="text-zinc-500 font-normal">(pick 1–3)</span></p>
+            {deckColors.length > 0 && (
+              <button type="button" onClick={() => setDeckColors([])} className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors">Clear</button>
+            )}
+          </div>
+          <div className="flex gap-2">
+            {COLOR_OPTIONS.map(c => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => setDeckColors(prev => prev.includes(c.id) ? prev.filter(x => x !== c.id) : [...prev, c.id])}
+                className={`w-10 h-10 rounded-full text-sm font-bold border-2 transition-all ${deckColors.includes(c.id) ? `${c.bg} ${c.text} border-transparent ring-2 ${c.ring}` : 'bg-zinc-800 text-zinc-500 border-zinc-700 hover:border-zinc-500'}`}
+                title={c.label}
+              >
+                {c.symbol}
+              </button>
+            ))}
+          </div>
+          {deckColors.length === 0 && (
+            <p className="text-xs text-amber-500/80">Select your colors — this limits Khoa to cards of those colors only.</p>
+          )}
+        </div>
+      )}
 
       <div className="flex items-center justify-between">
         <button type="button" onClick={onBack} className="text-zinc-500 hover:text-zinc-300 text-sm transition-colors">

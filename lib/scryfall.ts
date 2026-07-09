@@ -15,7 +15,9 @@ export interface ScryfallCard {
   card_faces?: Array<{ image_uris?: { small: string; normal: string }; colors?: string[] }>;
   prices: { usd: string | null; usd_foil: string | null };
   scryfall_uri: string;
+  set: string;
   set_name: string;
+  collector_number: string;
   legalities?: Record<string, 'legal' | 'banned' | 'restricted' | 'not_legal'>; // standard, pioneer, commander, modern, legacy, etc.
 }
 

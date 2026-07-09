@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { ManaChart } from './ManaChart';
+import type { DeckScore } from '@/app/api/deck-wizard/score/route';
 
 interface Violation { card: string; reason: string }
 interface Combo { cards: string[]; description: string; difficulty: string; type: string }
@@ -39,6 +40,10 @@ export function DeckReview({ sessionId, format, commander, commanderColorIdentit
   const [violations, setViolations] = useState<Violation[]>([]);
   const [combos, setCombos] = useState<Combo[]>([]);
   const [synergies, setSynergies] = useState<Synergy[]>([]);
+  const [winCondition, setWinCondition] = useState<string | null>(null);
+  const [deckScore, setDeckScore] = useState<DeckScore | null>(null);
+  const [scoring, setScoring] = useState(true);
+  const [overrideScore, setOverrideScore] = useState(false);
   const [validating, setValidating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -71,8 +76,9 @@ export function DeckReview({ sessionId, format, commander, commanderColorIdentit
 
   const validate = useCallback(async () => {
     setValidating(true);
+    setScoring(true);
     try {
-      const [validRes, combosRes] = await Promise.all([
+      const [validRes, combosRes, scoreRes] = await Promise.all([
         fetch('/api/deck-wizard/validate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -81,22 +87,31 @@ export function DeckReview({ sessionId, format, commander, commanderColorIdentit
         fetch('/api/deck-wizard/detect-combos', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ cards: cardEntries.map(([name]) => name) }),
+          body: JSON.stringify({ cards: cardEntries.map(([name]) => name), commander, format }),
+        }),
+        fetch('/api/deck-wizard/score', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cards, commander, commanderColorIdentity, format, archetype, themes, tribalType }),
         }),
       ]);
 
       const validData = await validRes.json() as { violations: Violation[] };
-      const combosData = await combosRes.json() as { combos: Combo[]; synergies: Synergy[] };
+      const combosData = await combosRes.json() as { combos: Combo[]; synergies: Synergy[]; winCondition?: string | null };
+      const scoreData = await scoreRes.json() as DeckScore;
 
       setViolations(validData.violations ?? []);
       setCombos(combosData.combos ?? []);
       setSynergies(combosData.synergies ?? []);
+      setWinCondition(combosData.winCondition ?? null);
+      if (scoreRes.ok) setDeckScore(scoreData);
     } catch {
       setViolations([]);
     } finally {
       setValidating(false);
+      setScoring(false);
     }
-  }, [cardEntries, format, commanderColorIdentity]);
+  }, [cardEntries, format, commanderColorIdentity]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { validate(); generateName(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -136,7 +151,7 @@ export function DeckReview({ sessionId, format, commander, commanderColorIdentit
       const res = await fetch('/api/deck-wizard/finalize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId, deckName, cards, commander, format, archetype }),
+        body: JSON.stringify({ sessionId, deckName, cards, commander, format, archetype, rubricScore: deckScore ?? undefined }),
       });
       const data = await res.json() as { deckId: string; ok: boolean; error?: string };
       if (!data.ok) { setError(data.error ?? 'Failed to save'); return; }
@@ -150,7 +165,9 @@ export function DeckReview({ sessionId, format, commander, commanderColorIdentit
   }
 
   const isLegal = violations.length === 0;
-  const canSave = (isLegal || overrideLegal) && deckName.trim().length > 0;
+  const SCORE_THRESHOLD = 75; // out of 120
+  const scoreFails = deckScore !== null && deckScore.totalScore < SCORE_THRESHOLD;
+  const canSave = (isLegal || overrideLegal) && (!scoreFails || overrideScore) && deckName.trim().length > 0;
 
   // Group by role (lands vs non-lands)
   const lands = cardEntries.filter(([n]) => BASIC_LANDS.has(n));
@@ -211,6 +228,116 @@ export function DeckReview({ sessionId, format, commander, commanderColorIdentit
           <div className="text-xs text-zinc-600 mt-0.5">{isLegal ? 'Legal' : 'Violations'}</div>
         </div>
       </div>
+
+      {/* Win condition */}
+      {(winCondition || validating) && (
+        <div className="rounded-xl border border-amber-600/40 bg-amber-400/5 px-5 py-4 mb-6">
+          <div className="flex items-center gap-2 mb-1.5">
+            <span className="text-amber-400">⚡</span>
+            <span className="text-xs font-semibold text-amber-400 uppercase tracking-widest">Win Condition</span>
+          </div>
+          {winCondition
+            ? <p className="text-sm text-amber-100 leading-relaxed">{winCondition}</p>
+            : <div className="h-4 bg-amber-400/10 rounded animate-pulse w-3/4" />
+          }
+        </div>
+      )}
+
+      {/* Deck Score */}
+      {(scoring || deckScore) && (
+        <div className={`rounded-xl border px-5 py-4 mb-6 ${
+          scoring ? 'border-zinc-800 bg-zinc-900' :
+          deckScore!.percentage >= 75 ? 'border-green-800/50 bg-green-900/5' :
+          deckScore!.percentage >= 60 ? 'border-amber-700/50 bg-amber-900/5' :
+          'border-red-800/50 bg-red-900/5'
+        }`}>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-zinc-400 uppercase tracking-widest">Deck Score</span>
+              {scoring && <span className="text-xs text-zinc-600 animate-pulse">Evaluating…</span>}
+            </div>
+            {deckScore && !scoring && (
+              <div className="flex items-center gap-3">
+                <span className={`text-2xl font-bold ${deckScore.percentage >= 75 ? 'text-green-400' : deckScore.percentage >= 60 ? 'text-amber-400' : 'text-red-400'}`}>
+                  {deckScore.totalScore}/{deckScore.maxScore}
+                </span>
+                <span className={`text-sm font-bold rounded-full px-2.5 py-0.5 ${
+                  deckScore.grade === 'A' ? 'bg-green-900/40 text-green-400' :
+                  deckScore.grade === 'B' ? 'bg-blue-900/40 text-blue-400' :
+                  deckScore.grade === 'C' ? 'bg-amber-900/40 text-amber-400' :
+                  'bg-red-900/40 text-red-400'
+                }`}>{deckScore.grade}</span>
+                <span className="text-xs text-zinc-500">{deckScore.powerLevel.tier} · Power {deckScore.powerLevel.score}/10</span>
+              </div>
+            )}
+          </div>
+
+          {deckScore && !scoring && (
+            <>
+              {/* Category grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+                {[
+                  deckScore.manaBase,
+                  deckScore.deckStructure,
+                  deckScore.removal,
+                  deckScore.synergy,
+                  deckScore.cardAdvantage,
+                  deckScore.manaCurve,
+                  deckScore.formatCompliance,
+                ].map((cat) => {
+                  const pct = cat.score / cat.max;
+                  const color = pct >= 0.75 ? 'text-green-400' : pct >= 0.55 ? 'text-amber-400' : 'text-red-400';
+                  return (
+                    <div key={cat.label} className="rounded-lg bg-zinc-800/50 px-3 py-2" title={cat.notes}>
+                      <div className={`text-sm font-bold ${color}`}>{cat.score}/{cat.max}</div>
+                      <div className="text-[10px] text-zinc-500 leading-tight mt-0.5">{cat.label}</div>
+                    </div>
+                  );
+                })}
+                {/* Validity */}
+                <div className="rounded-lg bg-zinc-800/50 px-3 py-2" title={deckScore.validity.notes}>
+                  <div className={`text-sm font-bold ${deckScore.validity.pass ? 'text-green-400' : 'text-red-400'}`}>
+                    {deckScore.validity.pass ? '✓' : '✗'}
+                  </div>
+                  <div className="text-[10px] text-zinc-500 leading-tight mt-0.5">Validity</div>
+                </div>
+              </div>
+
+              {/* Recommendations */}
+              {deckScore.recommendations.length > 0 && (
+                <div className="space-y-2">
+                  <div className="text-xs font-semibold text-zinc-500 uppercase tracking-widest">Recommendations</div>
+                  {deckScore.recommendations.map((rec, i) => (
+                    <div key={i} className={`rounded-lg px-3 py-2 text-xs flex items-start gap-2 ${
+                      rec.priority === 'CRITICAL' ? 'bg-red-900/20 border border-red-800/40' :
+                      rec.priority === 'MAJOR' ? 'bg-amber-900/20 border border-amber-800/40' :
+                      'bg-zinc-800/50'
+                    }`}>
+                      <span className={`font-bold shrink-0 ${
+                        rec.priority === 'CRITICAL' ? 'text-red-400' :
+                        rec.priority === 'MAJOR' ? 'text-amber-400' :
+                        'text-zinc-500'
+                      }`}>{rec.priority}</span>
+                      <div>
+                        <span className="text-zinc-300 font-medium">{rec.issue}</span>
+                        {rec.action && <span className="text-zinc-500"> — {rec.action}</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Override for low score */}
+              {scoreFails && (
+                <label className="flex items-center gap-2 mt-3 text-xs text-zinc-500 cursor-pointer">
+                  <input type="checkbox" checked={overrideScore} onChange={e => setOverrideScore(e.target.checked)} className="rounded" />
+                  Save anyway (I acknowledge this deck needs work)
+                </label>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       {/* Mana chart */}
       <div className="rounded-xl bg-zinc-900 border border-zinc-800 p-4 mb-6">
