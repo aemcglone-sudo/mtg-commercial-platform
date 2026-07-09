@@ -7,6 +7,7 @@ import { ArchetypeSelector } from './ArchetypeSelector';
 import { ThemeSelector } from './ThemeSelector';
 import { BudgetSelector } from './BudgetSelector';
 import { CardSelectionPanel } from './CardSelectionPanel';
+import { AgentBuilder } from './AgentBuilder';
 import { DeckReview } from './DeckReview';
 import { NaturalLanguageEntry } from './NaturalLanguageEntry';
 
@@ -312,7 +313,7 @@ export function WizardShell({ initialState, sessionId }: Props) {
               />
             )}
             {state.currentStep === 5 && (
-              <CardSelectionPanel
+              <AgentBuilder
                 sessionId={state.sessionId}
                 format={state.format}
                 commander={state.commanderName}
@@ -322,12 +323,9 @@ export function WizardShell({ initialState, sessionId }: Props) {
                 tribalType={state.tribalType}
                 psychographic={state.psychographic}
                 budgetCents={state.budgetCents}
-                roleTargets={state.roleTargets}
-                deckColors={state.deckColors}
                 ownedCardNames={state.ownedCardNames}
                 collectionOnly={collectionOnly}
-                initialCards={state.cards}
-                onConfirm={(cards) => advance({ cards })}
+                onComplete={(cards) => advance({ cards })}
                 onBack={back}
               />
             )}
