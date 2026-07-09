@@ -179,7 +179,7 @@ export function DeckReview({ sessionId, format, commander, commanderColorIdentit
   }
 
   const isLegal = violations.length === 0;
-  const canSave = (isLegal || overrideLegal) && deckName.trim().length > 0;
+  const canSave = (isLegal || overrideLegal) && deckName.trim().length > 0 && !scoring;
 
   // Group by role (lands vs non-lands)
   const lands = cardEntries.filter(([n]) => BASIC_LANDS.has(n));

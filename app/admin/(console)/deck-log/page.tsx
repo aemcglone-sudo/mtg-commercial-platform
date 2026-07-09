@@ -51,8 +51,9 @@ function DeckDetail({ deckId, onBack }: { deckId: string; onBack: () => void }) 
   const [cards, setCards] = useState<DeckLogCard[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCard, setSelectedCard] = useState<DeckLogCard | null>(null);
+  const [rescoring, setRescoring] = useState(false);
 
-  useEffect(() => {
+  const reload = useCallback(() => {
     fetch(`/api/admin/deck-log?deckId=${deckId}`, { credentials: 'include' })
       .then(r => r.ok ? r.json() : null)
       .then((d: { deck: DeckLogEntry; cards: DeckLogCard[] } | null) => {
@@ -61,6 +62,23 @@ function DeckDetail({ deckId, onBack }: { deckId: string; onBack: () => void }) 
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [deckId]);
+
+  useEffect(() => { reload(); }, [reload]);
+
+  async function rescore() {
+    setRescoring(true);
+    try {
+      const res = await fetch('/api/admin/deck-log/rescore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ deckId }),
+      });
+      if (res.ok) reload();
+    } catch { /* best effort */ } finally {
+      setRescoring(false);
+    }
+  }
 
   let score: DeckScore | null = null;
   try { score = deck?.rubric_score ? JSON.parse(deck.rubric_score) : null; } catch { score = null; }
@@ -157,6 +175,20 @@ function DeckDetail({ deckId, onBack }: { deckId: string; onBack: () => void }) 
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {!score && deck && (
+            <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 px-5 py-4 mb-6 flex items-center justify-between">
+              <span className="text-sm text-zinc-500">No rubric score on file.</span>
+              <button
+                type="button"
+                onClick={rescore}
+                disabled={rescoring}
+                className="text-xs bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-zinc-900 font-semibold px-4 py-1.5 rounded-lg transition-colors"
+              >
+                {rescoring ? 'Scoring…' : 'Score Now'}
+              </button>
             </div>
           )}
 
