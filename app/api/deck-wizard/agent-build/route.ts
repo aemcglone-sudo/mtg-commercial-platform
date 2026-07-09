@@ -47,6 +47,64 @@ async function scryfallSearch(q: string, limit = 30): Promise<Array<{ name: stri
   } catch { return []; }
 }
 
+type CardDetail = { name: string; mana_cost: string; type_line: string; oracle_text: string; cmc: number; color_identity: string[]; prices?: { usd?: string } };
+
+async function fetchOwnedCardPool(cardNames: string[], colorIdentity: string[]): Promise<CardDetail[]> {
+  const CHUNK = 75;
+  const all: CardDetail[] = [];
+  const legalColors = colorIdentity.length > 0 ? new Set(colorIdentity.map(c => c.toUpperCase())) : null;
+
+  for (let i = 0; i < cardNames.length; i += CHUNK) {
+    const chunk = cardNames.slice(i, i + CHUNK);
+    try {
+      const res = await fetch('https://api.scryfall.com/cards/collection', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'User-Agent': 'Grimoire/1.0' },
+        body: JSON.stringify({ identifiers: chunk.map(name => ({ name })) }),
+      });
+      if (!res.ok) continue;
+      const data = await res.json() as { data: CardDetail[] };
+      for (const card of data.data) {
+        if (BASIC_LANDS.has(card.name)) continue;
+        if (legalColors && !card.color_identity.every(c => legalColors.has(c.toUpperCase()))) continue;
+        all.push(card);
+      }
+    } catch { /* skip chunk */ }
+    if (i + CHUNK < cardNames.length) await new Promise(r => setTimeout(r, 80));
+  }
+  return all;
+}
+
+function searchOwnedPool(pool: CardDetail[], query: string, limit: number): CardDetail[] {
+  // Parse simple Scryfall-like query: extract o:"..." and t: terms for local filtering
+  const oTerms: string[] = [];
+  const tTerms: string[] = [];
+  const nameTerms: string[] = [];
+
+  const oMatches = query.matchAll(/o:"([^"]+)"/g);
+  for (const m of oMatches) oTerms.push(m[1].toLowerCase());
+
+  const oSimple = query.matchAll(/\bo:(\S+)/g);
+  for (const m of oSimple) if (!m[1].startsWith('"')) oTerms.push(m[1].toLowerCase());
+
+  const tMatches = query.matchAll(/\bt:(\S+)/g);
+  for (const m of tMatches) tTerms.push(m[1].toLowerCase());
+
+  // Any bare words (not prefixed) treated as name search
+  const bare = query.replace(/\b(legal|color|cmc|o|t|is|format)[:<=>\w"]+/g, '').trim();
+  if (bare) nameTerms.push(...bare.toLowerCase().split(/\s+/).filter(w => w.length > 2));
+
+  return pool.filter(card => {
+    const oracle = (card.oracle_text ?? '').toLowerCase();
+    const type = card.type_line.toLowerCase();
+    const name = card.name.toLowerCase();
+    if (oTerms.length && !oTerms.every(t => oracle.includes(t))) return false;
+    if (tTerms.length && !tTerms.some(t => type.includes(t))) return false;
+    if (nameTerms.length && !nameTerms.some(t => name.includes(t) || oracle.includes(t))) return false;
+    return true;
+  }).slice(0, limit);
+}
+
 async function scryfallNamed(name: string) {
   try {
     const res = await fetch(`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}`, {
@@ -131,23 +189,26 @@ async function executeTool(
   format: string,
   collectionOnly: boolean,
   ownedCardNames: string[],
+  ownedCardPool: CardDetail[],
 ): Promise<{ result: unknown; summary: string }> {
 
   if (toolName === 'search_cards') {
     const query = input.query as string;
     const limit = Math.min((input.limit as number) ?? 20, 40);
-    const cards = await scryfallSearch(query, collectionOnly ? 200 : limit);
-    let formatted = cards.map(c => ({
-      name: c.name,
-      cost: c.mana_cost,
-      type: c.type_line,
-      text: c.oracle_text?.slice(0, 200),
-      cmc: c.cmc,
-      colors: c.color_identity,
-    }));
-    if (collectionOnly && ownedCardNames.length > 0) {
-      const ownedSet = new Set(ownedCardNames.map(n => n.toLowerCase()));
-      formatted = formatted.filter(c => ownedSet.has(c.name.toLowerCase())).slice(0, limit);
+    let formatted: { name: string; cost: string; type: string; text: string | undefined; cmc: number; colors: string[] }[];
+
+    if (collectionOnly && ownedCardPool.length > 0) {
+      const results = searchOwnedPool(ownedCardPool, query, limit);
+      formatted = results.map(c => ({
+        name: c.name, cost: c.mana_cost, type: c.type_line,
+        text: c.oracle_text?.slice(0, 200), cmc: c.cmc, colors: c.color_identity,
+      }));
+    } else {
+      const cards = await scryfallSearch(query, limit);
+      formatted = cards.map(c => ({
+        name: c.name, cost: c.mana_cost, type: c.type_line,
+        text: c.oracle_text?.slice(0, 200), cmc: c.cmc, colors: c.color_identity,
+      }));
     }
     return {
       result: formatted,
@@ -181,16 +242,17 @@ async function executeTool(
       scryfallSearch(`legal:commander ${colorFilter} -t:basic`, 60),
       scryfallNamed(commander),
     ]);
-    let formatted = staples.map(c => ({
-      name: c.name,
-      cost: c.mana_cost,
-      type: c.type_line,
-      text: c.oracle_text?.slice(0, 150),
-      cmc: c.cmc,
-    }));
-    if (collectionOnly && ownedCardNames.length > 0) {
-      const ownedSet = new Set(ownedCardNames.map(n => n.toLowerCase()));
-      formatted = formatted.filter(c => ownedSet.has(c.name.toLowerCase()));
+    let formatted: { name: string; cost: string; type: string; text: string | undefined; cmc: number }[];
+    if (collectionOnly && ownedCardPool.length > 0) {
+      formatted = ownedCardPool.slice(0, 60).map(c => ({
+        name: c.name, cost: c.mana_cost, type: c.type_line,
+        text: c.oracle_text?.slice(0, 150), cmc: c.cmc,
+      }));
+    } else {
+      formatted = staples.map(c => ({
+        name: c.name, cost: c.mana_cost, type: c.type_line,
+        text: c.oracle_text?.slice(0, 150), cmc: c.cmc,
+      }));
     }
     const commanderInfo = commanderCard ? {
       name: commanderCard.name,
@@ -283,6 +345,12 @@ export async function POST(req: NextRequest) {
       );
       if (rows.length > 0) resolvedOwnedCardNames = rows.map(r => r.name);
     } catch { /* fall back to client-provided list */ }
+  }
+
+  // Pre-fetch full owned card pool when in collection-only mode
+  let ownedCardPool: CardDetail[] = [];
+  if (collectionOnly && resolvedOwnedCardNames.length > 0) {
+    ownedCardPool = await fetchOwnedCardPool(resolvedOwnedCardNames, commanderColorIdentity);
   }
 
   const isCommander = ['commander', 'brawl', 'oathbreaker'].includes(format);
@@ -415,7 +483,8 @@ Think step by step. Research first, then build the engine, then support, then la
                   commanderColorIdentity,
                   format,
                   collectionOnly,
-                  ownedCardNames: resolvedOwnedCardNames,
+                  resolvedOwnedCardNames,
+                  ownedCardPool,
                 );
                 send(sseEvent('tool_result', { tool: block.name, summary }));
                 toolResults.push({
