@@ -136,8 +136,8 @@ async function executeTool(
   if (toolName === 'search_cards') {
     const query = input.query as string;
     const limit = Math.min((input.limit as number) ?? 20, 40);
-    const cards = await scryfallSearch(query, limit);
-    const formatted = cards.map(c => ({
+    const cards = await scryfallSearch(query, collectionOnly ? 200 : limit);
+    let formatted = cards.map(c => ({
       name: c.name,
       cost: c.mana_cost,
       type: c.type_line,
@@ -145,9 +145,13 @@ async function executeTool(
       cmc: c.cmc,
       colors: c.color_identity,
     }));
+    if (collectionOnly && ownedCardNames.length > 0) {
+      const ownedSet = new Set(ownedCardNames.map(n => n.toLowerCase()));
+      formatted = formatted.filter(c => ownedSet.has(c.name.toLowerCase())).slice(0, limit);
+    }
     return {
       result: formatted,
-      summary: `Found ${formatted.length} cards for query "${query}"`,
+      summary: `Found ${formatted.length} cards for query "${query}"${collectionOnly ? ' (from your collection)' : ''}`,
     };
   }
 
@@ -177,13 +181,17 @@ async function executeTool(
       scryfallSearch(`legal:commander ${colorFilter} -t:basic`, 60),
       scryfallNamed(commander),
     ]);
-    const formatted = staples.map(c => ({
+    let formatted = staples.map(c => ({
       name: c.name,
       cost: c.mana_cost,
       type: c.type_line,
       text: c.oracle_text?.slice(0, 150),
       cmc: c.cmc,
     }));
+    if (collectionOnly && ownedCardNames.length > 0) {
+      const ownedSet = new Set(ownedCardNames.map(n => n.toLowerCase()));
+      formatted = formatted.filter(c => ownedSet.has(c.name.toLowerCase()));
+    }
     const commanderInfo = commanderCard ? {
       name: commanderCard.name,
       oracle_text: commanderCard.oracle_text,
