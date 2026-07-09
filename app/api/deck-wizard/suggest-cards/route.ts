@@ -156,6 +156,7 @@ interface SuggestRequest {
   roleTargets?: Record<string, number>;
   deckColors?: string[]; // non-commander: user-selected color palette
   collectionOnly?: boolean;
+  rubricFeedback?: string; // injected from a failed rubric score on a previous attempt
 }
 
 interface CommanderData {
@@ -220,7 +221,8 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json() as SuggestRequest;
   const { sessionId, format, commander, commanderColorIdentity, archetype, themes = [], tribalType,
-    psychographic, budgetCents, currentCards = {}, ownedCardNames = [], roleTargets, deckColors = [], collectionOnly = false } = body;
+    psychographic, budgetCents, currentCards = {}, ownedCardNames = [], roleTargets, deckColors = [], collectionOnly = false,
+    rubricFeedback } = body;
 
   const isCommander = ['commander','brawl','oathbreaker'].includes(format);
   // Non-commander targets vary by archetype — aggro needs creatures, control needs interaction.
@@ -320,7 +322,7 @@ export async function POST(req: NextRequest) {
 
       const buildRolePrompt = (role: string, count: number, exclude: string[]) =>
         `You are a Magic: The Gathering deck building expert.
-
+${rubricFeedback ? `\n⚠️ RUBRIC FAILURES FROM PREVIOUS ATTEMPT — YOU MUST FIX THESE:\n${rubricFeedback}\n` : ''}
 DECK BUILDING RULES:
 ${rulesDoc ? rulesDoc.slice(0, 1000) : '(use standard Commander deckbuilding conventions)'}
 
@@ -428,7 +430,7 @@ The goal is a functional, consistent mana base with relevant utility. Make it ar
         const guidance = roleGuidance[role.toLowerCase()] ?? `Cards that fulfill the ${role} role in this deck.`;
 
         return `You are Khoa, a Magic: The Gathering deck building expert filling one specific role in a deck.
-
+${rubricFeedback ? `\n⚠️ RUBRIC FAILURES FROM PREVIOUS ATTEMPT — YOU MUST FIX THESE:\n${rubricFeedback}\n` : ''}
 DECK CONTEXT:
 - Format: ${format}
 ${commander ? `- Commander: ${commander}` : ''}

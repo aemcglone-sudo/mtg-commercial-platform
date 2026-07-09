@@ -343,6 +343,10 @@ export function WizardShell({ initialState, sessionId }: Props) {
                 tribalType={state.tribalType}
                 psychographic={state.psychographic}
                 budgetCents={state.budgetCents}
+                ownedCardNames={state.ownedCardNames}
+                collectionOnly={collectionOnly}
+                roleTargets={state.roleTargets}
+                deckColors={state.deckColors}
                 onBack={back}
               />
             )}
