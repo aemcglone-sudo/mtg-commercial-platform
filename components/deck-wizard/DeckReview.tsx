@@ -255,8 +255,8 @@ export function DeckReview({ sessionId, format, commander, commanderColorIdentit
         </div>
       )}
 
-      {/* Deck Score */}
-      {(scoring || deckScore) && (
+      {/* Deck Score — hidden from collector; stored for admin deck log only */}
+      {false && (scoring || deckScore) && (
         <div className={`rounded-xl border px-5 py-4 mb-6 ${
           scoring ? 'border-zinc-800 bg-zinc-900' :
           deckScore!.percentage >= 75 ? 'border-green-800/50 bg-green-900/5' :
