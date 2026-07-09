@@ -11,7 +11,7 @@ export interface DeckLogEntry {
   strategy: string | null;
   commander: string | null;
   cards: string; // JSON
-  rubric_score: string | Record<string, unknown> | null;
+  rubric_score: import('@/app/api/deck-wizard/score/route').DeckScore | null;
   rubric_scored_at: string | null;
   createdAt: string;
 }
@@ -26,6 +26,20 @@ export interface DeckLogCard {
   scryfall_uri?: string;
 }
 
+function parseRubricScore(raw: unknown): import('@/app/api/deck-wizard/score/route').DeckScore | null {
+  try {
+    const obj = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    if (obj && typeof (obj as Record<string, unknown>).totalScore === 'number') {
+      return obj as import('@/app/api/deck-wizard/score/route').DeckScore;
+    }
+  } catch { /* ignore */ }
+  return null;
+}
+
+function normalizeDeck(deck: Record<string, unknown>): DeckLogEntry {
+  return { ...deck, rubric_score: parseRubricScore(deck.rubric_score) } as DeckLogEntry;
+}
+
 export async function GET(req: NextRequest) {
   if (getRole(req) !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
@@ -34,9 +48,9 @@ export async function GET(req: NextRequest) {
 
   // Single deck detail with Scryfall card data
   if (deckId) {
-    const deck = await findOne<DeckLogEntry>(
+    const deck = await findOne<Record<string, unknown>>(
       `SELECT d.id, d."userId", u.email as "userEmail", d.name, d.format, d.strategy,
-              d.commander, d.cards::text as cards, d.rubric_score::text as rubric_score, d.rubric_scored_at, d."createdAt"
+              d.commander, d.cards, d.rubric_score, d.rubric_scored_at, d."createdAt"
        FROM decks d
        LEFT JOIN users u ON u.id = d."userId"
        WHERE d.id = ?`,
@@ -45,7 +59,10 @@ export async function GET(req: NextRequest) {
     if (!deck) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
     // Fetch Scryfall data for all cards
-    const cardsObj: Record<string, number> = deck.cards ? JSON.parse(deck.cards) : {};
+    const rawCards = deck.cards;
+    const cardsObj: Record<string, number> = rawCards
+      ? (typeof rawCards === 'string' ? JSON.parse(rawCards) : rawCards as Record<string, number>)
+      : {};
     const cardNames = Object.keys(cardsObj);
     const scryfallCards: DeckLogCard[] = [];
 
@@ -84,18 +101,18 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ deck, cards: scryfallCards });
+    return NextResponse.json({ deck: normalizeDeck(deck), cards: scryfallCards });
   }
 
   // List all decks
   const decks = await findMany<DeckLogEntry>(
     `SELECT d.id, d."userId", u.email as "userEmail", d.name, d.format, d.strategy,
-            d.commander, d.rubric_score::text as rubric_score, d.rubric_scored_at, d."createdAt"
+            d.commander, d.rubric_score, d.rubric_scored_at, d."createdAt"
      FROM decks d
      LEFT JOIN users u ON u.id = d."userId"
      ORDER BY d."createdAt" DESC
      LIMIT 200`
   );
 
-  return NextResponse.json({ decks });
+  return NextResponse.json({ decks: decks.map(normalizeDeck) });
 }

@@ -11,13 +11,13 @@ export async function POST(req: NextRequest) {
   const { deckId } = await req.json() as { deckId: string };
   if (!deckId) return NextResponse.json({ error: 'Missing deckId' }, { status: 400 });
 
-  const deck = await findOne<{ id: string; cards: string; commander: string | null; format: string | null }>(
+  const deck = await findOne<{ id: string; cards: Record<string, number> | string; commander: string | null; format: string | null }>(
     `SELECT id, cards, commander, format FROM decks WHERE id = ?`,
     [deckId]
   );
   if (!deck) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  const cards = JSON.parse(deck.cards ?? '{}') as Record<string, number>;
+  const cards: Record<string, number> = typeof deck.cards === 'string' ? JSON.parse(deck.cards) : (deck.cards ?? {});
   const result = await scoreDeck({
     cards,
     commander: deck.commander ?? undefined,
