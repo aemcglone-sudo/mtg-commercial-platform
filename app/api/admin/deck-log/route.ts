@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
   if (deckId) {
     const deck = await findOne<DeckLogEntry>(
       `SELECT d.id, d."userId", u.email as "userEmail", d.name, d.format, d.strategy,
-              d.commander, d.cards, d.rubric_score, d.rubric_scored_at, d."createdAt"
+              d.commander, d.cards::text as cards, d.rubric_score::text as rubric_score, d.rubric_scored_at, d."createdAt"
        FROM decks d
        LEFT JOIN users u ON u.id = d."userId"
        WHERE d.id = ?`,
@@ -90,7 +90,7 @@ export async function GET(req: NextRequest) {
   // List all decks
   const decks = await findMany<DeckLogEntry>(
     `SELECT d.id, d."userId", u.email as "userEmail", d.name, d.format, d.strategy,
-            d.commander, d.rubric_score, d.rubric_scored_at, d."createdAt"
+            d.commander, d.rubric_score::text as rubric_score, d.rubric_scored_at, d."createdAt"
      FROM decks d
      LEFT JOIN users u ON u.id = d."userId"
      ORDER BY d."createdAt" DESC
