@@ -62,7 +62,9 @@ function DeckDetail({ deckId, onBack }: { deckId: string; onBack: () => void }) 
       .finally(() => setLoading(false));
   }, [deckId]);
 
-  const score: DeckScore | null = deck?.rubric_score ? JSON.parse(deck.rubric_score) : null;
+  let score: DeckScore | null = null;
+  try { score = deck?.rubric_score ? JSON.parse(deck.rubric_score) : null; } catch { score = null; }
+  if (score && typeof score.totalScore !== 'number') score = null;
 
   const nonLands = cards.filter(c => !BASIC_LANDS.has(c.name)).sort((a, b) => (a.cmc ?? 0) - (b.cmc ?? 0));
   const lands = cards.filter(c => BASIC_LANDS.has(c.name));
@@ -216,7 +218,9 @@ export default function DeckLogPage() {
 
       <div className="space-y-2">
         {decks.map(deck => {
-          const score: DeckScore | null = deck.rubric_score ? JSON.parse(deck.rubric_score) : null;
+          let score: DeckScore | null = null;
+          try { score = deck.rubric_score ? JSON.parse(deck.rubric_score) : null; } catch { score = null; }
+          if (score && typeof score.totalScore !== 'number') score = null;
           return (
             <button
               key={deck.id}
@@ -258,11 +262,11 @@ export default function DeckLogPage() {
                         ['Sy', score.synergy, 25],
                         ['Dr', score.cardAdvantage, 15],
                       ].map(([label, cat, max]) => {
-                        const c = cat as { score: number; max: number };
-                        const pct = (c.score / (max as number)) * 100;
+                        const c = cat as { score: number; max: number } | undefined;
+                        const pct = c ? (c.score / (max as number)) * 100 : 0;
                         return (
                           <div key={label as string} className="text-center">
-                            <div className={`text-[10px] font-bold ${gradeColor(pct)}`}>{c.score}</div>
+                            <div className={`text-[10px] font-bold ${gradeColor(pct)}`}>{c?.score ?? '—'}</div>
                             <div className="text-[9px] text-zinc-700">{label as string}</div>
                           </div>
                         );
