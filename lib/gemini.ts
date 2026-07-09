@@ -1,45 +1,37 @@
-// Primary: Claude Haiku (Anthropic). Fallback: Groq (llama).
+// Primary: Gemini Flash (Google). Fallback: Groq (llama).
 
-const CLAUDE_MODEL = 'claude-haiku-4-5-20251001';
-const CLAUDE_URL = 'https://api.anthropic.com/v1/messages';
+const GEMINI_MODEL = 'gemini-2.0-flash';
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
 const GROQ_MODEL = 'llama-3.3-70b-versatile';
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const GROQ_MAX_CHARS = 12000;
 
-async function claudeChat(prompt: string, temperature: number, system?: string, maxTokens = 2048): Promise<string | null> {
-  const key = process.env.ANTHROPIC_API_KEY;
+async function geminiChatInternal(prompt: string, temperature: number, system?: string, maxTokens = 2048): Promise<string | null> {
+  const key = process.env.GOOGLE_API_KEY;
   if (!key) return null;
   try {
-    const body: Record<string, unknown> = {
-      model: CLAUDE_MODEL,
-      max_tokens: maxTokens,
-      temperature,
-      messages: [{ role: 'user', content: prompt }],
-    };
-    if (system) body.system = system;
+    const contents: unknown[] = [];
+    if (system) contents.push({ role: 'user', parts: [{ text: system }] }, { role: 'model', parts: [{ text: 'Understood.' }] });
+    contents.push({ role: 'user', parts: [{ text: prompt }] });
 
-    const res = await fetch(CLAUDE_URL, {
+    const res = await fetch(`${GEMINI_URL}?key=${key}`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': key,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify(body),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents,
+        generationConfig: { temperature, maxOutputTokens: maxTokens },
+      }),
     });
     if (!res.ok) {
       const err = await res.text().catch(() => '');
-      console.error('[claude] HTTP', res.status, err.slice(0, 200));
+      console.error('[gemini] HTTP', res.status, err.slice(0, 200));
       return null;
     }
-    const data = await res.json() as { content?: Array<{ type: string; text: string }>; stop_reason?: string; usage?: { input_tokens: number; output_tokens: number } };
-    if (data.stop_reason && data.stop_reason !== 'end_turn') {
-      console.warn(`[claude] stop_reason=${data.stop_reason} tokens=${JSON.stringify(data.usage)}`);
-    }
-    return data.content?.find(b => b.type === 'text')?.text ?? null;
+    const data = await res.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
+    return data.candidates?.[0]?.content?.parts?.[0]?.text ?? null;
   } catch (e) {
-    console.error('[claude] threw:', e);
+    console.error('[gemini] threw:', e);
     return null;
   }
 }
@@ -71,18 +63,16 @@ async function groqChat(prompt: string, temperature: number, system?: string, ma
   }
 }
 
-// geminiChat is now Claude-primary with Groq fallback.
-// The name is kept for compatibility with all existing callers.
 export async function geminiChat(
   prompt: string,
   temperature = 0.7,
   system?: string,
   maxTokens = 2048
 ): Promise<string | null> {
-  const result = await claudeChat(prompt, temperature, system, maxTokens);
+  const result = await geminiChatInternal(prompt, temperature, system, maxTokens);
   if (result) return result;
 
-  console.warn('[claude] failed — falling back to Groq');
+  console.warn('[gemini] failed — falling back to Groq');
   return groqChat(prompt, temperature, system, maxTokens);
 }
 
