@@ -87,42 +87,64 @@ function DeckDetail({ deckId, onBack }: { deckId: string; onBack: () => void }) 
 
           {/* Rubric scorecard */}
           {score && (
-            <div className={`rounded-xl border px-5 py-4 mb-6 ${
+            <div className={`rounded-xl border px-5 py-5 mb-6 ${
               score.percentage >= 75 ? 'border-green-800/50 bg-green-900/5' :
               score.percentage >= 60 ? 'border-amber-700/50 bg-amber-900/5' :
               'border-red-800/50 bg-red-900/5'
             }`}>
-              <div className="flex items-center justify-between mb-4">
-                <span className="text-xs font-semibold text-zinc-400 uppercase tracking-widest">Rubric Score</span>
-                <div className="flex items-center gap-3">
-                  <span className={`text-2xl font-bold ${gradeColor(score.percentage)}`}>{score.totalScore}/{score.maxScore}</span>
-                  <span className={`text-sm font-bold rounded-full px-2.5 py-0.5 ${
-                    score.grade === 'A' ? 'bg-green-900/40 text-green-400' :
-                    score.grade === 'B' ? 'bg-blue-900/40 text-blue-400' :
-                    score.grade === 'C' ? 'bg-amber-900/40 text-amber-400' :
-                    'bg-red-900/40 text-red-400'
-                  }`}>{score.grade}</span>
-                  <span className="text-xs text-zinc-500">{score.powerLevel.tier} · Power {score.powerLevel.score}/10</span>
+              {/* Header */}
+              <div className="flex items-center justify-between mb-5">
+                <div>
+                  <span className="text-xs font-semibold text-zinc-400 uppercase tracking-widest">Rubric Score</span>
+                  <div className="flex items-center gap-3 mt-1">
+                    <span className={`text-3xl font-bold ${gradeColor(score.percentage)}`}>{score.totalScore}<span className="text-lg text-zinc-600">/{score.maxScore}</span></span>
+                    <span className={`text-base font-bold rounded-full px-3 py-0.5 ${
+                      score.grade === 'A' ? 'bg-green-900/40 text-green-400' :
+                      score.grade === 'B' ? 'bg-blue-900/40 text-blue-400' :
+                      score.grade === 'C' ? 'bg-amber-900/40 text-amber-400' :
+                      'bg-red-900/40 text-red-400'
+                    }`}>{score.grade}</span>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-sm font-medium text-zinc-300">{score.powerLevel.tier}</div>
+                  <div className="text-xs text-zinc-500">Power {score.powerLevel.score}/10</div>
+                  {score.powerLevel.notes && <div className="text-xs text-zinc-600 mt-0.5 max-w-48">{score.powerLevel.notes}</div>}
                 </div>
               </div>
-              <div className="grid grid-cols-4 gap-2 mb-4">
+
+              {/* Category breakdown */}
+              <div className="space-y-3 mb-5">
                 {([
-                  ['Mana Base', score.manaBase],
-                  ['Structure', score.deckStructure],
-                  ['Removal', score.removal],
-                  ['Synergy', score.synergy],
-                  ['Card Adv.', score.cardAdvantage],
-                  ['Curve', score.manaCurve],
-                  ['Compliance', score.formatCompliance],
-                ] as [string, { score: number; max: number; notes: string }][]).map(([label, cat]) => (
-                  <div key={label} className="rounded-lg bg-zinc-800/50 px-3 py-2" title={cat.notes}>
-                    <ScoreChip score={cat.score} max={cat.max} />
-                    <div className="text-[10px] text-zinc-500 mt-0.5">{label}</div>
-                  </div>
-                ))}
+                  ['Mana Base', score.manaBase, 'Evaluates land count, mana ramp, and color fixing. 36–38 lands + 10 ramp spells is ideal for Commander.'],
+                  ['Deck Structure', score.deckStructure, 'Checks role ratios — ramp, draw, removal, win conditions, and creatures must be balanced for a functional 100-card deck.'],
+                  ['Removal & Interaction', score.removal, 'Counts spot removal, board wipes, and counterspells. 10–12 pieces of interaction is the Commander baseline.'],
+                  ['Synergy & Commander Alignment', score.synergy, 'Measures how well the 99 support the commander\'s strategy. Low score means generic good-stuff cards instead of on-theme picks.'],
+                  ['Card Advantage & Draw', score.cardAdvantage, 'Evaluates draw engines, cantrips, and value generators. 10+ draw effects prevents running out of cards.'],
+                  ['Mana Curve', score.manaCurve, 'Analyzes CMC distribution. Heavy curve weighting above 4 means slow starts; too low means lack of late-game power.'],
+                  ['Format Compliance', score.formatCompliance, 'Verifies singleton rule, banned list adherence, and color identity constraints for the chosen format.'],
+                ] as [string, { score: number; max: number; notes: string }, string][]).map(([label, cat, definition]) => {
+                  const pct = (cat.score / cat.max) * 100;
+                  return (
+                    <div key={label} className="rounded-lg bg-zinc-800/30 px-4 py-3">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-zinc-200">{label}</span>
+                          <span className={`text-xs font-mono font-bold ${gradeColor(pct)}`}>{cat.score}/{cat.max}</span>
+                        </div>
+                        <span className={`text-xs ${pct >= 75 ? 'text-green-500' : pct >= 50 ? 'text-amber-500' : 'text-red-500'}`}>{Math.round(pct)}%</span>
+                      </div>
+                      <p className="text-xs text-zinc-500 mb-1">{definition}</p>
+                      {cat.notes && <p className={`text-xs font-medium ${gradeColor(pct)}`}>{cat.notes}</p>}
+                    </div>
+                  );
+                })}
               </div>
+
+              {/* Recommendations */}
               {score.recommendations.length > 0 && (
-                <div className="space-y-1.5">
+                <div className="space-y-1.5 border-t border-zinc-800 pt-4">
+                  <div className="text-xs font-semibold text-zinc-500 uppercase tracking-widest mb-2">Recommendations</div>
                   {score.recommendations.map((rec, i) => (
                     <div key={i} className={`rounded-lg px-3 py-2 text-xs flex gap-2 ${
                       rec.priority === 'CRITICAL' ? 'bg-red-900/20 border border-red-800/40' :
