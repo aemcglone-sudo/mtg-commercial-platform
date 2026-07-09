@@ -52,6 +52,7 @@ function DeckDetail({ deckId, onBack }: { deckId: string; onBack: () => void }) 
   const [loading, setLoading] = useState(true);
   const [selectedCard, setSelectedCard] = useState<DeckLogCard | null>(null);
   const [rescoring, setRescoring] = useState(false);
+  const [rescoreError, setRescoreError] = useState<string | null>(null);
 
   const reload = useCallback(() => {
     fetch(`/api/admin/deck-log?deckId=${deckId}`, { credentials: 'include' })
@@ -67,6 +68,7 @@ function DeckDetail({ deckId, onBack }: { deckId: string; onBack: () => void }) 
 
   async function rescore() {
     setRescoring(true);
+    setRescoreError(null);
     try {
       const res = await fetch('/api/admin/deck-log/rescore', {
         method: 'POST',
@@ -74,8 +76,15 @@ function DeckDetail({ deckId, onBack }: { deckId: string; onBack: () => void }) 
         credentials: 'include',
         body: JSON.stringify({ deckId }),
       });
-      if (res.ok) reload();
-    } catch { /* best effort */ } finally {
+      if (res.ok) {
+        reload();
+      } else {
+        const data = await res.json().catch(() => ({})) as { error?: string };
+        setRescoreError(`Error ${res.status}: ${data.error ?? 'unknown'}`);
+      }
+    } catch (e) {
+      setRescoreError(e instanceof Error ? e.message : 'Request failed');
+    } finally {
       setRescoring(false);
     }
   }
@@ -179,16 +188,19 @@ function DeckDetail({ deckId, onBack }: { deckId: string; onBack: () => void }) 
           )}
 
           {!score && deck && (
-            <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 px-5 py-4 mb-6 flex items-center justify-between">
-              <span className="text-sm text-zinc-500">No rubric score on file.</span>
-              <button
-                type="button"
-                onClick={rescore}
-                disabled={rescoring}
-                className="text-xs bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-zinc-900 font-semibold px-4 py-1.5 rounded-lg transition-colors"
-              >
-                {rescoring ? 'Scoring…' : 'Score Now'}
-              </button>
+            <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 px-5 py-4 mb-6">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-zinc-500">No rubric score on file.</span>
+                <button
+                  type="button"
+                  onClick={rescore}
+                  disabled={rescoring}
+                  className="text-xs bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-zinc-900 font-semibold px-4 py-1.5 rounded-lg transition-colors"
+                >
+                  {rescoring ? 'Scoring… (may take ~30s)' : 'Score Now'}
+                </button>
+              </div>
+              {rescoreError && <p className="text-xs text-red-400 mt-2">{rescoreError}</p>}
             </div>
           )}
 
