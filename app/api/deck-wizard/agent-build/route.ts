@@ -284,7 +284,7 @@ export async function POST(req: NextRequest) {
 
   const budgetStr = budgetCents ? `$${(budgetCents / 100).toFixed(0)} total budget — stay under this` : 'no budget constraint';
   const collectionNote = collectionOnly && ownedCardNames.length > 0
-    ? `COLLECTION MODE: User owns ${ownedCardNames.length} cards. Prefer cards from this list: ${ownedCardNames.slice(0, 150).join(', ')}. You may include non-owned cards if essential.`
+    ? `COLLECTION MODE (HARD CONSTRAINT): You MUST use ONLY cards from the user's collection. Do NOT suggest any card not on this list. Every single non-land card in the final deck must appear in this owned list:\n${ownedCardNames.slice(0, 600).join(', ')}`
     : '';
 
   const systemPrompt = `You are Khoa, an expert Magic: The Gathering deck builder with deep knowledge of Commander strategy.
@@ -441,6 +441,18 @@ Think step by step. Research first, then build the engine, then support, then la
             if (basicsData.basics) Object.assign(finalDeck, basicsData.basics);
           }
         } catch { /* best effort */ }
+
+        // Enforce collection filter: strip any non-owned cards (basic lands exempt)
+        if (collectionOnly && ownedCardNames.length > 0) {
+          const ownedSet = new Set(ownedCardNames.map(n => n.toLowerCase()));
+          const filtered: Record<string, number> = {};
+          for (const [name, qty] of Object.entries(finalDeck)) {
+            if (BASIC_LANDS.has(name) || ownedSet.has(name.toLowerCase())) {
+              filtered[name] = qty;
+            }
+          }
+          finalDeck = filtered;
+        }
 
         send(sseEvent('complete', { deck: finalDeck, strategy: finalStrategy }));
         controller.close();
