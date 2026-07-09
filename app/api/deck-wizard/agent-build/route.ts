@@ -340,7 +340,7 @@ Think step by step. Research first, then build the engine, then support, then la
           iterationCount++;
 
           const response = await anthropic.messages.create({
-            model: 'claude-opus-4-8',
+            model: 'claude-sonnet-5',
             max_tokens: 8000,
             system: systemPrompt,
             tools: TOOLS,
