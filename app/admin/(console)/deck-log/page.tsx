@@ -90,7 +90,7 @@ function DeckDetail({ deckId, onBack }: { deckId: string; onBack: () => void }) 
   }
 
   let score: DeckScore | null = null;
-  try { score = deck?.rubric_score ? JSON.parse(deck.rubric_score) : null; } catch { score = null; }
+  try { score = deck?.rubric_score ? (typeof deck.rubric_score === 'string' ? JSON.parse(deck.rubric_score) : deck.rubric_score as unknown as DeckScore) : null; } catch { score = null; }
   if (score && typeof score.totalScore !== 'number') score = null;
 
   const nonLands = cards.filter(c => !BASIC_LANDS.has(c.name)).sort((a, b) => (a.cmc ?? 0) - (b.cmc ?? 0));
@@ -285,7 +285,7 @@ export default function DeckLogPage() {
       <div className="space-y-2">
         {decks.map(deck => {
           let score: DeckScore | null = null;
-          try { score = deck.rubric_score ? JSON.parse(deck.rubric_score) : null; } catch { score = null; }
+          try { score = deck.rubric_score ? (typeof deck.rubric_score === 'string' ? JSON.parse(deck.rubric_score) : deck.rubric_score as unknown as DeckScore) : null; } catch { score = null; }
           if (score && typeof score.totalScore !== 'number') score = null;
           return (
             <button

@@ -11,7 +11,7 @@ export interface DeckLogEntry {
   strategy: string | null;
   commander: string | null;
   cards: string; // JSON
-  rubric_score: string | null; // JSON
+  rubric_score: string | Record<string, unknown> | null;
   rubric_scored_at: string | null;
   createdAt: string;
 }
