@@ -74,30 +74,24 @@ function grade(pct: number): string {
   return 'F';
 }
 
-export async function POST(req: NextRequest) {
-  const userId = getAuthenticatedUserId(req);
-  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  const { cards, commander, commanderColorIdentity, format, archetype, themes, tribalType } =
-    await req.json() as {
-      cards: Record<string, number>;
-      commander?: string;
-      commanderColorIdentity?: string[];
-      format: string;
-      archetype?: string;
-      themes?: string[];
-      tribalType?: string;
-    };
+export async function scoreDeck(params: {
+  cards: Record<string, number>;
+  commander?: string;
+  commanderColorIdentity?: string[];
+  format: string;
+  archetype?: string;
+  themes?: string[];
+  tribalType?: string;
+}): Promise<DeckScore | null> {
+  const { cards, commander, commanderColorIdentity, format, archetype, themes, tribalType } = params;
 
   const cardEntries = Object.entries(cards);
   const totalCards = cardEntries.reduce((s, [, q]) => s + q, 0);
   const nonLandEntries = cardEntries.filter(([n]) => !BASIC_LANDS.has(n));
   const nonLandNames = nonLandEntries.map(([n]) => n);
 
-  // Ground scoring in real Scryfall data
   const scryfallData = await fetchScryfallData(nonLandNames);
 
-  // Build grounded card list for prompt
   const cardListWithData = cardEntries.map(([name, qty]) => {
     const data = scryfallData.get(name.toLowerCase());
     if (data) {
@@ -106,7 +100,6 @@ export async function POST(req: NextRequest) {
     return `${qty}x ${name} | (unverified)`;
   }).join('\n');
 
-  // Compute quick stats to give Khoa accurate starting data
   const landCount = cardEntries.filter(([n]) => BASIC_LANDS.has(n) ||
     (scryfallData.get(n.toLowerCase())?.type_line ?? '').includes('Land'))
     .reduce((s, [, q]) => s + q, 0);
@@ -122,21 +115,71 @@ export async function POST(req: NextRequest) {
   }
   const avgCmc = cmcValues.length ? (cmcValues.reduce((a, b) => a + b, 0) / cmcValues.length).toFixed(2) : '0';
 
-  const prompt = `You are Khoa, evaluating a Magic: The Gathering ${format} deck against a standardized rubric. Use the verified card data below — it comes from Scryfall and is accurate.
+  const prompt = buildScoringPrompt({ commander, commanderColorIdentity, format, archetype, themes, tribalType, totalCards, landCount, creatureCount, avgCmc, cardListWithData });
+
+  try {
+    const raw = await geminiChat(prompt, 0.2, undefined, 4096);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(extractJson(raw)) as Omit<DeckScore, 'totalScore' | 'maxScore' | 'percentage' | 'grade'> & {
+      validity: { pass: boolean; notes: string };
+    };
+
+    const scores = [
+      parsed.manaBase?.score ?? 0,
+      parsed.deckStructure?.score ?? 0,
+      parsed.removal?.score ?? 0,
+      parsed.synergy?.score ?? 0,
+      parsed.cardAdvantage?.score ?? 0,
+      parsed.manaCurve?.score ?? 0,
+      parsed.formatCompliance?.score ?? 0,
+    ];
+    const totalScore = scores.reduce((a, b) => a + b, 0);
+    const maxScore = 120;
+    const percentage = Math.round((totalScore / maxScore) * 100);
+
+    return {
+      validity: { score: 0, max: 0, label: 'Validity', pass: parsed.validity?.pass ?? true, notes: parsed.validity?.notes ?? '' },
+      manaBase: { score: parsed.manaBase?.score ?? 0, max: 25, label: 'Mana Base', notes: parsed.manaBase?.notes ?? '' },
+      deckStructure: { score: parsed.deckStructure?.score ?? 0, max: 15, label: 'Deck Structure', notes: parsed.deckStructure?.notes ?? '' },
+      removal: { score: parsed.removal?.score ?? 0, max: 20, label: 'Removal & Interaction', notes: parsed.removal?.notes ?? '' },
+      synergy: { score: parsed.synergy?.score ?? 0, max: 25, label: 'Synergy & Commander Alignment', notes: parsed.synergy?.notes ?? '' },
+      cardAdvantage: { score: parsed.cardAdvantage?.score ?? 0, max: 15, label: 'Card Advantage & Draw', notes: parsed.cardAdvantage?.notes ?? '' },
+      manaCurve: { score: parsed.manaCurve?.score ?? 0, max: 10, label: 'Mana Curve', notes: parsed.manaCurve?.notes ?? '' },
+      formatCompliance: { score: parsed.formatCompliance?.score ?? 0, max: 10, label: 'Format Compliance', notes: parsed.formatCompliance?.notes ?? '' },
+      powerLevel: { score: parsed.powerLevel?.score ?? 5, tier: parsed.powerLevel?.tier ?? 'Casual', notes: parsed.powerLevel?.notes ?? '' },
+      recommendations: parsed.recommendations ?? [],
+      totalScore,
+      maxScore,
+      percentage,
+      grade: grade(percentage),
+    };
+  } catch (e) {
+    console.error('[deck-score]', e);
+    return null;
+  }
+}
+
+function buildScoringPrompt(p: {
+  commander?: string; commanderColorIdentity?: string[]; format: string; archetype?: string;
+  themes?: string[]; tribalType?: string; totalCards: number; landCount: number;
+  creatureCount: number; avgCmc: string; cardListWithData: string;
+}) {
+  return `You are Khoa, evaluating a Magic: The Gathering ${p.format} deck against a standardized rubric. Use the verified card data below — it comes from Scryfall and is accurate.
 
 DECK STATS (pre-computed from Scryfall data):
-- Commander: ${commander ?? 'none'}
-- Commander color identity: ${commanderColorIdentity?.join('') || 'C'}
-- Total cards: ${totalCards} (target: 100)
-- Land count: ${landCount}
-- Creature count: ${creatureCount}
-- Avg CMC (non-lands): ${avgCmc}
-- Archetype: ${archetype ?? 'not specified'}
-- Themes: ${themes?.join(', ') || 'none'}
-- Tribal focus: ${tribalType ?? 'none'}
+- Commander: ${p.commander ?? 'none'}
+- Commander color identity: ${p.commanderColorIdentity?.join('') || 'C'}
+- Total cards: ${p.totalCards} (target: 100)
+- Land count: ${p.landCount}
+- Creature count: ${p.creatureCount}
+- Avg CMC (non-lands): ${p.avgCmc}
+- Archetype: ${p.archetype ?? 'not specified'}
+- Themes: ${p.themes?.join(', ') || 'none'}
+- Tribal focus: ${p.tribalType ?? 'none'}
 
 FULL CARD LIST (verified from Scryfall):
-${cardListWithData}
+${p.cardListWithData}
 
 Score this deck against the rubric below. Be strict and honest — a deck with no tribal synergy for a tribal commander should score poorly on synergy. A deck with 40 basic lands and no utility lands should score poorly on mana base.
 
@@ -186,48 +229,24 @@ Return ONLY valid JSON:
 }
 
 Provide 3-6 recommendations ordered by priority. Be specific — name actual cards to add or cut.`;
+}
 
-  try {
-    const raw = await geminiChat(prompt, 0.2, undefined, 4096);
-    if (!raw) return NextResponse.json({ error: 'AI unavailable' }, { status: 502 });
+export async function POST(req: NextRequest) {
+  const userId = getAuthenticatedUserId(req);
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const parsed = JSON.parse(extractJson(raw)) as Omit<DeckScore, 'totalScore' | 'maxScore' | 'percentage' | 'grade'> & {
-      validity: { pass: boolean; notes: string };
+  const { cards, commander, commanderColorIdentity, format, archetype, themes, tribalType } =
+    await req.json() as {
+      cards: Record<string, number>;
+      commander?: string;
+      commanderColorIdentity?: string[];
+      format: string;
+      archetype?: string;
+      themes?: string[];
+      tribalType?: string;
     };
 
-    const scores = [
-      parsed.manaBase?.score ?? 0,
-      parsed.deckStructure?.score ?? 0,
-      parsed.removal?.score ?? 0,
-      parsed.synergy?.score ?? 0,
-      parsed.cardAdvantage?.score ?? 0,
-      parsed.manaCurve?.score ?? 0,
-      parsed.formatCompliance?.score ?? 0,
-    ];
-    const totalScore = scores.reduce((a, b) => a + b, 0);
-    const maxScore = 120;
-    const percentage = Math.round((totalScore / maxScore) * 100);
-
-    const result: DeckScore = {
-      validity: { score: 0, max: 0, label: 'Validity', pass: parsed.validity?.pass ?? true, notes: parsed.validity?.notes ?? '' },
-      manaBase: { score: parsed.manaBase?.score ?? 0, max: 25, label: 'Mana Base', notes: parsed.manaBase?.notes ?? '' },
-      deckStructure: { score: parsed.deckStructure?.score ?? 0, max: 15, label: 'Deck Structure', notes: parsed.deckStructure?.notes ?? '' },
-      removal: { score: parsed.removal?.score ?? 0, max: 20, label: 'Removal & Interaction', notes: parsed.removal?.notes ?? '' },
-      synergy: { score: parsed.synergy?.score ?? 0, max: 25, label: 'Synergy & Commander Alignment', notes: parsed.synergy?.notes ?? '' },
-      cardAdvantage: { score: parsed.cardAdvantage?.score ?? 0, max: 15, label: 'Card Advantage & Draw', notes: parsed.cardAdvantage?.notes ?? '' },
-      manaCurve: { score: parsed.manaCurve?.score ?? 0, max: 10, label: 'Mana Curve', notes: parsed.manaCurve?.notes ?? '' },
-      formatCompliance: { score: parsed.formatCompliance?.score ?? 0, max: 10, label: 'Format Compliance', notes: parsed.formatCompliance?.notes ?? '' },
-      powerLevel: { score: parsed.powerLevel?.score ?? 5, tier: parsed.powerLevel?.tier ?? 'Casual', notes: parsed.powerLevel?.notes ?? '' },
-      recommendations: parsed.recommendations ?? [],
-      totalScore,
-      maxScore,
-      percentage,
-      grade: grade(percentage),
-    };
-
-    return NextResponse.json(result);
-  } catch (e) {
-    console.error('[deck-score]', e);
-    return NextResponse.json({ error: 'Scoring failed' }, { status: 500 });
-  }
+  const result = await scoreDeck({ cards, commander, commanderColorIdentity, format, archetype, themes, tribalType });
+  if (!result) return NextResponse.json({ error: 'Scoring failed' }, { status: 500 });
+  return NextResponse.json(result);
 }
