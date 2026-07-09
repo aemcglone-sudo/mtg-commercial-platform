@@ -97,6 +97,7 @@ export function CardSelectionPanel({
   const [roles, setRoles] = useState<RoleGroup[]>([]);
   const [loading, setLoading] = useState(true); // start true — fetch fires immediately
   const [loadError, setLoadError] = useState(false);
+  const [loadErrorMsg, setLoadErrorMsg] = useState<string | null>(null);
   const [loadStage, setLoadStage] = useState(0); // 0-4 for progress steps
   const [deck, setDeck] = useState<Record<string, number>>(initialCards);
   const [expandedRole, setExpandedRole] = useState<string | null>(null);
@@ -137,9 +138,14 @@ export function CardSelectionPanel({
           ownedCardNames, roleTargets, deckColors, collectionOnly,
         }),
       });
-      const data = await res.json() as { roles: RoleGroup[]; summary?: string };
+      const data = await res.json() as { roles: RoleGroup[]; summary?: string; error?: string };
       if (!res.ok) {
         console.error('[suggest-cards] API error', res.status, data);
+        if (data.error === 'collection_empty') {
+          setLoadErrorMsg('Your collection appears to be empty. Add cards to your collection first, or turn off "From My Collection".');
+          setLoadError(true);
+          return;
+        }
       }
       const fetchedRoles = data.roles ?? [];
       setRoles(fetchedRoles);
@@ -385,7 +391,7 @@ export function CardSelectionPanel({
               <div className="text-center max-w-xs">
                 <div className="text-3xl mb-3">⚠️</div>
                 <div className="text-zinc-400 text-sm font-medium mb-1">Khoa ran into a problem</div>
-                <div className="text-zinc-600 text-xs mb-4">The AI couldn't generate suggestions right now. Try refreshing.</div>
+                <div className="text-zinc-600 text-xs mb-4">{loadErrorMsg ?? "The AI couldn't generate suggestions right now. Try refreshing."}</div>
                 <button
                   type="button"
                   onClick={fetchSuggestions}

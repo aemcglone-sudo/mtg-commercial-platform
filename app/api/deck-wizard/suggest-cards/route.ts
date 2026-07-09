@@ -299,6 +299,11 @@ export async function POST(req: NextRequest) {
   try {
     let parsed: Parsed;
 
+    if (collectionOnly && ownedCardNames.length === 0) {
+      console.warn('[suggest-cards] collectionOnly=true but ownedCardNames is empty — returning error');
+      return NextResponse.json({ error: 'collection_empty', roles: [] }, { status: 400 });
+    }
+
     if (collectionOnly && ownedCardNames.length > 0) {
       // Pre-filter: format legality first, then color identity
       let legalNames = !isCommander
