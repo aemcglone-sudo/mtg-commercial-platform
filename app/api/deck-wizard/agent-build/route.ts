@@ -426,6 +426,8 @@ Think step by step. Research first, then build the engine, then support, then la
       const send = (data: string) => controller.enqueue(encoder.encode(data));
 
       try {
+        send(sseEvent('status', { text: `[debug] collectionOnly=${collectionOnly} resolvedCollectionOnly=${resolvedCollectionOnly} ownedCards=${resolvedOwnedCardNames.length}` }));
+
         // Collection-only: use direct Gemini call — no agent tools needed, all cards are in the prompt
         if (resolvedCollectionOnly && resolvedOwnedCardNames.length > 0) {
           send(sseEvent('status', { text: `Building from your collection (${resolvedOwnedCardNames.length} cards)…` }));
