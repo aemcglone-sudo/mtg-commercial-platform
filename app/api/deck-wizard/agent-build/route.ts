@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { getAuthenticatedUserId } from '@/lib/auth';
 import { findMany } from '@/lib/db';
+import { geminiChat, extractJson } from '@/lib/gemini';
 
 export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
@@ -425,8 +426,37 @@ Think step by step. Research first, then build the engine, then support, then la
       const send = (data: string) => controller.enqueue(encoder.encode(data));
 
       try {
-        send(sseEvent('status', { text: resolvedCollectionOnly && resolvedOwnedCardNames.length > 0 ? `Building from your collection (${resolvedOwnedCardNames.length} cards)…` : 'Khoa is thinking…' }));
-        const ownedCardPool: CardDetail[] = [];
+        // Collection-only: use direct Gemini call — no agent tools needed, all cards are in the prompt
+        if (resolvedCollectionOnly && resolvedOwnedCardNames.length > 0) {
+          send(sseEvent('status', { text: `Building from your collection (${resolvedOwnedCardNames.length} cards)…` }));
+
+          const collectionPrompt = `${systemPrompt}
+
+Build the deck now. Return ONLY valid JSON in this exact format, no other text:
+{"deck":{"Card Name":1,"Another Card":1},"strategy":"one paragraph explaining the deck"}
+
+The deck must have exactly ${deckSize} cards total including the commander. Every non-land card MUST come from the OWNED CARDS list in the system prompt. Basic lands (Plains, Island, Swamp, Mountain, Forest) are always allowed. Do not include any card not in the owned list.`;
+
+          send(sseEvent('thinking', { text: 'Selecting cards from your collection…' }));
+          const raw = await geminiChat(collectionPrompt, 0.5, undefined, 8192);
+
+          if (raw) {
+            try {
+              const jsonStr = extractJson(raw);
+              const parsed = JSON.parse(jsonStr) as { deck?: Record<string, number>; strategy?: string };
+              if (parsed.deck && typeof parsed.deck === 'object') {
+                finalDeck = parsed.deck;
+                finalStrategy = parsed.strategy ?? '';
+              }
+            } catch { /* fall through to agent */ }
+          }
+
+          if (!finalDeck) {
+            send(sseEvent('error', { message: 'Could not build a deck from your collection. Try a different commander.' }));
+            controller.close();
+            return;
+          }
+        }
 
         while (iterationCount < MAX_ITERATIONS && !finalDeck) {
           iterationCount++;
@@ -488,7 +518,7 @@ Think step by step. Research first, then build the engine, then support, then la
                   format,
                   collectionOnly,
                   resolvedOwnedCardNames,
-                  ownedCardPool,
+                  [],
                 );
                 send(sseEvent('tool_result', { tool: block.name, summary }));
                 toolResults.push({
