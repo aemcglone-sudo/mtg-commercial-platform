@@ -366,7 +366,10 @@ export async function POST(req: NextRequest) {
 
   const budgetStr = budgetCents ? `$${(budgetCents / 100).toFixed(0)} total budget — stay under this` : 'no budget constraint';
   const collectionNote = collectionOnly && resolvedOwnedCardNames.length > 0
-    ? `COLLECTION MODE (HARD CONSTRAINT): You MUST use ONLY cards from the user's collection. Do NOT suggest any card not on this list. Every single non-land card in the final deck must appear in this owned list:\n${resolvedOwnedCardNames.slice(0, 600).join(', ')}`
+    ? `COLLECTION MODE — HARD CONSTRAINT: You MUST build the deck using ONLY cards from the user's owned collection below. Every non-land card in the final deck MUST appear in this list. You already know what these cards do from your MTG training — use that knowledge to pick strategically. Use get_card to verify details when needed.
+
+OWNED CARDS (${resolvedOwnedCardNames.length} total):
+${resolvedOwnedCardNames.join(', ')}`
     : '';
 
   const systemPrompt = `You are Khoa, an expert Magic: The Gathering deck builder with deep knowledge of Commander strategy.
@@ -416,15 +419,8 @@ Think step by step. Research first, then build the engine, then support, then la
       const send = (data: string) => controller.enqueue(encoder.encode(data));
 
       try {
-        // Pre-fetch owned card pool inside stream so client gets immediate feedback
-        let ownedCardPool: CardDetail[] = [];
-        if (collectionOnly && resolvedOwnedCardNames.length > 0) {
-          send(sseEvent('status', { text: `Loading your collection (${resolvedOwnedCardNames.length} cards)…` }));
-          ownedCardPool = await fetchOwnedCardPool(resolvedOwnedCardNames, commanderColorIdentity);
-          send(sseEvent('status', { text: `Found ${ownedCardPool.length} cards matching your commander's colors. Khoa is thinking…` }));
-        } else {
-          send(sseEvent('status', { text: 'Khoa is thinking…' }));
-        }
+        send(sseEvent('status', { text: collectionOnly && resolvedOwnedCardNames.length > 0 ? `Building from your collection (${resolvedOwnedCardNames.length} cards)…` : 'Khoa is thinking…' }));
+        const ownedCardPool: CardDetail[] = [];
 
         while (iterationCount < MAX_ITERATIONS && !finalDeck) {
           iterationCount++;
