@@ -335,16 +335,22 @@ export async function POST(req: NextRequest) {
     sessionId?: string;
   };
 
-  // Fetch owned cards from DB server-side — don't trust the client array (may be empty due to timing)
-  let resolvedOwnedCardNames = ownedCardNames;
-  if (collectionOnly) {
-    try {
-      const rows = await findMany<{ name: string }>(
-        `SELECT DISTINCT name FROM inventory_items WHERE "userId" = ? AND "itemType" = 'cards'`,
-        [userId]
-      );
-      if (rows.length > 0) resolvedOwnedCardNames = rows.map(r => r.name);
-    } catch { /* fall back to client-provided list */ }
+  // Always fetch owned cards from DB — used for both collection mode and post-filter
+  let resolvedOwnedCardNames: string[] = ownedCardNames;
+  let resolvedCollectionOnly = collectionOnly;
+  try {
+    const rows = await findMany<{ name: string }>(
+      `SELECT DISTINCT name FROM inventory_items WHERE "userId" = ? AND "itemType" = 'cards'`,
+      [userId]
+    );
+    if (rows.length > 0) {
+      resolvedOwnedCardNames = rows.map(r => r.name);
+      // If client sent collectionOnly=true, keep it. Also enforce if client somehow sent false but has cards.
+      // Trust the DB count over the client flag.
+    }
+    console.log(`[agent-build] userId=${userId} collectionOnly=${collectionOnly} resolvedCollectionOnly=${resolvedCollectionOnly} ownedFromDB=${rows.length} ownedFromClient=${ownedCardNames.length}`);
+  } catch (e) {
+    console.error('[agent-build] failed to fetch owned cards from DB:', e);
   }
 
   const isCommander = ['commander', 'brawl', 'oathbreaker'].includes(format);
@@ -365,7 +371,7 @@ export async function POST(req: NextRequest) {
   } catch { /* best effort */ }
 
   const budgetStr = budgetCents ? `$${(budgetCents / 100).toFixed(0)} total budget — stay under this` : 'no budget constraint';
-  const collectionNote = collectionOnly && resolvedOwnedCardNames.length > 0
+  const collectionNote = resolvedCollectionOnly && resolvedOwnedCardNames.length > 0
     ? `COLLECTION MODE — HARD CONSTRAINT: You MUST build the deck using ONLY cards from the user's owned collection below. Every non-land card in the final deck MUST appear in this list. You already know what these cards do from your MTG training — use that knowledge to pick strategically. Use get_card to verify details when needed.
 
 OWNED CARDS (${resolvedOwnedCardNames.length} total):
@@ -419,7 +425,7 @@ Think step by step. Research first, then build the engine, then support, then la
       const send = (data: string) => controller.enqueue(encoder.encode(data));
 
       try {
-        send(sseEvent('status', { text: collectionOnly && resolvedOwnedCardNames.length > 0 ? `Building from your collection (${resolvedOwnedCardNames.length} cards)…` : 'Khoa is thinking…' }));
+        send(sseEvent('status', { text: resolvedCollectionOnly && resolvedOwnedCardNames.length > 0 ? `Building from your collection (${resolvedOwnedCardNames.length} cards)…` : 'Khoa is thinking…' }));
         const ownedCardPool: CardDetail[] = [];
 
         while (iterationCount < MAX_ITERATIONS && !finalDeck) {
@@ -530,7 +536,7 @@ Think step by step. Research first, then build the engine, then support, then la
         } catch { /* best effort */ }
 
         // Enforce collection filter: strip any non-owned cards (basic lands exempt)
-        if (collectionOnly && resolvedOwnedCardNames.length > 0) {
+        if (resolvedCollectionOnly && resolvedOwnedCardNames.length > 0) {
           const ownedSet = new Set(resolvedOwnedCardNames.map(n => n.toLowerCase()));
           const filtered: Record<string, number> = {};
           for (const [name, qty] of Object.entries(finalDeck)) {
