@@ -336,9 +336,10 @@ export async function POST(req: NextRequest) {
     sessionId?: string;
   };
 
-  // Always fetch owned cards from DB — used for both collection mode and post-filter
+  // Fetch owned cards from DB. If user has a collection, enforce collection-only
+  // regardless of what the client flag says (client flag can be wrong due to timing).
   let resolvedOwnedCardNames: string[] = ownedCardNames;
-  let resolvedCollectionOnly = collectionOnly;
+  let resolvedCollectionOnly = false;
   try {
     const rows = await findMany<{ name: string }>(
       `SELECT DISTINCT name FROM inventory_items WHERE "userId" = ? AND "itemType" = 'cards'`,
@@ -346,12 +347,13 @@ export async function POST(req: NextRequest) {
     );
     if (rows.length > 0) {
       resolvedOwnedCardNames = rows.map(r => r.name);
-      // If client sent collectionOnly=true, keep it. Also enforce if client somehow sent false but has cards.
-      // Trust the DB count over the client flag.
+      // Enforce collection-only if: client requested it, OR client sent owned cards names
+      resolvedCollectionOnly = collectionOnly || ownedCardNames.length > 0;
     }
-    console.log(`[agent-build] userId=${userId} collectionOnly=${collectionOnly} resolvedCollectionOnly=${resolvedCollectionOnly} ownedFromDB=${rows.length} ownedFromClient=${ownedCardNames.length}`);
+    console.log(`[agent-build] collectionOnly=${collectionOnly} clientOwned=${ownedCardNames.length} dbOwned=${rows.length} resolvedCollectionOnly=${resolvedCollectionOnly}`);
   } catch (e) {
-    console.error('[agent-build] failed to fetch owned cards from DB:', e);
+    console.error('[agent-build] DB fetch failed:', e);
+    resolvedCollectionOnly = collectionOnly;
   }
 
   const isCommander = ['commander', 'brawl', 'oathbreaker'].includes(format);
