@@ -347,12 +347,6 @@ export async function POST(req: NextRequest) {
     } catch { /* fall back to client-provided list */ }
   }
 
-  // Pre-fetch full owned card pool when in collection-only mode
-  let ownedCardPool: CardDetail[] = [];
-  if (collectionOnly && resolvedOwnedCardNames.length > 0) {
-    ownedCardPool = await fetchOwnedCardPool(resolvedOwnedCardNames, commanderColorIdentity);
-  }
-
   const isCommander = ['commander', 'brawl', 'oathbreaker'].includes(format);
   const deckSize = isCommander ? 100 : 60;
   const colorStr = commanderColorIdentity.join('') || 'WUBRG';
@@ -422,7 +416,15 @@ Think step by step. Research first, then build the engine, then support, then la
       const send = (data: string) => controller.enqueue(encoder.encode(data));
 
       try {
-        send(sseEvent('status', { text: 'Khoa is thinking…' }));
+        // Pre-fetch owned card pool inside stream so client gets immediate feedback
+        let ownedCardPool: CardDetail[] = [];
+        if (collectionOnly && resolvedOwnedCardNames.length > 0) {
+          send(sseEvent('status', { text: `Loading your collection (${resolvedOwnedCardNames.length} cards)…` }));
+          ownedCardPool = await fetchOwnedCardPool(resolvedOwnedCardNames, commanderColorIdentity);
+          send(sseEvent('status', { text: `Found ${ownedCardPool.length} cards matching your commander's colors. Khoa is thinking…` }));
+        } else {
+          send(sseEvent('status', { text: 'Khoa is thinking…' }));
+        }
 
         while (iterationCount < MAX_ITERATIONS && !finalDeck) {
           iterationCount++;
