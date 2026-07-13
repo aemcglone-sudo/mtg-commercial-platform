@@ -186,27 +186,6 @@ export function ThemeSelector({ format, commanderName, selectedThemes, selectedA
         </div>
       </div>
 
-      {/* Named archetypes — only show for Commander where no broad archetype was pre-selected */}
-      {!selectedArchetype && (
-      <div className="mb-6">
-        <h3 className="text-xs font-semibold text-zinc-600 uppercase tracking-widest mb-2">Popular Deck Builds</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-          {data.namedArchetypes.map(t => (
-            <ThemeTile
-              key={t.id}
-              id={t.id}
-              label={t.label}
-              description={t.description}
-              colors={t.colors}
-              difficulty={t.difficulty}
-              selected={themes.includes(t.id)}
-              recommended={isRec('archetypes', t.id)}
-              onClick={() => toggleTheme(t.id)}
-            />
-          ))}
-        </div>
-      </div>
-      )}
 
       {/* Tribal */}
       <div className="mb-6">
@@ -308,9 +287,9 @@ export function ThemeSelector({ format, commanderName, selectedThemes, selectedA
       </div>
       </div>{/* end main column */}
 
-      {/* Sidebar — Khoa's explanation */}
-      {(commanderName || selectedArchetype) && (
-        <div className="w-64 shrink-0 hidden lg:block">
+      {/* Sidebar — Khoa's explanation + selections */}
+      <div className="w-64 shrink-0 hidden lg:block">
+        {(commanderName || selectedArchetype) && (
           <div className="sticky top-24 rounded-xl border border-zinc-800 bg-zinc-900 p-4">
             <div className="flex items-center gap-2 mb-3">
               <span className="text-amber-400 text-xs">✦</span>
@@ -338,9 +317,65 @@ export function ThemeSelector({ format, commanderName, selectedThemes, selectedA
                 </div>
               </div>
             )}
+
+            {/* Selections summary */}
+            <div className="mt-4 pt-3 border-t border-zinc-800">
+              <p className="text-xs font-semibold text-zinc-400 uppercase tracking-widest mb-2">Your Selections</p>
+              {themes.length === 0 && !tribal && !psychographic ? (
+                <p className="text-xs text-zinc-600 italic">Nothing selected yet</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {themes.map(id => (
+                    <div key={id} className="flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
+                      <span className="text-xs text-green-300">{id}</span>
+                    </div>
+                  ))}
+                  {tribal && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
+                      <span className="text-xs text-green-300">Tribal: {tribal}</span>
+                    </div>
+                  )}
+                  {psychographic && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
+                      <span className="text-xs text-green-300">Style: {psychographic}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+
+        {/* Always-visible selections panel */}
+        {(themes.length > 0 || tribal || psychographic) && !(commanderName || selectedArchetype) && (
+          <div className="sticky top-24 rounded-xl border border-zinc-800 bg-zinc-900 p-4">
+            <p className="text-xs font-semibold text-zinc-400 uppercase tracking-widest mb-3">Your Selections</p>
+            <div className="space-y-1.5">
+              {themes.map(id => (
+                <div key={id} className="flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
+                  <span className="text-xs text-green-300">{id}</span>
+                </div>
+              ))}
+              {tribal && (
+                <div className="flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
+                  <span className="text-xs text-green-300">Tribal: {tribal}</span>
+                </div>
+              )}
+              {psychographic && (
+                <div className="flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
+                  <span className="text-xs text-green-300">Style: {psychographic}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
