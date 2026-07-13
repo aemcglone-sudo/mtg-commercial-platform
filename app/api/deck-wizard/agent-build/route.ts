@@ -524,6 +524,9 @@ Think step by step: read the commander → identify its strategy → find synerg
   let finalStrategy = '';
   let iterationCount = 0;
   const MAX_ITERATIONS = 30;
+  // Track best deck seen in check_deck calls so finalize can't submit a forgotten subset
+  let bestDeckSoFar: Record<string, number> = {};
+  let bestDeckTotal = 0;
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -602,12 +605,16 @@ Think step by step: read the commander → identify its strategy → find synerg
             if (name === 'finalize_deck') {
               const submittedDeck = args.deck as Record<string, number>;
               const submittedTotal = Object.values(submittedDeck).reduce((s, q) => s + q, 0);
-              const minNonLand = Math.floor(deckSize * 0.55); // at least 55 non-land cards for a 100-card deck
-              if (submittedTotal < minNonLand) {
-                // Reject and ask for more cards
-                responseParts.push({ functionResponse: { name, response: { name, content: { ok: false, error: `Deck only has ${submittedTotal} cards. You need at least ${minNonLand} non-land cards before finalizing. Keep adding cards.` } } } });
+              // Use whichever deck is larger — submitted or best seen during check_deck
+              // (agent sometimes forgets earlier cards when building the final JSON)
+              const effectiveDeck = submittedTotal >= bestDeckTotal ? submittedDeck : bestDeckSoFar;
+              const effectiveTotal = Math.max(submittedTotal, bestDeckTotal);
+              const minCards = Math.floor(deckSize * 0.55);
+              if (effectiveTotal < minCards) {
+                // Not enough cards even with the best snapshot — ask for more
+                responseParts.push({ functionResponse: { name, response: { name, content: { ok: false, error: `Deck only has ${effectiveTotal} cards. You need at least ${minCards} before finalizing. Keep adding cards.` } } } });
               } else {
-                finalDeck = submittedDeck;
+                finalDeck = effectiveDeck;
                 finalStrategy = (args.strategy as string) ?? '';
                 send(sseEvent('finalizing', { text: 'Building complete — filling basics…' }));
                 responseParts.push({ functionResponse: { name, response: { name, content: { ok: true } } } });
@@ -617,6 +624,17 @@ Think step by step: read the commander → identify its strategy → find synerg
                 name, args, userId, commanderColorIdentity, format,
                 resolvedCollectionOnly, resolvedOwnedCardNames, ownedCardPool,
               );
+              // Snapshot the best deck we've seen via check_deck
+              if (name === 'check_deck') {
+                const checkedDeck = args.deck as Record<string, number> | undefined;
+                if (checkedDeck) {
+                  const checkedTotal = Object.values(checkedDeck).reduce((s, q) => s + q, 0);
+                  if (checkedTotal > bestDeckTotal) {
+                    bestDeckSoFar = { ...checkedDeck };
+                    bestDeckTotal = checkedTotal;
+                  }
+                }
+              }
               send(sseEvent('tool_result', { tool: name, summary }));
               responseParts.push({ functionResponse: { name, response: { name, content: result } } });
             }
