@@ -31,9 +31,24 @@ function ShopSettingsContent() {
   const [dragOver, setDragOver] = useState(false);
   const [mergeMode, setMergeMode] = useState<'replace' | 'add'>('add');
   const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadProgress, setUploadProgress] = useState<{ added: number; total: number | null } | null>(null);
   const [uploadError, setUploadError] = useState('');
   const [uploadSuccess, setUploadSuccess] = useState('');
+  const [notFoundNames, setNotFoundNames] = useState<string[]>([]);
+  const [showNotFound, setShowNotFound] = useState(false);
+  const [loadingNotFound, setLoadingNotFound] = useState(false);
+
+  async function loadLastNotFound() {
+    setLoadingNotFound(true);
+    try {
+      const res = await fetch('/api/shops/inventory/last-upload');
+      const data = await res.json() as { notFoundNames?: string[] };
+      setNotFoundNames(data.notFoundNames ?? []);
+      setShowNotFound(true);
+    } finally {
+      setLoadingNotFound(false);
+    }
+  }
   const [inventoryCount, setInventoryCount] = useState<number | null>(null);
   const [clearing, setClearing] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
@@ -87,30 +102,52 @@ function ShopSettingsContent() {
   async function handleUpload() {
     if (!text.trim()) return;
     setUploading(true);
-    setUploadProgress(0);
+    setUploadProgress(null);
     setUploadError('');
     setUploadSuccess('');
-    const startTime = Date.now();
-    const interval = setInterval(() => setUploadProgress(Math.round((Date.now() - startTime) / 1000)), 500);
+    setNotFoundNames([]);
+    setShowNotFound(false);
     try {
       const res = await fetch('/api/shops/inventory/upload', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text, mergeMode }),
       });
-      const text2 = await res.text();
-      const data = text2 ? JSON.parse(text2) as { added?: number; skipped?: number; error?: string } : {};
-      if (!res.ok) throw new Error(data.error ?? `Upload failed (${res.status})`);
-      setUploadSuccess(`Added ${data.added?.toLocaleString()} card${data.added !== 1 ? 's' : ''} to inventory${data.skipped ? ` · ${data.skipped} not found` : ''}.`);
-      setInventoryCount(prev => mergeMode === 'replace' ? (data.added ?? 0) : (prev ?? 0) + (data.added ?? 0));
+      const data = await res.json() as { jobId?: string; error?: string };
+      if (!res.ok || !data.jobId) throw new Error(data.error ?? 'Upload failed');
+
+      const jobId = data.jobId;
       setText('');
       setFileName('');
+
+      // Poll for job completion
+      const poll = setInterval(async () => {
+        try {
+          const sr = await fetch(`/api/shops/inventory/upload-status/${jobId}`);
+          const status = await sr.json() as { status: string; added: number | null; skipped: number | null; total: number | null; error_msg: string | null; notFoundNames?: string[] };
+          if (status.status === 'processing' || status.status === 'pending') {
+            setUploadProgress({ added: status.added ?? 0, total: status.total });
+          } else if (status.status === 'done') {
+            clearInterval(poll);
+            setUploading(false);
+            setUploadProgress(null);
+            setUploadSuccess(`Added ${(status.added ?? 0).toLocaleString()} card${status.added !== 1 ? 's' : ''} to inventory${status.skipped ? ` · ${status.skipped} not found` : ''}.`);
+            setInventoryCount(prev => mergeMode === 'replace' ? (status.added ?? 0) : (prev ?? 0) + (status.added ?? 0));
+            if (status.notFoundNames?.length) setNotFoundNames(status.notFoundNames);
+          } else if (status.status === 'error') {
+            clearInterval(poll);
+            setUploading(false);
+            setUploadProgress(null);
+            setUploadError(status.error_msg ?? 'Upload failed');
+          }
+        } catch {
+          // keep polling
+        }
+      }, 3000);
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : 'Something went wrong');
-    } finally {
-      clearInterval(interval);
       setUploading(false);
-      setUploadProgress(0);
+      setUploadProgress(null);
     }
   }
 
@@ -139,6 +176,12 @@ function ShopSettingsContent() {
     { id: 'marketplace', label: 'Shop Details' },
     { id: 'inventory', label: 'Inventory Upload' },
   ] as const;
+
+  const quickLinks = [
+    { href: '/shop/site', label: '🌐 Site Builder', desc: 'Hours, sections, gallery, branding' },
+    { href: '/shop/site/events', label: '🗓 Events', desc: 'Manage your in-store events' },
+    { href: '/shop/campaigns', label: '📣 Campaigns', desc: 'Email & discount campaigns' },
+  ];
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
@@ -241,17 +284,52 @@ function ShopSettingsContent() {
 
                 {uploadError && <p className="text-red-400 text-sm">{uploadError}</p>}
                 {uploadSuccess && <p className="text-emerald-400 text-sm">{uploadSuccess}</p>}
+                <button type="button" onClick={loadLastNotFound} disabled={loadingNotFound}
+                  className="text-xs text-zinc-500 hover:text-zinc-300 underline disabled:opacity-50 text-left w-fit">
+                  {loadingNotFound ? 'Loading…' : '⚠ View cards not found in last upload'}
+                </button>
+                {notFoundNames.length > 0 && (
+                  <div className="border border-zinc-700 rounded-xl overflow-hidden">
+                    <button type="button"
+                      onClick={() => setShowNotFound(v => !v)}
+                      className="w-full flex items-center justify-between px-4 py-2.5 text-sm text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50 transition-colors">
+                      <span>⚠ {notFoundNames.length} card{notFoundNames.length !== 1 ? 's' : ''} not found on Scryfall</span>
+                      <span className="text-xs text-zinc-600">{showNotFound ? '▲ hide' : '▼ show'}</span>
+                    </button>
+                    {showNotFound && (
+                      <div className="border-t border-zinc-700 max-h-48 overflow-y-auto px-4 py-3 space-y-1">
+                        {notFoundNames.map((name, i) => (
+                          <p key={i} className="text-xs text-zinc-500 font-mono">{name}</p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {uploading && (
-                  <div className="flex items-center gap-3 px-4 py-3 bg-zinc-900 border border-zinc-800 rounded-xl">
-                    <svg className="animate-spin h-4 w-4 shrink-0 text-amber-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                    <div>
-                      <p className="text-sm text-zinc-200">{uploadProgress < 3 ? 'Parsing…' : uploadProgress < 10 ? 'Looking up cards…' : 'Enriching card data…'}</p>
-                      <p className="text-xs text-zinc-500">{uploadProgress}s elapsed · large lists take 60–90s</p>
+                  <div className="px-4 py-3 bg-zinc-900 border border-zinc-800 rounded-xl space-y-2">
+                    <div className="flex items-center gap-3">
+                      <svg className="animate-spin h-4 w-4 shrink-0 text-amber-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      <div>
+                        <p className="text-sm text-zinc-200">
+                          {!uploadProgress ? 'Submitting…' : uploadProgress.total ? `Processing cards…` : 'Looking up cards on Scryfall…'}
+                        </p>
+                        <p className="text-xs text-zinc-500">
+                          {uploadProgress?.added != null && uploadProgress.added > 0
+                            ? `${uploadProgress.added.toLocaleString()}${uploadProgress.total ? ` / ${uploadProgress.total.toLocaleString()}` : ''} cards processed`
+                            : 'Large lists take a few minutes — you can navigate away and come back'}
+                        </p>
+                      </div>
                     </div>
+                    {uploadProgress?.total != null && uploadProgress.total > 0 && (
+                      <div className="w-full bg-zinc-800 rounded-full h-1.5">
+                        <div className="bg-amber-400 h-1.5 rounded-full transition-all"
+                          style={{ width: `${Math.min(100, Math.round((uploadProgress.added / uploadProgress.total) * 100))}%` }} />
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -326,6 +404,15 @@ function ShopSettingsContent() {
               {item.label}
             </Link>
           ))}
+          <div className="pt-4 border-t border-zinc-800 mt-4 space-y-1">
+            <p className="text-[10px] font-semibold text-zinc-600 uppercase tracking-widest px-4 pb-1">Quick Links</p>
+            {quickLinks.map(l => (
+              <Link key={l.href} href={l.href}
+                className="block px-4 py-2 rounded-xl text-xs text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900 transition-colors">
+                {l.label}
+              </Link>
+            ))}
+          </div>
         </nav>
       </div>
     </div>
