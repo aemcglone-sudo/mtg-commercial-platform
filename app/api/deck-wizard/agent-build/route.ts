@@ -1,13 +1,79 @@
 import { NextRequest } from 'next/server';
-import Anthropic from '@anthropic-ai/sdk';
 import { getAuthenticatedUserId } from '@/lib/auth';
 import { findMany } from '@/lib/db';
-import { geminiChat, extractJson } from '@/lib/gemini';
+import { extractJson } from '@/lib/gemini';
 
 export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const GEMINI_MODEL = 'gemini-3.1-flash-lite';
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+
+type GeminiPart =
+  | { text: string }
+  | { functionCall: { name: string; args: Record<string, unknown> } }
+  | { functionResponse: { name: string; response: { name: string; content: unknown } } };
+
+type GeminiContent = { role: 'user' | 'model'; parts: GeminiPart[] };
+
+async function geminiWithTools(
+  systemInstruction: string,
+  contents: GeminiContent[],
+  tools: GeminiFunctionDeclaration[],
+): Promise<{ parts: GeminiPart[]; finishReason: string } | null> {
+  const key = process.env.GOOGLE_API_KEY;
+  if (!key) return null;
+  const body = JSON.stringify({
+    systemInstruction: { role: 'user', parts: [{ text: systemInstruction }] },
+    contents,
+    tools: [{ functionDeclarations: tools }],
+    generationConfig: { temperature: 0.4, maxOutputTokens: 8192 },
+  });
+  const delays = [3000, 8000, 20000];
+  for (let attempt = 0; attempt <= delays.length; attempt++) {
+    try {
+      const res = await fetch(`${GEMINI_URL}?key=${key}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+      });
+      if (res.status === 429 && attempt < delays.length) {
+        const wait = delays[attempt];
+        console.warn(`[gemini-tools] 429 rate limit — waiting ${wait}ms before retry ${attempt + 1}`);
+        await new Promise(r => setTimeout(r, wait));
+        continue;
+      }
+      if (!res.ok) {
+        const err = await res.text().catch(() => '');
+        console.error('[gemini-tools] HTTP', res.status, err.slice(0, 500));
+        return { parts: [{ text: `[gemini-error] HTTP ${res.status}: ${err.slice(0, 300)}` }], finishReason: 'error' };
+      }
+      const data = await res.json() as {
+        candidates?: Array<{
+          content: { parts: GeminiPart[] };
+          finishReason: string;
+        }>;
+      };
+      const candidate = data.candidates?.[0];
+      if (!candidate) return null;
+      return { parts: candidate.content.parts, finishReason: candidate.finishReason };
+    } catch (e) {
+      console.error('[gemini-tools] threw:', e);
+      if (attempt < delays.length) {
+        await new Promise(r => setTimeout(r, delays[attempt]));
+        continue;
+      }
+      return null;
+    }
+  }
+  return null;
+}
+
+interface GeminiFunctionDeclaration {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+}
 
 const BASIC_LANDS = new Set([
   'Plains','Island','Swamp','Mountain','Forest','Wastes',
@@ -77,22 +143,55 @@ async function fetchOwnedCardPool(cardNames: string[], colorIdentity: string[]):
 }
 
 function searchOwnedPool(pool: CardDetail[], query: string, limit: number): CardDetail[] {
-  // Parse simple Scryfall-like query: extract o:"..." and t: terms for local filtering
+  const q = query.toLowerCase();
+
+  // Handle OR queries by splitting and unioning results
+  if (/ or /i.test(query)) {
+    const parts = query.split(/ or /i);
+    const seen = new Set<string>();
+    const results: CardDetail[] = [];
+    for (const part of parts) {
+      for (const card of searchOwnedPool(pool, part.trim(), limit)) {
+        if (!seen.has(card.name)) { seen.add(card.name); results.push(card); }
+      }
+    }
+    return results.slice(0, limit);
+  }
+
   const oTerms: string[] = [];
+  const oNeg: string[] = [];
   const tTerms: string[] = [];
   const nameTerms: string[] = [];
+  let cmcMax: number | null = null;
+  let cmcMin: number | null = null;
 
-  const oMatches = query.matchAll(/o:"([^"]+)"/g);
-  for (const m of oMatches) oTerms.push(m[1].toLowerCase());
+  // o:"..." quoted
+  for (const m of query.matchAll(/\bo:"([^"]+)"/g)) oTerms.push(m[1].toLowerCase());
+  // -o:"..." negated
+  for (const m of query.matchAll(/-o:"([^"]+)"/g)) oNeg.push(m[1].toLowerCase());
+  // o:word unquoted
+  for (const m of query.matchAll(/(?<!-)o:([^"\s]+)/g)) oTerms.push(m[1].toLowerCase());
+  // t:word
+  for (const m of query.matchAll(/\bt:([^"\s]+)/g)) tTerms.push(m[1].toLowerCase());
+  // name:"..." or name:word
+  for (const m of query.matchAll(/\bname:"([^"]+)"/g)) nameTerms.push(m[1].toLowerCase());
+  for (const m of query.matchAll(/\bname:([^"\s]+)/g)) nameTerms.push(m[1].toLowerCase());
+  // cmc<=N or cmc<N
+  const cmcMaxM = q.match(/cmc<=(\d+)/);
+  if (cmcMaxM) cmcMax = parseInt(cmcMaxM[1]);
+  const cmcMinM = q.match(/cmc>=(\d+)/);
+  if (cmcMinM) cmcMin = parseInt(cmcMinM[1]);
 
-  const oSimple = query.matchAll(/\bo:(\S+)/g);
-  for (const m of oSimple) if (!m[1].startsWith('"')) oTerms.push(m[1].toLowerCase());
-
-  const tMatches = query.matchAll(/\bt:(\S+)/g);
-  for (const m of tMatches) tTerms.push(m[1].toLowerCase());
-
-  // Any bare words (not prefixed) treated as name search
-  const bare = query.replace(/\b(legal|color|cmc|o|t|is|format)[:<=>\w"]+/g, '').trim();
+  // Bare words (no prefix) → name search
+  const bare = query
+    .replace(/-?o:"[^"]+"/g, '')
+    .replace(/-?o:\S+/g, '')
+    .replace(/\bt:\S+/g, '')
+    .replace(/\bname:"[^"]+"/g, '')
+    .replace(/\bname:\S+/g, '')
+    .replace(/\b(legal|color|c|cmc|is|format)[:<=>]\S+/g, '')
+    .replace(/\bOR\b/gi, '')
+    .trim();
   if (bare) nameTerms.push(...bare.toLowerCase().split(/\s+/).filter(w => w.length > 2));
 
   return pool.filter(card => {
@@ -100,8 +199,11 @@ function searchOwnedPool(pool: CardDetail[], query: string, limit: number): Card
     const type = card.type_line.toLowerCase();
     const name = card.name.toLowerCase();
     if (oTerms.length && !oTerms.every(t => oracle.includes(t))) return false;
+    if (oNeg.length && oNeg.some(t => oracle.includes(t))) return false;
     if (tTerms.length && !tTerms.some(t => type.includes(t))) return false;
-    if (nameTerms.length && !nameTerms.some(t => name.includes(t) || oracle.includes(t))) return false;
+    if (nameTerms.length && !nameTerms.some(t => name.includes(t))) return false;
+    if (cmcMax !== null && card.cmc > cmcMax) return false;
+    if (cmcMin !== null && card.cmc < cmcMin) return false;
     return true;
   }).slice(0, limit);
 }
@@ -116,26 +218,26 @@ async function scryfallNamed(name: string) {
   } catch { return null; }
 }
 
-// --- Tool definitions for Claude ---
+// --- Tool definitions for Gemini ---
 
-const TOOLS: Anthropic.Tool[] = [
+const TOOLS: GeminiFunctionDeclaration[] = [
   {
     name: 'search_cards',
-    description: 'Search Scryfall for cards matching a query. Results are sorted by EDHREC popularity. Use for finding cards by keyword, mechanic, synergy, or effect. Include color/format constraints in the query using Scryfall syntax.',
-    input_schema: {
-      type: 'object' as const,
+    description: 'Search for cards matching a query. Results sorted by EDHREC popularity. Use for finding cards by keyword, mechanic, synergy, or effect.',
+    parameters: {
+      type: 'object',
       properties: {
-        query: { type: 'string', description: 'Scryfall search query. Examples: "t:ninja legal:commander color<=UB", "o:ninjutsu legal:commander color<=UB", "o:\"draw a card\" t:creature legal:commander color<=G"' },
-        limit: { type: 'number', description: 'Max results to return (default 20, max 40)' },
+        query: { type: 'string', description: 'Search query using terms like: t:creature, o:"draw a card", name:Fireball, cmc<=3' },
+        limit: { type: 'number', description: 'Max results (default 20, max 40)' },
       },
       required: ['query'],
     },
   },
   {
     name: 'get_card',
-    description: 'Get full details for a specific card by exact name. Use to inspect oracle text, cost, or confirm a card exists.',
-    input_schema: {
-      type: 'object' as const,
+    description: 'Get full details for a specific card by exact name.',
+    parameters: {
+      type: 'object',
       properties: {
         name: { type: 'string', description: 'Exact card name' },
       },
@@ -144,9 +246,9 @@ const TOOLS: Anthropic.Tool[] = [
   },
   {
     name: 'get_commander_staples',
-    description: 'Get the most popular cards played with a specific commander, ordered by EDHREC rank. Always call this first for any commander deck.',
-    input_schema: {
-      type: 'object' as const,
+    description: 'Get top cards for a commander sorted by EDHREC popularity. Always call this first.',
+    parameters: {
+      type: 'object',
       properties: {
         commander: { type: 'string', description: 'Commander card name' },
         colors: { type: 'array', items: { type: 'string' }, description: 'Color identity letters e.g. ["U","B"]' },
@@ -156,24 +258,24 @@ const TOOLS: Anthropic.Tool[] = [
   },
   {
     name: 'check_deck',
-    description: 'Analyze the current deck. Returns total card count, land count, and role breakdown. Call this to know where you stand and what gaps remain.',
-    input_schema: {
-      type: 'object' as const,
+    description: 'Analyze current deck state — total count, slots remaining, land count.',
+    parameters: {
+      type: 'object',
       properties: {
-        deck: { type: 'object', description: 'Current deck as {cardName: quantity}', additionalProperties: { type: 'number' } },
-        target_size: { type: 'number', description: 'Target deck size (100 for Commander)' },
+        deck: { type: 'object', description: 'Current deck as a JSON object mapping card name to quantity' },
+        target_size: { type: 'number', description: 'Target size (100 for Commander)' },
       },
       required: ['deck', 'target_size'],
     },
   },
   {
     name: 'finalize_deck',
-    description: 'Submit the completed deck. Call this only when the deck has the correct number of cards (100 for Commander) and meets all requirements. Pass the complete deck list.',
-    input_schema: {
-      type: 'object' as const,
+    description: 'Submit the completed deck. Call when deck has correct number of cards.',
+    parameters: {
+      type: 'object',
       properties: {
-        deck: { type: 'object', description: 'Final deck as {cardName: quantity}', additionalProperties: { type: 'number' } },
-        strategy: { type: 'string', description: 'One paragraph explaining the deck strategy and win conditions' },
+        deck: { type: 'object', description: 'Final deck as a JSON object mapping card name to quantity' },
+        strategy: { type: 'string', description: 'One paragraph explaining the deck strategy' },
       },
       required: ['deck', 'strategy'],
     },
@@ -347,8 +449,7 @@ export async function POST(req: NextRequest) {
     );
     if (rows.length > 0) {
       resolvedOwnedCardNames = rows.map(r => r.name);
-      // Enforce collection-only if: client requested it, OR client sent owned cards names
-      resolvedCollectionOnly = collectionOnly || ownedCardNames.length > 0;
+      resolvedCollectionOnly = true; // always use collection when user has cards
     }
     console.log(`[agent-build] collectionOnly=${collectionOnly} clientOwned=${ownedCardNames.length} dbOwned=${rows.length} resolvedCollectionOnly=${resolvedCollectionOnly}`);
   } catch (e) {
@@ -375,10 +476,7 @@ export async function POST(req: NextRequest) {
 
   const budgetStr = budgetCents ? `$${(budgetCents / 100).toFixed(0)} total budget — stay under this` : 'no budget constraint';
   const collectionNote = resolvedCollectionOnly && resolvedOwnedCardNames.length > 0
-    ? `COLLECTION MODE — HARD CONSTRAINT: You MUST build the deck using ONLY cards from the user's owned collection below. Every non-land card in the final deck MUST appear in this list. You already know what these cards do from your MTG training — use that knowledge to pick strategically. Use get_card to verify details when needed.
-
-OWNED CARDS (${resolvedOwnedCardNames.length} total):
-${resolvedOwnedCardNames.join(', ')}`
+    ? `COLLECTION MODE — HARD CONSTRAINT: The user owns ${resolvedOwnedCardNames.length} cards. You MUST build using ONLY cards they own. Use search_cards and get_commander_staples — those tools automatically search the owned collection so every result is a card they own. Basic lands are always allowed. Do NOT include cards they don't own.`
     : '';
 
   const systemPrompt = `You are Khoa, an expert Magic: The Gathering deck builder with deep knowledge of Commander strategy.
@@ -396,24 +494,28 @@ BUDGET: ${budgetStr}
 ${collectionNote}
 
 DECK BUILDING PHILOSOPHY:
-1. Research the commander FIRST using get_commander_staples — understand its strategy before picking any cards
-2. Build around the commander's specific win condition, not generic good-stuff
-3. Every card must answer: "does this help the commander's strategy?"
-4. Targets for Commander: 36-38 lands (including commander), 10 ramp spells, 10 draw effects, 10-12 removal, 28-32 synergy/engine cards
-5. Use search_cards and get_card to find specific cards for specific needs — do not guess at card names
-6. Use check_deck regularly to track progress and gaps
-7. When the deck reaches ${deckSize} cards, call finalize_deck
+1. Use get_card to read the commander's EXACT oracle text first. Identify:
+   - What creature types does it care about? (e.g. "Other Villains" → build Villain tribal)
+   - What mechanics does it enable? (e.g. hand size, draw triggers, +1/+1 counters)
+   - What is the win condition?
+2. Then use get_commander_staples to see what's popular with this commander.
+3. Build around the commander's SPECIFIC strategy — if it says "Other Villains get +2/+2", fill the deck with that creature type. Do NOT build generic good-stuff.
+4. Prioritize cards from the same set or block as the commander — they are designed to synergize.
+5. Every non-land card must answer: "does this directly support the commander's strategy?"
+6. MANA BASE: Include mana rocks (Arcane Signet, signets, talismans) AND quality dual lands, not just basics. Aim for 36-38 lands total with ~8-10 mana rocks.
+7. Use search_cards to find synergistic cards — search for the specific creature type, mechanic, or keyword the commander cares about.
+8. Use check_deck to track progress. When at ${deckSize} cards, call finalize_deck.
 
 SINGLETON RULE: In Commander, each card (except basic lands) may only appear once.
 
 ${rulesDoc ? `DECK BUILDING RULES:\n${rulesDoc.slice(0, 2000)}` : ''}
 
-Think step by step. Research first, then build the engine, then support, then lands. Do not rush to finalize.`;
+Think step by step: read the commander → identify its strategy → find synergistic cards → build support → add lands.`;
 
-  const messages: Anthropic.MessageParam[] = [
+  const geminiContents: GeminiContent[] = [
     {
       role: 'user',
-      content: `Build a ${format} deck${commander ? ` with ${commander} as the commander` : ''}. Start by researching the commander, then build a complete ${deckSize}-card deck. Think through the strategy carefully before picking cards.`,
+      parts: [{ text: `Build a ${format} deck${commander ? ` with ${commander} as the commander` : ''}. First, use get_card to read ${commander ?? 'the commander'}'s oracle text and identify its creature type synergies and strategy. Then search for cards that match that specific strategy. Build a complete ${deckSize}-card deck focused on the commander's strengths.` }],
     },
   ];
 
@@ -428,117 +530,102 @@ Think step by step. Research first, then build the engine, then support, then la
       const send = (data: string) => controller.enqueue(encoder.encode(data));
 
       try {
-        send(sseEvent('status', { text: `[debug] collectionOnly=${collectionOnly} resolvedCollectionOnly=${resolvedCollectionOnly} ownedCards=${resolvedOwnedCardNames.length}` }));
-
-        // Collection-only: use direct Gemini call — no agent tools needed, all cards are in the prompt
+        // Pre-fetch owned card pool with Scryfall details for collection-only mode
+        let ownedCardPool: CardDetail[] = [];
         if (resolvedCollectionOnly && resolvedOwnedCardNames.length > 0) {
-          send(sseEvent('status', { text: `Building from your collection (${resolvedOwnedCardNames.length} cards)…` }));
-
-          const collectionPrompt = `${systemPrompt}
-
-Build the deck now. Return ONLY valid JSON in this exact format, no other text:
-{"deck":{"Card Name":1,"Another Card":1},"strategy":"one paragraph explaining the deck"}
-
-The deck must have exactly ${deckSize} cards total including the commander. Every non-land card MUST come from the OWNED CARDS list in the system prompt. Basic lands (Plains, Island, Swamp, Mountain, Forest) are always allowed. Do not include any card not in the owned list.`;
-
-          send(sseEvent('thinking', { text: 'Selecting cards from your collection…' }));
-          const raw = await geminiChat(collectionPrompt, 0.5, undefined, 8192);
-
-          if (raw) {
-            try {
-              const jsonStr = extractJson(raw);
-              const parsed = JSON.parse(jsonStr) as { deck?: Record<string, number>; strategy?: string };
-              if (parsed.deck && typeof parsed.deck === 'object') {
-                finalDeck = parsed.deck;
-                finalStrategy = parsed.strategy ?? '';
-              }
-            } catch { /* fall through to agent */ }
-          }
-
-          if (!finalDeck) {
-            send(sseEvent('error', { message: 'Could not build a deck from your collection. Try a different commander.' }));
-            controller.close();
-            return;
-          }
+          send(sseEvent('status', { text: `Loading your collection (${resolvedOwnedCardNames.length} cards)…` }));
+          ownedCardPool = await fetchOwnedCardPool(resolvedOwnedCardNames, commanderColorIdentity);
+          send(sseEvent('status', { text: `Found ${ownedCardPool.length} cards in your collection matching this commander's colors.` }));
         }
 
         while (iterationCount < MAX_ITERATIONS && !finalDeck) {
           iterationCount++;
+          // Small inter-iteration pause to stay under rate limits (skip first call)
+          if (iterationCount > 1) await new Promise(r => setTimeout(r, 800));
 
-          const response = await anthropic.messages.create({
-            model: 'claude-sonnet-5',
-            max_tokens: 8000,
-            system: systemPrompt,
-            tools: TOOLS,
-            messages,
-          });
+          // Warn agent when running low
+          const contents = [...geminiContents];
+          if (iterationCount >= MAX_ITERATIONS - 5) {
+            contents.push({
+              role: 'user',
+              parts: [{ text: `You have ${MAX_ITERATIONS - iterationCount} iterations remaining. Call finalize_deck now with whatever cards you have.` }],
+            });
+          }
 
-          // Stream any text content
-          for (const block of response.content) {
-            if (block.type === 'text' && block.text.trim()) {
-              send(sseEvent('thinking', { text: block.text.trim() }));
+          const response = await geminiWithTools(systemPrompt, contents, TOOLS);
+          if (!response) {
+            send(sseEvent('error', { message: 'Gemini API call failed (no response).' }));
+            controller.close();
+            return;
+          }
+
+          // Surface API errors in the feed
+          const errorPart = response.parts.find(p => 'text' in p && p.text.startsWith('[gemini-error]'));
+          if (errorPart && 'text' in errorPart) {
+            send(sseEvent('error', { message: errorPart.text }));
+            controller.close();
+            return;
+          }
+
+          // Stream text parts
+          for (const part of response.parts) {
+            if ('text' in part && part.text.trim()) {
+              send(sseEvent('thinking', { text: part.text.trim() }));
             }
           }
 
-          // If the model is done
-          if (response.stop_reason === 'end_turn') {
-            // Try to extract deck from text if finalize_deck wasn't called
-            const textBlock = response.content.find(b => b.type === 'text');
-            if (textBlock && textBlock.type === 'text') {
-              const match = textBlock.text.match(/\{"deck"\s*:/);
-              if (match) {
+          // Collect function calls
+          const functionCalls = response.parts.filter((p): p is { functionCall: { name: string; args: Record<string, unknown> } } => 'functionCall' in p);
+
+          if (functionCalls.length === 0) {
+            // Model finished without calling a tool — try to extract JSON from text
+            for (const part of response.parts) {
+              if ('text' in part && part.text.includes('"deck"')) {
                 try {
-                  const parsed = JSON.parse(textBlock.text.slice(textBlock.text.indexOf('{'))) as { deck: Record<string, number>; strategy: string };
-                  finalDeck = parsed.deck;
-                  finalStrategy = parsed.strategy ?? '';
-                } catch { /* couldn't parse */ }
+                  const parsed = JSON.parse(extractJson(part.text)) as { deck: Record<string, number>; strategy: string };
+                  if (parsed.deck) { finalDeck = parsed.deck; finalStrategy = parsed.strategy ?? ''; }
+                } catch { /* ignore */ }
               }
             }
             break;
           }
 
-          // Process tool calls
-          if (response.stop_reason === 'tool_use') {
-            const toolUseBlocks = response.content.filter(b => b.type === 'tool_use');
-            const toolResults: Anthropic.ToolResultBlockParam[] = [];
+          // Add model turn to history
+          geminiContents.push({ role: 'model', parts: response.parts });
 
-            for (const block of toolUseBlocks) {
-              if (block.type !== 'tool_use') continue;
+          // Execute each function call and collect responses
+          const responseParts: GeminiPart[] = [];
+          for (const fc of functionCalls) {
+            const { name, args } = fc.functionCall;
+            send(sseEvent('tool_call', { tool: name, input: args }));
 
-              send(sseEvent('tool_call', { tool: block.name, input: block.input }));
-
-              if (block.name === 'finalize_deck') {
-                const input = block.input as { deck: Record<string, number>; strategy: string };
-                finalDeck = input.deck;
-                finalStrategy = input.strategy ?? '';
-                send(sseEvent('finalizing', { text: 'Building complete — filling basics and scoring…' }));
-                toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: JSON.stringify({ ok: true }) });
+            if (name === 'finalize_deck') {
+              const submittedDeck = args.deck as Record<string, number>;
+              const submittedTotal = Object.values(submittedDeck).reduce((s, q) => s + q, 0);
+              const minNonLand = Math.floor(deckSize * 0.55); // at least 55 non-land cards for a 100-card deck
+              if (submittedTotal < minNonLand) {
+                // Reject and ask for more cards
+                responseParts.push({ functionResponse: { name, response: { name, content: { ok: false, error: `Deck only has ${submittedTotal} cards. You need at least ${minNonLand} non-land cards before finalizing. Keep adding cards.` } } } });
               } else {
-                const { result, summary } = await executeTool(
-                  block.name,
-                  block.input as Record<string, unknown>,
-                  userId,
-                  commanderColorIdentity,
-                  format,
-                  collectionOnly,
-                  resolvedOwnedCardNames,
-                  [],
-                );
-                send(sseEvent('tool_result', { tool: block.name, summary }));
-                toolResults.push({
-                  type: 'tool_result',
-                  tool_use_id: block.id,
-                  content: JSON.stringify(result),
-                });
+                finalDeck = submittedDeck;
+                finalStrategy = (args.strategy as string) ?? '';
+                send(sseEvent('finalizing', { text: 'Building complete — filling basics…' }));
+                responseParts.push({ functionResponse: { name, response: { name, content: { ok: true } } } });
               }
+            } else {
+              const { result, summary } = await executeTool(
+                name, args, userId, commanderColorIdentity, format,
+                resolvedCollectionOnly, resolvedOwnedCardNames, ownedCardPool,
+              );
+              send(sseEvent('tool_result', { tool: name, summary }));
+              responseParts.push({ functionResponse: { name, response: { name, content: result } } });
             }
-
-            // Add assistant response + tool results to history
-            messages.push({ role: 'assistant', content: response.content });
-            messages.push({ role: 'user', content: toolResults });
-
-            if (finalDeck) break;
           }
+
+          // Add tool responses to history
+          geminiContents.push({ role: 'user', parts: responseParts });
+
+          if (finalDeck) break;
         }
 
         if (!finalDeck) {
