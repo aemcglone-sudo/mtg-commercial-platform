@@ -771,18 +771,18 @@ export default function ShopInventoryInsightsTab() {
     </div>{/* end 2-col grid */}
 
     {/* ── Full-width: Your Prices vs. The Market ───────────────────────── */}
-    <GroupCard title="Your Prices vs. The Market" description="Cards you still hold that are worth more or less than what you paid. Act on these while the market favors you.">
+    <GroupCard title="Market Movement Since You Listed" description="Cards in your inventory whose market price has moved ≥5% since you first priced them. Refresh market prices from your inventory page to keep this current.">
       <GroupSection>
         <div className="grid grid-cols-2 gap-6">
           <div>
             <p className="text-xs font-semibold text-zinc-300 mb-0.5">🚀 Went Up in Value</p>
-            <p className="text-xs text-zinc-500 mb-3">Worth more than you paid — great time to sell.</p>
-            {pricingData.gainers.length === 0 ? <p className="text-zinc-600 text-xs">No data yet</p> : (
+            <p className="text-xs text-zinc-500 mb-3">Market rose above your listed price — consider repricing upward.</p>
+            {pricingData.gainers.length === 0 ? <p className="text-zinc-600 text-xs">No movement detected — try refreshing market prices from your inventory page.</p> : (
               <div className="overflow-auto max-h-52"><table className="w-full text-xs">
                 <thead><tr className="text-zinc-500 border-b border-zinc-800">
                   <th className="text-left pb-1.5 font-medium">Card</th>
-                  <th className="text-right pb-1.5 font-medium">Paid</th>
-                  <th className="text-right pb-1.5 font-medium text-green-400">Gain</th>
+                  <th className="text-right pb-1.5 font-medium">Listed At</th>
+                  <th className="text-right pb-1.5 font-medium text-green-400">Market Now</th>
                 </tr></thead>
                 <tbody className="divide-y divide-zinc-800/50">
                   {pricingData.gainers.map((item, i) => (
@@ -798,13 +798,13 @@ export default function ShopInventoryInsightsTab() {
           </div>
           <div>
             <p className="text-xs font-semibold text-zinc-300 mb-0.5">⚠ Dropped in Value</p>
-            <p className="text-xs text-zinc-500 mb-3">Worth less than you paid — sell before it falls further.</p>
-            {pricingData.losers.length === 0 ? <p className="text-zinc-600 text-xs">No data yet</p> : (
+            <p className="text-xs text-zinc-500 mb-3">Market fell below your listed price — you may be overpriced.</p>
+            {pricingData.losers.length === 0 ? <p className="text-zinc-600 text-xs">No movement detected — try refreshing market prices from your inventory page.</p> : (
               <div className="overflow-auto max-h-52"><table className="w-full text-xs">
                 <thead><tr className="text-zinc-500 border-b border-zinc-800">
                   <th className="text-left pb-1.5 font-medium">Card</th>
-                  <th className="text-right pb-1.5 font-medium">Paid</th>
-                  <th className="text-right pb-1.5 font-medium text-red-400">Loss</th>
+                  <th className="text-right pb-1.5 font-medium">Listed At</th>
+                  <th className="text-right pb-1.5 font-medium text-red-400">Market Now</th>
                 </tr></thead>
                 <tbody className="divide-y divide-zinc-800/50">
                   {pricingData.losers.map((item, i) => (

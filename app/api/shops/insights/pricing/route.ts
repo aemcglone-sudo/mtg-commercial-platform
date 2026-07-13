@@ -74,42 +74,38 @@ export async function GET(req: NextRequest) {
        LIMIT 15`,
       [shopId]
     ),
+    // Gainers: current market > listing price when added (priceCents is set from Scryfall at upload time)
+    // Only meaningful when the market has moved since they uploaded — requires price snapshots newer than upload
     findMany<GainerRow>(
-      `SELECT card_name, condition, bought_at_cents, market_now_cents, gain_cents, gain_pct
-       FROM (
-         SELECT spi.card_name, spi.condition,
-                AVG(spi.buy_price_cents) as bought_at_cents,
-                snap."priceCents" as market_now_cents,
-                snap."priceCents" - AVG(spi.buy_price_cents) as gain_cents,
-                ROUND(((snap."priceCents" - AVG(spi.buy_price_cents))::numeric / AVG(spi.buy_price_cents)) * 100, 1) as gain_pct
-         FROM shop_purchase_items spi
-         JOIN shop_inventory si ON si."scryfallId" = spi.scryfall_id
-           AND si.condition = spi.condition AND si."shopId" = ?
-         JOIN (${latestPriceSubquery}) snap ON snap."scryfallId" = spi.scryfall_id
-         GROUP BY spi.card_name, spi.condition, snap."priceCents"
-         HAVING AVG(spi.buy_price_cents) > 0
-       ) sub
-       WHERE market_now_cents > bought_at_cents
+      `SELECT si."cardName" as card_name, si.condition,
+              si."priceCents" as bought_at_cents,
+              snap."priceCents" as market_now_cents,
+              snap."priceCents" - si."priceCents" as gain_cents,
+              ROUND(((snap."priceCents"::numeric - si."priceCents") / si."priceCents") * 100, 1) as gain_pct
+       FROM shop_inventory si
+       JOIN (${latestPriceSubquery}) snap ON snap."scryfallId" = si."scryfallId"
+       WHERE si."shopId" = ?
+         AND si.quantity > 0
+         AND snap."priceCents" > si."priceCents" * 1.05
+         AND si."priceCents" > 0
+         AND snap."priceCents" <> si."priceCents"
        ORDER BY gain_cents DESC
        LIMIT 10`,
       [shopId]
     ),
     findMany<GainerRow>(
-      `SELECT card_name, condition, bought_at_cents, market_now_cents, gain_cents, gain_pct
-       FROM (
-         SELECT spi.card_name, spi.condition,
-                AVG(spi.buy_price_cents) as bought_at_cents,
-                snap."priceCents" as market_now_cents,
-                snap."priceCents" - AVG(spi.buy_price_cents) as gain_cents,
-                ROUND(((snap."priceCents" - AVG(spi.buy_price_cents))::numeric / AVG(spi.buy_price_cents)) * 100, 1) as gain_pct
-         FROM shop_purchase_items spi
-         JOIN shop_inventory si ON si."scryfallId" = spi.scryfall_id
-           AND si.condition = spi.condition AND si."shopId" = ?
-         JOIN (${latestPriceSubquery}) snap ON snap."scryfallId" = spi.scryfall_id
-         GROUP BY spi.card_name, spi.condition, snap."priceCents"
-         HAVING AVG(spi.buy_price_cents) > 0
-       ) sub
-       WHERE market_now_cents < bought_at_cents
+      `SELECT si."cardName" as card_name, si.condition,
+              si."priceCents" as bought_at_cents,
+              snap."priceCents" as market_now_cents,
+              snap."priceCents" - si."priceCents" as gain_cents,
+              ROUND(((snap."priceCents"::numeric - si."priceCents") / si."priceCents") * 100, 1) as gain_pct
+       FROM shop_inventory si
+       JOIN (${latestPriceSubquery}) snap ON snap."scryfallId" = si."scryfallId"
+       WHERE si."shopId" = ?
+         AND si.quantity > 0
+         AND snap."priceCents" < si."priceCents" * 0.95
+         AND si."priceCents" > 0
+         AND snap."priceCents" <> si."priceCents"
        ORDER BY gain_cents ASC
        LIMIT 10`,
       [shopId]
