@@ -168,7 +168,10 @@ export function ThemeSelector({ format, commanderName, selectedThemes, selectedA
 
       {/* Strategy themes */}
       <div className="mb-6">
-        <h3 className="text-xs font-semibold text-zinc-600 uppercase tracking-widest mb-2">Strategy Themes</h3>
+        <div className="mb-2">
+          <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-widest inline">Strategy Themes</h3>
+          <span className="text-xs text-zinc-600 ml-2">Pick any that fit — these guide Khoa's card choices</span>
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
           {data.strategyThemes.map(t => (
             <ThemeTile
@@ -189,24 +192,36 @@ export function ThemeSelector({ format, commanderName, selectedThemes, selectedA
 
       {/* Tribal */}
       <div className="mb-6">
-        <h3 className="text-xs font-semibold text-zinc-600 uppercase tracking-widest mb-2">Tribal Focus (optional)</h3>
+        <div className="flex items-baseline justify-between mb-2">
+          <div>
+            <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-widest inline">Tribal Focus</h3>
+            <span className="text-xs text-zinc-600 ml-2">Pick one creature type to build around, or skip</span>
+          </div>
+          {tribal && (
+            <button type="button" onClick={() => setTribal(null)} className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors">
+              Clear
+            </button>
+          )}
+        </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
           {data.tribalThemes.map(t => {
             const recTribal = isRec('tribal', t.id);
+            const isSelected = tribal === t.id;
             return (
               <button
                 key={t.id}
                 type="button"
                 onClick={() => setTribal(prev => prev === t.id ? null : t.id)}
-                className={`rounded-xl border p-2 text-xs font-medium transition-all ${
-                  tribal === t.id
-                    ? 'bg-amber-400/10 border-amber-500 text-amber-400'
+                className={`rounded-xl border px-3 py-2 text-sm font-medium transition-all flex items-center gap-1.5 ${
+                  isSelected
+                    ? 'bg-green-900/20 border-green-500 text-green-400'
                     : recTribal
                       ? 'bg-amber-400/5 border-amber-700/60 text-amber-200 hover:border-amber-500'
                       : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-600 hover:text-zinc-300'
                 }`}
               >
-                {recTribal && tribal !== t.id && <span className="mr-1 text-amber-500">✦</span>}
+                {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />}
+                {recTribal && !isSelected && <span className="text-amber-500 text-xs">✦</span>}
                 {t.label}
               </button>
             );
@@ -216,26 +231,38 @@ export function ThemeSelector({ format, commanderName, selectedThemes, selectedA
 
       {/* Psychographic */}
       <div className="mb-8">
-        <h3 className="text-xs font-semibold text-zinc-600 uppercase tracking-widest mb-2">Play Style (optional)</h3>
+        <div className="flex items-baseline justify-between mb-2">
+          <div>
+            <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-widest inline">Play Style</h3>
+            <span className="text-xs text-zinc-600 ml-2">How do you like to win? Helps Khoa choose cards that match your vibe</span>
+          </div>
+          {psychographic && (
+            <button type="button" onClick={() => setPsychographic(null)} className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors">
+              Clear
+            </button>
+          )}
+        </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
           {data.psychographics.map(p => {
             const recPsycho = isRec('psychographics', p.id);
+            const isSelected = psychographic === p.id;
             return (
               <button
                 key={p.id}
                 type="button"
                 onClick={() => setPsychographic(prev => prev === p.id ? null : p.id)}
                 className={`text-left rounded-xl border p-3 transition-all ${
-                  psychographic === p.id
-                    ? 'bg-amber-400/10 border-amber-500'
+                  isSelected
+                    ? 'bg-green-900/20 border-green-500'
                     : recPsycho
                       ? 'bg-amber-400/5 border-amber-700/60 hover:border-amber-500'
                       : 'bg-zinc-900 border-zinc-800 hover:border-zinc-600'
                 }`}
               >
                 <div className="flex items-center gap-1.5">
-                  {recPsycho && psychographic !== p.id && <span className="text-amber-500 text-xs">✦</span>}
-                  <div className={`font-semibold text-sm ${psychographic === p.id ? 'text-amber-400' : recPsycho ? 'text-amber-200' : 'text-zinc-200'}`}>{p.label}</div>
+                  {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />}
+                  {recPsycho && !isSelected && <span className="text-amber-500 text-xs">✦</span>}
+                  <div className={`font-semibold text-sm ${isSelected ? 'text-green-400' : recPsycho ? 'text-amber-200' : 'text-zinc-200'}`}>{p.label}</div>
                 </div>
                 <p className="text-xs text-zinc-500 mt-0.5">{p.description}</p>
               </button>
