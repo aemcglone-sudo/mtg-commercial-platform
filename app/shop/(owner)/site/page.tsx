@@ -190,6 +190,14 @@ export default function SiteBuilderPage() {
     setBannerUploading(false);
   }
 
+  async function deleteBanner() {
+    const res = await fetch(`/api/shop-site/${shopId}/banner`, { method: 'DELETE' });
+    if (res.ok) {
+      setData(d => d ? { ...d, bannerUrl: null } : d);
+      flash('Banner removed');
+    }
+  }
+
   async function togglePublish() {
     if (!data || !shopId) return;
     setPublishing(true);
@@ -518,11 +526,17 @@ export default function SiteBuilderPage() {
             )}
             <input ref={bannerInputRef} type="file" title="Upload banner image" accept="image/jpeg,image/png,image/webp" className="hidden"
               onChange={e => { const f = e.target.files?.[0]; if (f) uploadBanner(f); }} />
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
               <button type="button" onClick={() => bannerInputRef.current?.click()} disabled={bannerUploading}
                 className="text-xs bg-zinc-700 hover:bg-zinc-600 text-zinc-700 dark:text-zinc-200 px-3 py-1.5 rounded-lg disabled:opacity-50 transition-colors">
                 {bannerUploading ? 'Uploading…' : data.bannerUrl ? 'Replace Banner' : 'Upload Banner'}
               </button>
+              {data.bannerUrl && (
+                <button type="button" onClick={deleteBanner}
+                  className="text-xs text-red-400 hover:text-red-300 transition-colors">
+                  Remove
+                </button>
+              )}
               <p className="text-xs text-zinc-600">JPG, PNG, or WebP · Max 5 MB · 1200×400 px recommended</p>
             </div>
           </div>

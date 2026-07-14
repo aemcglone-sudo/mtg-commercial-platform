@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthenticatedUserId, getRole } from '@/lib/auth';
 import { findOne, run } from '@/lib/db';
-import { writeFile, mkdir } from 'fs/promises';
+import { writeFile, mkdir, unlink } from 'fs/promises';
 import path from 'path';
 
 export const dynamic = 'force-dynamic';
@@ -39,4 +39,28 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ sho
   await run(`UPDATE shops SET "bannerUrl" = ? WHERE id = ?`, [url, shopId]);
 
   return NextResponse.json({ url });
+}
+
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ shopId: string }> }) {
+  const { shopId } = await params;
+  const shop = await resolveShop(req, shopId);
+  if (!shop) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+
+  const existing = await findOne<{ banner_url: string | null }>(
+    `SELECT "bannerUrl" AS banner_url FROM shops WHERE id = ?`,
+    [shopId]
+  );
+
+  await run(`UPDATE shops SET "bannerUrl" = NULL WHERE id = ?`, [shopId]);
+
+  // Best-effort file deletion — ignore if already gone
+  if (existing?.banner_url) {
+    const filename = existing.banner_url.split('/').pop();
+    if (filename) {
+      const filePath = path.join(UPLOAD_DIR, shopId, filename);
+      await unlink(filePath).catch(() => null);
+    }
+  }
+
+  return NextResponse.json({ ok: true });
 }
