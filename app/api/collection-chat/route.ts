@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { analyzeForChat, extractDeckFromContext, formatCardsForStream } from '@/lib/magic-agent/chat-integration';
 import { findOne, findMany } from '@/lib/db';
 import { getRole, getAuthenticatedUserId } from '@/lib/auth';
-import { isDemoMode, chatWithClaude } from '@/lib/demo-llm';
+import { geminiChat, extractJson } from '@/lib/gemini';
 
 // Cache Scryfall set list for 6 hours
 let setCache: { data: string; ts: number } | null = null;
@@ -56,23 +56,7 @@ Rules:
 
     const userContent = `Conversation so far:\n${last.map((m) => `${m.role}: ${m.content.slice(0, 200)}`).join('\n')}\n\nReturn 3 follow-up button options as a JSON array.`;
 
-    let text: string;
-    if (isDemoMode()) {
-      text = await chatWithClaude(userContent, { system: systemPrompt, maxTokens: 256 }) ?? '[]';
-    } else {
-      const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=' + process.env.GOOGLE_API_KEY, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: systemPrompt }] },
-          contents: [{ role: 'user', parts: [{ text: userContent }] }],
-          generationConfig: { maxOutputTokens: 256 },
-        }),
-      });
-      const data = await res.json() as { candidates: Array<{ content: { parts: Array<{ text: string }> } }> };
-      text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '[]';
-    }
-
+    const text = await geminiChat(userContent, 0.7, systemPrompt, 256) ?? '[]';
     const match = text.match(/\[[\s\S]*\]/);
     if (!match) return [];
     const parsed = JSON.parse(match[0]);
@@ -84,8 +68,7 @@ Rules:
 
 async function enforceSwapPairing(
   response: string,
-  conversation: Array<{ role: string; content: string }>,
-  apiKey: string
+  conversation: Array<{ role: string; content: string }>
 ): Promise<string> {
   // Skip fresh deck builds and wishlists — no existing deck to cut from
   const isPullList = /hit the.*add to my decks|save this deck|pull from your collection/i.test(response);
@@ -124,22 +107,7 @@ Output ONLY the swap pairs in this exact format, one per line:
 If Khoa named 3 cards to add, output 3 swap pairs.
 If the response contained no specific card recommendations, output: NONE`;
 
-    let cuts = '';
-    if (isDemoMode()) {
-      cuts = await chatWithClaude(cutPrompt, { system: cutSystemPrompt, maxTokens: 600 }) ?? '';
-    } else {
-      const cutRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=${apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: cutSystemPrompt }] },
-          contents: [{ role: 'user', parts: [{ text: cutPrompt }] }],
-          generationConfig: { maxOutputTokens: 600 },
-        }),
-      });
-      const cutData = await cutRes.json() as { candidates: Array<{ content: { parts: Array<{ text: string }> } }> };
-      cuts = cutData.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? '';
-    }
+    const cuts = (await geminiChat(cutPrompt, 0.7, cutSystemPrompt, 600))?.trim() ?? '';
 
     if (cuts && cuts !== 'NONE' && cuts.length > 10) {
       return `${response}\n\n---\n**🔄 Recommended Swaps**\n${cuts}`;
@@ -224,7 +192,20 @@ export async function POST(req: NextRequest) {
     )
     .join('\n') + (truncated ? `\n(+ ${totalNonLand - cardListCards.length} more cards also owned but not listed)` : '');
 
-  const system = `You are Khoa — the AI deck advisor inside Grimoire. You are not a generic chatbot. You are a seasoned Commander player with deep knowledge of card interactions, archetypes, synergy theory, and the competitive meta. You give honest, expert advice — not flattery.
+  const system = `## COLLECTION CONTEXT — read this first
+
+USER'S COLLECTION: ${collectionTypeInfo}
+- Total unique cards: ${collectionSize?.toLocaleString() ?? cards.length}
+${detectedFormat && detectedFormat !== 'Unknown' ? `- Detected format from export: ${detectedFormat}` : ''}
+
+EVERY CARD THEY OWN (top by value):
+${cardList || '(no cards loaded)'}
+
+Lands: assume unlimited access to all basic and non-basic lands — never flag any land as missing.
+
+═══════════════════════════════════════════
+
+You are Khoa — the AI deck advisor inside Grimoire. You are not a generic chatbot. You are a seasoned Commander player with deep knowledge of card interactions, archetypes, synergy theory, and the competitive meta. You give honest, expert advice — not flattery.
 
 ## RULE #1: You cannot recommend adding a card without naming what to cut.
 
@@ -333,22 +314,6 @@ When answering questions about recent or upcoming sets, commanders, or products,
 ${rulesDoc ? rulesDoc.slice(0, 4000) : '(rules doc unavailable — use standard MTG deckbuilding conventions)'}
 
 ═══════════════════════════════════════════
-## COLLECTION CONTEXT
-
-USER'S COLLECTION: ${collectionTypeInfo}
-- Total unique cards: ${collectionSize?.toLocaleString() ?? cards.length}
-${detectedFormat && detectedFormat !== 'Unknown' ? `- Detected format from export: ${detectedFormat}` : ''}
-- Physical paper cards only. Recommendations for Commander, Modern, Pioneer, Standard, Legacy, and any format using physical cards.
-## LANDS: Always assume unlimited access
-
-The user has unlimited access to every land — basic and non-basic alike. Never flag any land as missing. Never list lands in a missing cards section. When building decks, choose whatever lands the mana base requires without checking the collection. Lands are excluded from "EVERY CARD THEY OWN" below for this reason.
-
-When building from their collection, ONLY include non-land cards listed in "EVERY CARD THEY OWN" below. Cards not on that list must be flagged as "NOT IN COLLECTION."
-
-EVERY CARD THEY OWN:
-${cardList || '(no cards loaded)'}
-
-═══════════════════════════════════════════
 ## OUTPUT RULES — follow exactly, every response
 
 **Card lists:**
@@ -387,58 +352,70 @@ ${cardList || '(no cards loaded)'}
   const encoder = new TextEncoder();
   const incomingMessages: ChatMessage[] = (messages ?? []).slice(-20);
 
+  // If the latest message contains a decklist, fetch verified card data from Scryfall
+  // and inject it so Khoa doesn't hallucinate mana costs or card counts.
+  async function buildGroundedLastMessage(msg: string): Promise<string> {
+    const lines = msg.split('\n');
+    const cardLines: Array<{ qty: number; name: string }> = [];
+    for (const line of lines) {
+      const m = line.trim().match(/^(\d+)x?\s+(.+)$/);
+      if (m) {
+        const name = m[2].replace(/\s+\([A-Z0-9]{2,6}\)(\s+\d+)?$/, '').trim();
+        if (name) cardLines.push({ qty: parseInt(m[1]), name });
+      }
+    }
+    if (cardLines.length < 5) return msg; // not a decklist, skip
+
+    try {
+      const CHUNK = 75;
+      const cardData = new Map<string, { mana_cost?: string; cmc: number; type_line: string; color_identity: string[] }>();
+      for (let i = 0; i < cardLines.length; i += CHUNK) {
+        const chunk = cardLines.slice(i, i + CHUNK);
+        const res = await fetch('https://api.scryfall.com/cards/collection', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'User-Agent': 'Grimoire/1.0' },
+          body: JSON.stringify({ identifiers: chunk.map(c => ({ name: c.name })) }),
+        });
+        if (!res.ok) continue;
+        const data = await res.json() as { data: Array<{ name: string; mana_cost?: string; cmc: number; type_line: string; color_identity: string[] }> };
+        for (const card of data.data) cardData.set(card.name.toLowerCase(), card);
+      }
+
+      const totalCards = cardLines.reduce((s, c) => s + c.qty, 0);
+      const allColors = new Set<string>();
+      const enriched = cardLines.map(c => {
+        const d = cardData.get(c.name.toLowerCase());
+        if (d) {
+          d.color_identity.forEach(col => allColors.add(col));
+          return `${c.qty}x ${c.name} | ${d.mana_cost ?? 'colorless'} | CMC ${d.cmc} | ${d.type_line}`;
+        }
+        return `${c.qty}x ${c.name}`;
+      });
+
+      const preamble = `[VERIFIED CARD DATA from Scryfall — use these mana costs and types, not your memory]\nTotal cards: ${totalCards}\nColors present: ${[...allColors].join('') || 'Colorless'}\n\n${enriched.join('\n')}\n\n[END VERIFIED DATA]\n\n`;
+      return preamble + msg;
+    } catch {
+      return msg; // Scryfall unavailable, proceed without grounding
+    }
+  }
+
   const stream = new ReadableStream({
     async start(controller) {
       try {
         let fullResponse: string;
 
-        if (isDemoMode()) {
-          const userTurn = incomingMessages.map(m => `${m.role === 'user' ? 'User' : 'Khoa'}: ${m.content}`).join('\n\n');
-          fullResponse = await chatWithClaude(userTurn, { system, maxTokens: 4096 }) ?? '';
-        } else {
-          if (!process.env.GOOGLE_API_KEY) {
-            throw new Error('GOOGLE_API_KEY environment variable is missing');
-          }
+        {
+          // Build a single prompt string including conversation history
+          const historyText = incomingMessages.slice(0, -1)
+            .map(m => `${m.role === 'user' ? 'User' : 'Khoa'}: ${m.content}`)
+            .join('\n\n');
+          const rawLastMessage = incomingMessages[incomingMessages.length - 1]?.content ?? '';
+          const lastMessage = await buildGroundedLastMessage(rawLastMessage);
+          const prompt = historyText ? `${historyText}\n\nUser: ${lastMessage}` : lastMessage;
 
-          const contents = incomingMessages.map(msg => ({
-            role: msg.role === 'user' ? 'user' : 'model',
-            parts: [{ text: msg.content }]
-          }));
-
-          const geminiBody = JSON.stringify({
-            systemInstruction: { parts: [{ text: system }] },
-            contents,
-            generationConfig: { maxOutputTokens: 4096 },
-          });
-
-          let res: Response = null!;
-          let data: { candidates?: Array<{ content: { parts: Array<{ text: string }> } }>; error?: { message: string } } = {};
-          for (let attempt = 0; attempt < 3; attempt++) {
-            if (attempt > 0) await new Promise(r => setTimeout(r, attempt * 2000));
-            res = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + process.env.GOOGLE_API_KEY, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: geminiBody,
-            });
-            data = await res.json() as typeof data;
-            const isOverloaded = res.status === 503 || /high demand|overload|unavailable/i.test(data?.error?.message ?? '');
-            if (!isOverloaded) break;
-            console.warn(`Gemini overloaded, retry ${attempt + 1}`);
-          }
-
-          if (!res!.ok) {
-            const errMsg = data?.error?.message ?? `Gemini error ${res!.status}`;
-            console.error('Chat Gemini error:', errMsg);
-            const isQuota = res!.status === 429 || /quota|rate.?limit|exceeded/i.test(errMsg);
-            const isOverload = res!.status === 503 || /high demand|overload/i.test(errMsg);
-            throw new Error(
-              isQuota ? 'Rate limit reached — please wait a minute and try again.' :
-              isOverload ? 'Khoa is busy right now — try again in a few seconds.' :
-              errMsg
-            );
-          }
-
-          fullResponse = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+          const result = await geminiChat(prompt, 0.8, system, 4096);
+          if (!result) throw new Error('Khoa is unavailable right now — please try again in a moment.');
+          fullResponse = result;
         }
         console.log(`Chat response length: ${fullResponse.length}`);
 

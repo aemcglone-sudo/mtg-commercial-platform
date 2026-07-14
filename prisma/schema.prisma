@@ -493,7 +493,9 @@ model ShopOffer {
 
 model HoldGroup {
   id              String   @id @default(cuid())
-  collectorUserId String   @map("collector_user_id")
+  collectorUserId String?  @map("collector_user_id")
+  guestEmail      String?  @map("guest_email")
+  guestToken      String?  @unique @map("guest_token")
   shopId          String   @map("shop_id")
   shop            Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
   sourceDeckId    String?  @map("source_deck_id")
@@ -511,7 +513,10 @@ model HoldGroup {
 
 model Hold {
   id              String   @id @default(cuid())
-  collectorUserId String   @map("collector_user_id")
+  collectorUserId String?  @map("collector_user_id")
+  guestName       String?  @map("guest_name")
+  guestEmail      String?  @map("guest_email")
+  guestToken      String?  @unique @map("guest_token")
   shopId          String   @map("shop_id")
   shop            Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
   inventoryItemId String?  @map("inventory_item_id")

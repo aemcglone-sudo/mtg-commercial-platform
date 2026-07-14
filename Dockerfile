@@ -9,11 +9,13 @@ COPY package.json package-lock.json ./
 # Install dependencies
 RUN npm ci
 
+# ARG before COPY so Depot's layer cache is busted when CACHEBUST changes
+ARG CACHEBUST=1
+
 # Copy source
 COPY . .
 
-# Build Next.js app (ARG busts Depot cache when changed)
-ARG CACHEBUST=1
+# Build Next.js app
 RUN npm run build
 
 # Production stage

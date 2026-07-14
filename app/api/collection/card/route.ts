@@ -4,6 +4,7 @@
  * Body: { name: string, quantity?: number }
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { randomUUID } from 'crypto';
 import { getAuthenticatedUserId } from '@/lib/auth';
 import { findOne, run } from '@/lib/db';
 import { getCards, cardPrice, cardImageUrl, ScryfallCard } from '@/lib/scryfall';
@@ -90,6 +91,25 @@ export async function PATCH(req: NextRequest) {
   }
 
   const updated = await saveRow(row.id, data, row.rawText);
+
+  // Sync to inventory_items so collection search picks it up
+  const existingItem = await findOne<{ id: string }>(
+    `SELECT id FROM inventory_items WHERE "userId" = ? AND name = ? AND "itemType" = 'cards' AND "collectionType" = ?`,
+    [userId, name, collectionType]
+  );
+  if (existingItem) {
+    await run(
+      `UPDATE inventory_items SET quantity = quantity + ?, "updatedAt" = NOW() WHERE id = ?`,
+      [quantity, existingItem.id]
+    );
+  } else {
+    await run(
+      `INSERT INTO inventory_items (id, "userId", name, "itemType", "collectionType", quantity, "createdAt", "updatedAt")
+       VALUES (?, ?, ?, 'cards', ?, ?, NOW(), NOW())`,
+      [randomUUID(), userId, name, collectionType, quantity]
+    );
+  }
+
   return NextResponse.json(updated);
 }
 
@@ -109,5 +129,11 @@ export async function DELETE(req: NextRequest) {
   );
 
   const updated = await saveRow(row.id, data, row.rawText);
+
+  await run(
+    `DELETE FROM inventory_items WHERE "userId" = ? AND name = ? AND "itemType" = 'cards'`,
+    [userId, name]
+  );
+
   return NextResponse.json(updated);
 }

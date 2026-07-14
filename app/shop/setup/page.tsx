@@ -104,7 +104,7 @@ export default function ShopSetupPage() {
         }),
       });
       if (!res.ok) throw new Error('Save failed');
-      router.push('/shop/inventory');
+      router.push('/shop/dashboard');
     } catch {
       setError('Something went wrong. Please try again.');
     } finally {

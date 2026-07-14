@@ -9,7 +9,7 @@ interface HoldRow {
   condition: string; foil: boolean; price_cents: string; collector_note: string;
   pickup_window: string; shop_note: string; confirmed_at: string; request_expires_at: string;
   pickup_expires_at: string; created_at: string;
-  collector_name: string; collector_email: string;
+  collector_name: string; collector_email: string; is_guest: boolean;
 }
 
 export async function GET(req: NextRequest) {
@@ -25,7 +25,9 @@ export async function GET(req: NextRequest) {
             h.price_cents::text, h.collector_note, h.pickup_window, h.shop_note,
             h.confirmed_at::text, h.request_expires_at::text, h.pickup_expires_at::text,
             h.created_at::text,
-            u.name AS collector_name, u.email AS collector_email
+            COALESCE(u.name, h.guest_name) AS collector_name,
+            COALESCE(u.email, h.guest_email) AS collector_email,
+            (h.collector_user_id IS NULL) AS is_guest
      FROM holds h
      LEFT JOIN users u ON u.id = h.collector_user_id
      WHERE h.shop_id = ?
@@ -50,6 +52,7 @@ export async function GET(req: NextRequest) {
     createdAt: r.created_at,
     collectorName: r.collector_name,
     collectorEmail: r.collector_email,
+    isGuest: r.is_guest,
   }));
 
   const grouped: Record<string, typeof mapped> = {

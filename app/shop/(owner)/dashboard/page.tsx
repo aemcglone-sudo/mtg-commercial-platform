@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { PriceAlert } from '@/app/api/shops/price-alerts/route';
 import ShopInventoryInsightsTab from '@/components/ShopInventoryInsightsTab';
+import ShopInventoryVariants from '@/components/ShopInventoryVariants';
 
 interface ShopStats {
   inventoryCount: number;
@@ -124,6 +125,11 @@ export default function ShopDashboard() {
               <div className="text-xs text-zinc-500">Fulfill pending orders</div>
             </div>
           </Link>
+        </div>
+
+        <div>
+          <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3">Multi-Variant Stock</h2>
+          <ShopInventoryVariants />
         </div>
 
         <ShopInventoryInsightsTab />

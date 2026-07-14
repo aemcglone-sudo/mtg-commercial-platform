@@ -1,6 +1,6 @@
 // Primary: Gemini Flash (Google). Fallback: Groq (llama).
 
-const GEMINI_MODEL = 'gemini-2.0-flash';
+const GEMINI_MODEL = 'gemini-3.1-flash-lite';
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
 const GROQ_MODEL = 'llama-3.3-70b-versatile';

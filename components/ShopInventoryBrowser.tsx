@@ -55,7 +55,7 @@ const COLORS = [
   { id: 'B', label: 'Black',     bg: 'bg-zinc-700',    text: 'text-zinc-100',   border: 'border-zinc-600' },
   { id: 'R', label: 'Red',       bg: 'bg-red-600',     text: 'text-white',      border: 'border-red-700' },
   { id: 'G', label: 'Green',     bg: 'bg-green-700',   text: 'text-white',      border: 'border-green-800' },
-  { id: 'C', label: 'Colorless', bg: 'bg-zinc-500',    text: 'text-white',      border: 'border-zinc-600' },
+  { id: 'C', label: 'Colorless', bg: 'bg-gradient-to-br from-slate-300 via-zinc-200 to-slate-400', text: 'text-zinc-800', border: 'border-slate-400' },
   { id: 'M', label: 'Multicolor (Gold)', bg: 'bg-gradient-to-br from-amber-400 via-yellow-300 to-amber-500', text: 'text-amber-900', border: 'border-amber-500' },
 ] as const;
 type ColorId = typeof COLORS[number]['id'];
@@ -114,13 +114,25 @@ function toggleArr<T>(arr: T[], item: T): T[] {
 }
 function fmt(cents: number) { return `$${(cents / 100).toFixed(2)}`; }
 
-function Pill({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+function Tip({ label, children }: { label: string; children: React.ReactNode }) {
   return (
+    <span className="relative group/tip inline-flex">
+      {children}
+      <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 whitespace-nowrap rounded bg-zinc-700 px-2 py-1 text-[11px] text-zinc-100 opacity-0 group-hover/tip:opacity-100 transition-opacity z-50">
+        {label}
+      </span>
+    </span>
+  );
+}
+
+function Pill({ active, onClick, title, children }: { active: boolean; onClick: () => void; title?: string; children: React.ReactNode }) {
+  const btn = (
     <button type="button" onClick={onClick}
       className={`px-2.5 py-1 text-xs rounded-lg transition-colors ${
         active ? 'bg-amber-400 text-black font-medium' : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-700'
       }`}>{children}</button>
   );
+  return title ? <Tip label={title}>{btn}</Tip> : btn;
 }
 function FilterRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -186,9 +198,11 @@ function EditableQty({ item, onSave }: { item: DisplayItem; onSave: (qty: number
 interface Props {
   items: ShopItem[];
   onRefresh: () => void;
+  totalCount?: number;      // server total, if larger than items.length
+  onSearchChange?: (q: string) => void;  // if set, search queries server
 }
 
-export default function ShopInventoryBrowser({ items: rawItems, onRefresh }: Props) {
+export default function ShopInventoryBrowser({ items: rawItems, onRefresh, totalCount, onSearchChange }: Props) {
   const [view, setView] = useState<ViewMode>('table');
   const [cardZoom, setCardZoom] = useState<'sm' | 'md' | 'lg'>('md');
   const [search, setSearch] = useState('');
@@ -205,6 +219,16 @@ export default function ShopInventoryBrowser({ items: rawItems, onRefresh }: Pro
   const [showStaleOnly, setShowStaleOnly] = useState(false);
   const [staleIds, setStaleIds] = useState<Set<string>>(new Set());
   const [setNames, setSetNames] = useState<Record<string, string>>({});
+
+  // Debounce server-side search
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function handleSearchChange(val: string) {
+    setSearch(val);
+    if (onSearchChange) {
+      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+      searchDebounceRef.current = setTimeout(() => onSearchChange(val), 350);
+    }
+  }
 
   // Fetch set code→name map from Scryfall once
   useEffect(() => {
@@ -766,8 +790,13 @@ export default function ShopInventoryBrowser({ items: rawItems, onRefresh }: Pro
       </div>
 
       {/* Search */}
+      {totalCount != null && totalCount > rawItems.length && !search && (
+        <p className="text-xs text-zinc-500 -mb-1">
+          Showing {rawItems.length.toLocaleString()} of {totalCount.toLocaleString()} cards — search to find specific cards
+        </p>
+      )}
       <input type="search" placeholder="Search inventory…" value={search}
-        onChange={e => setSearch(e.target.value)}
+        onChange={e => handleSearchChange(e.target.value)}
         className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-amber-500"
       />
 
@@ -778,54 +807,62 @@ export default function ShopInventoryBrowser({ items: rawItems, onRefresh }: Pro
           <span className="text-xs text-zinc-500 w-10 shrink-0">Color</span>
           <div className="flex flex-wrap gap-3">
             {COLORS.map(c => (
-              <button key={c.id} type="button" title={c.label}
-                onClick={() => setSelectedColors(toggleArr(selectedColors, c.id))}
-                aria-label={c.label}
-                className={`w-8 h-8 rounded-full border-2 transition-all ${
-                  selectedColors.includes(c.id)
-                    ? `${c.bg} ${c.border} scale-110 ring-2 ring-offset-2 ring-offset-zinc-900`
-                    : `${c.bg} border-zinc-700 hover:scale-105 opacity-70 hover:opacity-100`
-                }`}
-              />
+              <Tip key={c.id} label={c.label}>
+                <button type="button"
+                  onClick={() => setSelectedColors(toggleArr(selectedColors, c.id))}
+                  aria-label={c.label}
+                  className={`w-8 h-8 rounded-full border-2 transition-all ${
+                    selectedColors.includes(c.id)
+                      ? `${c.bg} ${c.border} scale-110 ring-2 ring-offset-2 ring-offset-zinc-900`
+                      : `${c.bg} border-zinc-700 hover:scale-105 opacity-70 hover:opacity-100`
+                  }`}
+                />
+              </Tip>
             ))}
           </div>
         </div>
         <FilterRow label="Type">
           {CARD_TYPES.map(t => (
-            <Pill key={t} active={selectedTypes.includes(t)} onClick={() => setSelectedTypes(toggleArr(selectedTypes, t))}>{t}</Pill>
+            <Pill key={t} active={selectedTypes.includes(t)} title={`Filter by ${t}`} onClick={() => setSelectedTypes(toggleArr(selectedTypes, t))}>{t}</Pill>
           ))}
-          <Pill active={legendaryOnly} onClick={() => setLegendaryOnly(v => !v)}>👑 Legendary</Pill>
+          <Pill active={legendaryOnly} onClick={() => setLegendaryOnly(v => !v)} title="Show legendary creatures only">👑 Legendary</Pill>
         </FilterRow>
         <FilterRow label="Rarity">
           {RARITIES.map(r => (
-            <button key={r.id} type="button" title={r.title}
-              onClick={() => setSelectedRarities(toggleArr(selectedRarities, r.id))}
-              className={`w-7 h-7 rounded text-xs font-black border transition-colors ${
-                selectedRarities.includes(r.id) ? `${r.color} bg-zinc-800` : 'border-zinc-700 text-zinc-600 hover:text-zinc-400'
-              }`}>
-              {r.label}
-            </button>
+            <Tip key={r.id} label={r.title}>
+              <button type="button"
+                onClick={() => setSelectedRarities(toggleArr(selectedRarities, r.id))}
+                className={`w-7 h-7 rounded text-xs font-black border transition-colors ${
+                  selectedRarities.includes(r.id) ? `${r.color} bg-zinc-800` : 'border-zinc-700 text-zinc-600 hover:text-zinc-400'
+                }`}>
+                {r.label}
+              </button>
+            </Tip>
           ))}
         </FilterRow>
         <FilterRow label="CMC">
           {CMC_OPTIONS.map(v => (
-            <Pill key={String(v)} active={selectedCmc.includes(v)} onClick={() => setSelectedCmc(toggleArr(selectedCmc, v))}>{String(v)}</Pill>
+            <Pill key={String(v)} active={selectedCmc.includes(v)}
+              title={v === '6+' ? 'Mana value 6 or more' : `Mana value ${v}`}
+              onClick={() => setSelectedCmc(toggleArr(selectedCmc, v))}>{String(v)}</Pill>
           ))}
         </FilterRow>
         <div className="flex flex-wrap gap-x-4 gap-y-2 pt-1 border-t border-zinc-800">
           <FilterRow label="Price">
             {PRICE_TIERS.map(({ id, label }) => (
-              <Pill key={id} active={priceTier === id} onClick={() => setPriceTier(id)}>{label}</Pill>
+              <Pill key={id} active={priceTier === id}
+                title={id === 'all' ? 'Any price' : `Price: ${label}`}
+                onClick={() => setPriceTier(id)}>{label}</Pill>
             ))}
           </FilterRow>
           <FilterRow label="Cond">
-            <Pill active={!conditionFilter} onClick={() => setConditionFilter('')}>Any</Pill>
+            <Pill active={!conditionFilter} onClick={() => setConditionFilter('')} title="Any condition">Any</Pill>
             {CONDITIONS.map(c => (
-              <Pill key={c} active={conditionFilter === c} onClick={() => setConditionFilter(c)}>{c}</Pill>
+              <Pill key={c} active={conditionFilter === c} onClick={() => setConditionFilter(c)} title={c}>{c}</Pill>
             ))}
           </FilterRow>
           <FilterRow label="">
-            <Pill active={showStaleOnly} onClick={() => setShowStaleOnly(v => !v)}>
+            <Pill active={showStaleOnly} onClick={() => setShowStaleOnly(v => !v)} title="Cards not repriced in 30+ days">
               ⚠ Stale{staleIds.size > 0 ? ` (${staleIds.size})` : ''}
             </Pill>
           </FilterRow>

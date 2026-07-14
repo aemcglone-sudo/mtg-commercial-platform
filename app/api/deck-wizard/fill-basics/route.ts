@@ -24,8 +24,7 @@ export async function POST(req: NextRequest) {
 
   const currentCount = cards.reduce((s, c) => s + c.quantity, 0);
   const rawLandsNeeded = deckSize - currentCount;
-  const maxBasics = deckSize === 100 ? 40 : 26;
-  const landsNeeded = Math.min(Math.max(rawLandsNeeded, minLands ?? 0), maxBasics);
+  const landsNeeded = Math.max(rawLandsNeeded, minLands ?? 0);
 
   if (landsNeeded <= 0) {
     return NextResponse.json({ basics: {}, slotsAvailable: 0 });

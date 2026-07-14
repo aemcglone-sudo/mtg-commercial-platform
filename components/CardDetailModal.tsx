@@ -59,6 +59,8 @@ export default function CardDetailModal({ cardName, onClose, collectionCard, dec
 
   const [copied, setCopied] = useState(false);
 
+  const [retryCount, setRetryCount] = useState(0);
+
   useEffect(() => {
     if (!cardName) return;
     setLoading(true);
@@ -68,12 +70,12 @@ export default function CardDetailModal({ cardName, onClose, collectionCard, dec
     setIsEditingQty(false);
     setDisplayQty(collectionCard?.quantity ?? 0);
     setEditQty(collectionCard?.quantity ?? 1);
-    fetch(`https://api.scryfall.com/cards/named?fuzzy=${encodeURIComponent(cardName)}`)
+    fetch(`/api/card/lookup?name=${encodeURIComponent(cardName)}`)
       .then(r => r.json())
-      .then(d => { if (d.object === 'error') setError('Card not found'); else setScryfallCard(d); })
+      .then(d => { if (d.object === 'error' || d.error) setError('Card not found on Scryfall'); else setScryfallCard(d); })
       .catch(() => setError('Failed to load card'))
       .finally(() => setLoading(false));
-  }, [cardName]);
+  }, [cardName, retryCount]);
 
   if (!cardName) return null;
 
@@ -193,7 +195,18 @@ export default function CardDetailModal({ cardName, onClose, collectionCard, dec
         {/* Body */}
         <div className="max-h-[82vh] overflow-y-auto">
           {loading && <div className="p-8 text-center text-sm text-zinc-500">Loading card data…</div>}
-          {error && <div className="p-4 text-sm text-red-400">{error}</div>}
+          {error && (
+            <div className="p-4 space-y-3">
+              <p className="text-sm text-red-400">{error}</p>
+              <button
+                type="button"
+                onClick={() => setRetryCount(c => c + 1)}
+                className="text-xs text-zinc-400 hover:text-zinc-200 underline"
+              >
+                Try again
+              </button>
+            </div>
+          )}
 
           {!loading && !error && (
             <div className="flex flex-col md:flex-row">

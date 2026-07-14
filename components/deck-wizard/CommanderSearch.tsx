@@ -47,7 +47,7 @@ export function CommanderSearch({ format, commanderExplanation, onCommanderHover
     if (q.length < 2) { setResults([]); return; }
     setSearching(true);
     // Scryfall must be called client-side
-    fetch(`https://api.scryfall.com/cards/search?q=${encodeURIComponent(q + ' type:legendary type:creature')}&order=edhrec&dir=asc`)
+    fetch(`https://api.scryfall.com/cards/search?q=${encodeURIComponent(q + ' is:commander')}&order=edhrec&dir=asc`)
       .then(r => r.ok ? r.json() : Promise.reject())
       .then((d: { data: typeof results }) => setResults(d.data?.slice(0, 8) ?? []))
       .catch(() => setResults([]))

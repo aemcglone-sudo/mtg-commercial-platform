@@ -80,7 +80,7 @@ export default function MyDecksTab({ collection }: Props) {
     );
   }
 
-  if (decks.length === 0 && !showNew) {
+  if (decks.length === 0 && !showNew && !showNewList) {
     return (
       <div className="text-center space-y-6 py-16">
         <div className="text-5xl" title="My Decks">🃏</div>
@@ -1280,6 +1280,41 @@ function DeckDetail({
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [editMode, setEditMode] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [arenaExported, setArenaExported] = useState(false);
+
+  function exportForArena() {
+    const isCommanderFormat = ['commander', 'brawl', 'oathbreaker'].includes(deck.format?.toLowerCase() ?? '');
+    const BASIC_LANDS = new Set(['Plains', 'Island', 'Swamp', 'Mountain', 'Forest', 'Wastes',
+      'Snow-Covered Plains', 'Snow-Covered Island', 'Snow-Covered Swamp',
+      'Snow-Covered Mountain', 'Snow-Covered Forest']);
+
+    const allCards = Object.entries(deck.cards || {}).map(([name, qty]) => {
+      const clean = name.replace(/\s*\[.*?\]/g, '').replace(/\s*\(.*?\)/g, '').trim();
+      return [clean, qty] as [string, number];
+    });
+
+    let text = '';
+
+    if (isCommanderFormat && deck.commander) {
+      const commanderEntry = allCards.find(([n]) => n.toLowerCase() === deck.commander!.toLowerCase());
+      text += `Commander\n1 ${deck.commander}\n\n`;
+      const deckCards = allCards.filter(([n]) => n.toLowerCase() !== deck.commander!.toLowerCase());
+      const nonBasics = deckCards.filter(([n]) => !BASIC_LANDS.has(n));
+      const basics = deckCards.filter(([n]) => BASIC_LANDS.has(n));
+      text += 'Deck\n';
+      text += [...nonBasics, ...basics].map(([n, q]) => `${q} ${n}`).join('\n');
+    } else {
+      const nonBasics = allCards.filter(([n]) => !BASIC_LANDS.has(n));
+      const basics = allCards.filter(([n]) => BASIC_LANDS.has(n));
+      text += 'Deck\n';
+      text += [...nonBasics, ...basics].map(([n, q]) => `${q} ${n}`).join('\n');
+    }
+
+    navigator.clipboard.writeText(text).then(() => {
+      setArenaExported(true);
+      setTimeout(() => setArenaExported(false), 2500);
+    });
+  }
   const [searching, setSearching] = useState(false);
   const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [editCards, setEditCards] = useState<Record<string, number>>({});
@@ -1690,6 +1725,14 @@ function DeckDetail({
             size="sm"
             className="flex-1 !bg-zinc-700 !text-zinc-100 hover:!bg-zinc-600"
           />
+          <button
+            type="button"
+            onClick={exportForArena}
+            className="flex-1 px-3 py-1.5 rounded-xl text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 transition-colors"
+            title="Copy deck list in MTG Arena import format"
+          >
+            {arenaExported ? '✓ Copied!' : '⚡ Arena Export'}
+          </button>
           <button
             type="button"
             onClick={() => {

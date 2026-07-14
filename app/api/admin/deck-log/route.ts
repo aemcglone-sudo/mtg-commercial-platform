@@ -105,7 +105,7 @@ export async function GET(req: NextRequest) {
   }
 
   // List all decks
-  const decks = await findMany<DeckLogEntry>(
+  const decks = await findMany<Record<string, unknown>>(
     `SELECT d.id, d."userId", u.email as "userEmail", d.name, d.format, d.strategy,
             d.commander, d.rubric_score, d.rubric_scored_at, d."createdAt"
      FROM decks d

@@ -45,8 +45,8 @@ const COLORS = [
   { id: 'B', label: 'Black', bg: 'bg-zinc-700',    text: 'text-zinc-100',   border: 'border-zinc-600',   active: 'bg-zinc-600 border-zinc-400' },
   { id: 'R', label: 'Red',   bg: 'bg-red-600',     text: 'text-white',      border: 'border-red-700',    active: 'bg-red-700 border-red-500' },
   { id: 'G', label: 'Green', bg: 'bg-green-700',   text: 'text-white',      border: 'border-green-800',  active: 'bg-green-800 border-green-600' },
-  { id: 'C', label: 'Colorless', bg: 'bg-zinc-500', text: 'text-white',     border: 'border-zinc-600',   active: 'bg-zinc-400 border-zinc-300' },
-  { id: 'M', label: 'Multi', bg: 'bg-gradient-to-r from-yellow-50 via-blue-600 to-red-600',   text: 'text-white',      border: 'border-purple-500',  active: 'ring-2 ring-purple-400 border-purple-600' },
+  { id: 'C', label: 'Colorless', bg: 'bg-gradient-to-br from-slate-300 via-zinc-200 to-slate-400', text: 'text-zinc-800', border: 'border-slate-400',  active: 'border-slate-300' },
+  { id: 'M', label: 'Multi',     bg: 'bg-gradient-to-br from-amber-400 via-yellow-300 to-amber-500', text: 'text-amber-900', border: 'border-amber-500', active: 'border-amber-300' },
 ] as const;
 type ColorId = typeof COLORS[number]['id'];
 
@@ -89,14 +89,26 @@ function FilterRow({ label, children }: { label: string; children: React.ReactNo
   );
 }
 
-function Pill({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+function Tip({ label, children }: { label: string; children: React.ReactNode }) {
   return (
+    <span className="relative group/tip inline-flex">
+      {children}
+      <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 whitespace-nowrap rounded bg-zinc-700 px-2 py-1 text-[11px] text-zinc-100 opacity-0 group-hover/tip:opacity-100 transition-opacity z-50">
+        {label}
+      </span>
+    </span>
+  );
+}
+
+function Pill({ active, onClick, title, children }: { active: boolean; onClick: () => void; title?: string; children: React.ReactNode }) {
+  const btn = (
     <button type="button" onClick={onClick}
       className={`px-2.5 py-1 text-xs rounded-lg transition-colors ${
         active ? 'bg-amber-400 text-black font-medium' : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-700'
       }`}
     >{children}</button>
   );
+  return title ? <Tip label={title}>{btn}</Tip> : btn;
 }
 
 function matchesPriceTier(price: number | null, tier: PriceTier) {
@@ -331,13 +343,15 @@ export default function CollectionBrowser({ cards, totalCards, detectedFormat, d
           <span className="text-xs text-zinc-500 w-10 shrink-0">Color</span>
           <div className="flex flex-wrap gap-3">
             {COLORS.map((c) => (
-              <button key={c.id} type="button" title={c.label}
-                onClick={() => setSelectedColors(toggleItem(selectedColors, c.id))}
-                className={`w-8 h-8 rounded-full border-2 transition-all ${
-                  selectedColors.includes(c.id) ? `${c.bg} ${c.border} scale-110 ring-2 ring-offset-2 ring-offset-zinc-900` : `${c.bg} border-zinc-700 hover:scale-105 opacity-70 hover:opacity-100`
-                }`}
-                aria-label={c.label}
-              />
+              <Tip key={c.id} label={c.label}>
+                <button type="button"
+                  onClick={() => setSelectedColors(toggleItem(selectedColors, c.id))}
+                  className={`w-8 h-8 rounded-full border-2 transition-all ${
+                    selectedColors.includes(c.id) ? `${c.bg} ${c.border} scale-110 ring-2 ring-offset-2 ring-offset-zinc-900` : `${c.bg} border-zinc-700 hover:scale-105 opacity-70 hover:opacity-100`
+                  }`}
+                  aria-label={c.label}
+                />
+              </Tip>
             ))}
           </div>
         </div>
@@ -345,10 +359,10 @@ export default function CollectionBrowser({ cards, totalCards, detectedFormat, d
         {/* Card type */}
         <FilterRow label="Type">
           {CARD_TYPES.map((t) => (
-            <Pill key={t} active={selectedTypes.includes(t)}
+            <Pill key={t} active={selectedTypes.includes(t)} title={`Filter by ${t}`}
               onClick={() => setSelectedTypes(toggleItem(selectedTypes, t))}>{t}</Pill>
           ))}
-          <Pill active={legendaryOnly} onClick={() => setLegendaryOnly((v) => !v)}>
+          <Pill active={legendaryOnly} onClick={() => setLegendaryOnly((v) => !v)} title="Show legendary creatures only">
             👑 Legendary Creatures
           </Pill>
         </FilterRow>
@@ -358,12 +372,14 @@ export default function CollectionBrowser({ cards, totalCards, detectedFormat, d
           {RARITIES.map((r) => {
             const on = selectedRarities.includes(r.id);
             return (
-              <button key={r.id} type="button" title={r.title}
-                onClick={() => setSelectedRarities(toggleItem(selectedRarities, r.id))}
-                className={`w-7 h-7 rounded text-xs font-black border transition-colors ${
-                  on ? `${r.color} bg-zinc-800` : 'border-zinc-700 text-zinc-600 hover:text-zinc-400'
-                }`}
-              >{r.label}</button>
+              <Tip key={r.id} label={r.title}>
+                <button type="button"
+                  onClick={() => setSelectedRarities(toggleItem(selectedRarities, r.id))}
+                  className={`w-7 h-7 rounded text-xs font-black border transition-colors ${
+                    on ? `${r.color} bg-zinc-800` : 'border-zinc-700 text-zinc-600 hover:text-zinc-400'
+                  }`}
+                >{r.label}</button>
+              </Tip>
             );
           })}
         </FilterRow>
@@ -372,6 +388,7 @@ export default function CollectionBrowser({ cards, totalCards, detectedFormat, d
         <FilterRow label="CMC">
           {CMC_OPTIONS.map((v) => (
             <Pill key={String(v)} active={selectedCmc.includes(v)}
+              title={v === '6+' ? 'Mana value 6 or more' : `Mana value ${v}`}
               onClick={() => setSelectedCmc(toggleItem(selectedCmc, v))}>{String(v)}</Pill>
           ))}
         </FilterRow>
@@ -381,13 +398,14 @@ export default function CollectionBrowser({ cards, totalCards, detectedFormat, d
           <FilterRow label="Price">
             {PRICE_TIERS.map(({ id, label }) => (
               <Pill key={id} active={priceTier === id}
+                title={id === 'all' ? 'Any price' : `Price: ${label}`}
                 onClick={() => setPriceTier(id)}>{label}</Pill>
             ))}
           </FilterRow>
 
           <FilterRow label="Copies">
-            {([['all','Any'],['singles','×1'],['multiples','×2+']] as [QtyFilter,string][]).map(([id, label]) => (
-              <Pill key={id} active={qtyFilter === id} onClick={() => setQtyFilter(id)}>{label}</Pill>
+            {([['all','Any','Any quantity'],['singles','×1','Exactly 1 copy'],['multiples','×2+','2 or more copies']] as [QtyFilter,string,string][]).map(([id, label, tip]) => (
+              <Pill key={id} active={qtyFilter === id} title={tip} onClick={() => setQtyFilter(id)}>{label}</Pill>
             ))}
           </FilterRow>
 
@@ -433,17 +451,19 @@ export default function CollectionBrowser({ cards, totalCards, detectedFormat, d
               onMouseEnter={() => setHoveredCard(card)}
               onMouseLeave={() => setHoveredCard(null)}
             >
-              {card.imageUrl ? (
-                <img
-                  src={card.imageUrl}
-                  alt={card.name}
-                  className="w-full rounded-lg border border-zinc-700 group-hover:border-amber-400 transition-colors"
-                />
-              ) : (
-                <div className="w-full aspect-[63/88] rounded-lg border border-zinc-700 bg-gradient-to-br from-zinc-800 to-zinc-900 flex items-center justify-center p-2 group-hover:border-amber-400 transition-colors">
-                  <span className="text-zinc-400 text-xs text-center leading-tight font-medium"><CardNameLink name={card.name} imageUrl={card.imageUrl} /></span>
-                </div>
-              )}
+              <img
+                src={card.imageUrl ?? `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(card.name)}&format=image&version=normal`}
+                alt={card.name}
+                className="w-full rounded-lg border border-zinc-700 group-hover:border-amber-400 transition-colors"
+                onError={e => {
+                  const img = e.currentTarget;
+                  img.style.display = 'none';
+                  img.nextElementSibling?.removeAttribute('hidden');
+                }}
+              />
+              <div hidden className="w-full aspect-[63/88] rounded-lg border border-zinc-700 bg-gradient-to-br from-zinc-800 to-zinc-900 flex items-center justify-center p-2 group-hover:border-amber-400 transition-colors">
+                <span className="text-zinc-400 text-xs text-center leading-tight font-medium"><CardNameLink name={card.name} imageUrl={null} /></span>
+              </div>
               {/* Quantity badge */}
               <span className="absolute top-1 right-1 bg-black/80 text-white text-xs font-bold px-1.5 py-0.5 rounded" title="Quantity owned">
                 ×{card.quantity}
@@ -624,14 +644,10 @@ export default function CollectionBrowser({ cards, totalCards, detectedFormat, d
           onClose={() => setPreviewCard(null)}
           decks={decks}
           onCollectionChange={() => {
-            // Re-fetch collection from server to reflect any changes
-            fetch('/api/collection/card', { method: 'GET' }).catch(() => {});
-            onCollectionChange?.({
-              collectionCards: localCards,
-              collectionSize: localCards.length,
-              totalCards,
-              detectedFormat: detectedFormat ?? '',
-            });
+            fetch('/api/collection/saved')
+              .then(r => r.ok ? r.json() : null)
+              .then(data => { if (data) onCollectionChange?.(data); })
+              .catch(() => {});
           }}
         />
       )}

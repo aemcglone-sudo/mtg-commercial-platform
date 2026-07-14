@@ -17,6 +17,7 @@ const NAV = [
   { label: 'Marketing', children: [
       { href: '/shop/campaigns',   label: 'Campaigns' },
       { href: '/shop/marketplace', label: 'Local Marketplace' },
+      { href: '/shop/site',        label: 'Site Builder' },
   ]},
   { href: '/shop/collection?tab=chat', label: 'Ask Khoa' },
   { href: '/shop/settings', label: 'Settings' },

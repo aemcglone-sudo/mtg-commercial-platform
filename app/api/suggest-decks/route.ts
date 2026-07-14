@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { matchDeckToCollection, type DeckSource, type MatchedDeck } from '@/lib/deck-matcher';
 import { getCards, cardPrice } from '@/lib/scryfall';
-import { nimChat, stripThinkTags } from '@/lib/nvidia-nim';
+import { geminiChat, stripThinkTags } from '@/lib/gemini';
 
 export const maxDuration = 60;
 
@@ -13,7 +13,7 @@ interface CollectionCard {
 }
 
 async function generateDeckList(prompt: string): Promise<string> {
-  const raw = await nimChat(prompt, 0.7);
+  const raw = await geminiChat(prompt, 0.7);
   if (!raw) throw new Error('No response from NIM');
   return stripThinkTags(raw);
 }

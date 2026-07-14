@@ -1,7 +1,7 @@
 // Demo mode: routes all LLM calls through Claude Sonnet when DEMO_MODE=true.
 // Set DEMO_MODE=true on Fly before a demo, unset after.
 
-const CLAUDE_MODEL = 'claude-sonnet-4-5';
+const CLAUDE_MODEL = 'claude-sonnet-5';
 
 interface AnthropicResponse {
   content?: Array<{ type: string; text: string }>;
@@ -52,7 +52,11 @@ export async function chatWithClaude(
       return null;
     }
 
-    return data.content?.find(b => b.type === 'text')?.text ?? null;
+    const raw = data.content?.find(b => b.type === 'text')?.text ?? null;
+    if (!raw) return null;
+    // Strip markdown code fences if present (e.g. ```json ... ```)
+    const stripped = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '');
+    return stripped;
   } catch (e) {
     console.error('[demo-llm] threw:', e);
     return null;

@@ -12,6 +12,7 @@ interface Hold {
   priceCents: number;
   collectorName: string;
   collectorEmail: string;
+  isGuest?: boolean;
   pickupWindow: string;
   collectorNote: string;
   shopNote: string;
@@ -159,7 +160,10 @@ export default function ShopHoldQueue() {
                     <span className="text-xs text-zinc-600 shrink-0">{timeAgo(h.createdAt)}</span>
                   </div>
                   <div className="mt-2 space-y-0.5">
-                    <p className="text-sm text-zinc-300">{h.collectorName}</p>
+                    <p className="text-sm text-zinc-300 flex items-center gap-1.5">
+                      {h.collectorName}
+                      {h.isGuest && <span className="text-[10px] font-medium bg-zinc-700 text-zinc-400 rounded px-1 py-0.5">Guest</span>}
+                    </p>
                     <p className="text-xs text-zinc-500">{h.collectorEmail}</p>
                   </div>
                   {h.pickupWindow && (

@@ -12,19 +12,12 @@ import type { CollectionCardData } from '@/components/CollectionBrowser';
 type Tab = 'inventory' | 'chat';
 const VALID_TABS: Tab[] = ['inventory', 'chat'];
 
-async function fetchAllInventoryItems(): Promise<ShopItem[]> {
-  const all: ShopItem[] = [];
-  let page = 1;
-  let pages = 1;
-  while (page <= pages) {
-    const res = await fetch(`/api/shops/inventory?page=${page}&limit=200`);
-    if (!res.ok) break;
-    const data = await res.json() as { items: ShopItem[]; pages: number };
-    all.push(...data.items);
-    pages = data.pages ?? 1;
-    page++;
-  }
-  return all;
+async function fetchInventoryPage(search = ''): Promise<{ items: ShopItem[]; total: number }> {
+  const url = `/api/shops/inventory?limit=500${search ? `&search=${encodeURIComponent(search)}` : ''}`;
+  const res = await fetch(url);
+  if (!res.ok) return { items: [], total: 0 };
+  const data = await res.json() as { items: ShopItem[]; total: number };
+  return { items: data.items ?? [], total: data.total ?? 0 };
 }
 
 function itemsToCollection(items: ShopItem[]): CollectionResult {
@@ -62,15 +55,17 @@ function ShopCollectionContent() {
   const activeTab: Tab = rawTab && VALID_TABS.includes(rawTab) ? rawTab : 'inventory';
 
   const [items, setItems] = useState<ShopItem[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [chatMessage, setChatMessage] = useState('');
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
 
-  const loadItems = useCallback(async () => {
+  const loadItems = useCallback(async (search = '') => {
     setLoading(true);
     try {
-      const loaded = await fetchAllInventoryItems();
+      const { items: loaded, total } = await fetchInventoryPage(search);
       setItems(loaded);
+      setTotalCount(total);
     } finally {
       setLoading(false);
     }
@@ -114,7 +109,7 @@ function ShopCollectionContent() {
           </div>
         )}
 
-        {!loading && items.length === 0 && (
+        {!loading && items.length === 0 && totalCount === 0 && (
           <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-10 text-center space-y-3">
             <p className="text-zinc-400">Your inventory is empty.</p>
             <a href="/shop/settings?tab=inventory" className="text-amber-400 text-sm hover:text-amber-300 transition-colors">
@@ -126,7 +121,12 @@ function ShopCollectionContent() {
         {!loading && items.length > 0 && (
           <>
             {activeTab === 'inventory' && (
-              <ShopInventoryBrowser items={items} onRefresh={loadItems} />
+              <ShopInventoryBrowser
+                items={items}
+                onRefresh={() => loadItems()}
+                totalCount={totalCount}
+                onSearchChange={(q) => loadItems(q)}
+              />
             )}
             {activeTab === 'chat' && collection && (
               <CollectionChatTab
