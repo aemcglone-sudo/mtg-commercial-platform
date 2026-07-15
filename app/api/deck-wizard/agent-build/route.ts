@@ -449,7 +449,7 @@ export async function POST(req: NextRequest) {
     );
     if (rows.length > 0) {
       resolvedOwnedCardNames = rows.map(r => r.name);
-      resolvedCollectionOnly = true; // always use collection when user has cards
+      resolvedCollectionOnly = collectionOnly; // respect the client's explicit choice
     }
     console.log(`[agent-build] collectionOnly=${collectionOnly} clientOwned=${ownedCardNames.length} dbOwned=${rows.length} resolvedCollectionOnly=${resolvedCollectionOnly}`);
   } catch (e) {
