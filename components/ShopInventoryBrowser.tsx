@@ -790,15 +790,17 @@ export default function ShopInventoryBrowser({ items: rawItems, onRefresh, total
       </div>
 
       {/* Search */}
-      {totalCount != null && totalCount > rawItems.length && !search && (
-        <p className="text-xs text-zinc-500 -mb-1">
-          Showing {rawItems.length.toLocaleString()} of {totalCount.toLocaleString()} cards — search to find specific cards
-        </p>
-      )}
-      <input type="search" placeholder="Search inventory…" value={search}
-        onChange={e => handleSearchChange(e.target.value)}
-        className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-amber-500"
-      />
+      <div className="space-y-1.5">
+        {totalCount != null && totalCount > rawItems.length && !search && (
+          <p className="text-xs text-zinc-500">
+            Showing {rawItems.length.toLocaleString()} of {totalCount.toLocaleString()} cards — search to find specific cards
+          </p>
+        )}
+        <input type="search" placeholder="Search inventory…" value={search}
+          onChange={e => handleSearchChange(e.target.value)}
+          className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-2.5 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-amber-500"
+        />
+      </div>
 
       {/* Filters */}
       <div className="space-y-2.5 bg-zinc-900/50 border border-zinc-800 rounded-xl p-3">
