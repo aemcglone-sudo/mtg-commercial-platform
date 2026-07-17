@@ -1322,6 +1322,10 @@ function DeckDetail({
   const [searchResults, setSearchResults] = useState<Array<{ name: string; imageUrl: string | null }>>([]);
   const [saving, setSaving] = useState(false);
   const [scryCardCache, setScryCardCache] = useState<Record<string, any>>({});
+  const [combos, setCombos] = useState<{ cards: string[]; description: string }[]>([]);
+  const [synergies, setSynergies] = useState<{ cards: string[]; description: string }[]>([]);
+  const [winCondition, setWinCondition] = useState<string | null>(null);
+  const [combosLoading, setCombosLoading] = useState(false);
 
   // Build a map of card name to collection types for easy lookup
   const cardCollectionTypes = useMemo(() => {
@@ -1514,6 +1518,47 @@ function DeckDetail({
       }
     }).catch(() => {});
   }, [missingCards.map(([n]) => n).join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Mana curve: count non-land cards by CMC (0–7+)
+  const manaCurve = useMemo(() => {
+    const BASIC_LANDS = new Set(['Plains', 'Island', 'Swamp', 'Mountain', 'Forest', 'Wastes',
+      'Snow-Covered Plains', 'Snow-Covered Island', 'Snow-Covered Swamp',
+      'Snow-Covered Mountain', 'Snow-Covered Forest']);
+    const buckets: number[] = [0, 0, 0, 0, 0, 0, 0, 0]; // 0,1,2,3,4,5,6,7+
+    for (const [name, qty] of Object.entries(deck.cards || {})) {
+      if (BASIC_LANDS.has(name)) continue;
+      const data = getCardData(name);
+      const typeLine = (data?.typeLine ?? '').toLowerCase();
+      if (typeLine.includes('land')) continue;
+      const cmc = data?.cmc ?? null;
+      if (cmc === null) continue;
+      const bucket = Math.min(Math.floor(cmc), 7);
+      buckets[bucket] += qty;
+    }
+    return buckets;
+  }, [deck.cards, scryCardCache]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch combos once when deck has enough cards
+  useEffect(() => {
+    const cardNames = Object.keys(deck.cards || {});
+    if (cardNames.length < 10) return;
+    setCombosLoading(true);
+    fetch('/api/deck-wizard/detect-combos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cards: cardNames }),
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then((d: { combos?: { cards: string[]; description: string }[]; synergies?: { cards: string[]; description: string }[]; winCondition?: string } | null) => {
+        if (d) {
+          setCombos(d.combos ?? []);
+          setSynergies(d.synergies ?? []);
+          setWinCondition(d.winCondition ?? null);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setCombosLoading(false));
+  }, [deck.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleSort(column: typeof sortColumn) {
     if (sortColumn === column) {
@@ -2147,6 +2192,78 @@ function DeckDetail({
         )}
         </div>
       )}
+
+      {/* Mana Curve + Combos */}
+      {!editMode && (
+          <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+
+            {/* Mana Curve */}
+            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+              <h3 className="text-sm font-semibold text-zinc-100 mb-4">Mana Curve</h3>
+              {manaCurve.every(v => v === 0) ? (
+                <p className="text-xs text-zinc-600">Loading card data…</p>
+              ) : (
+                <div className="flex items-end gap-2 h-28">
+                  {manaCurve.map((count, i) => {
+                    const max = Math.max(...manaCurve, 1);
+                    const pct = (count / max) * 100;
+                    return (
+                      <div key={i} className="flex flex-col items-center gap-1 flex-1">
+                        {count > 0 && (
+                          <span className="text-[10px] text-zinc-400 font-medium">{count}</span>
+                        )}
+                        <div className="w-full rounded-t-sm bg-amber-500/80 transition-all"
+                          style={{ height: `${Math.max(pct, count > 0 ? 4 : 0)}%` }} />
+                        <span className="text-[10px] text-zinc-500">{i === 7 ? '7+' : i}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Combos & Synergies */}
+            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-4">
+              <h3 className="text-sm font-semibold text-zinc-100">Combos & Synergies</h3>
+              {combosLoading ? (
+                <p className="text-xs text-zinc-500 animate-pulse">Analyzing deck…</p>
+              ) : (
+                <>
+                  {winCondition && (
+                    <div className="text-xs text-zinc-300 border-l-2 border-amber-500 pl-3 leading-relaxed">
+                      {winCondition}
+                    </div>
+                  )}
+                  {combos.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-[10px] font-semibold text-amber-400 uppercase tracking-wider">Combos</p>
+                      {combos.map((c, i) => (
+                        <div key={i} className="space-y-0.5">
+                          <p className="text-[11px] font-medium text-zinc-200">{c.cards.join(' + ')}</p>
+                          <p className="text-[11px] text-zinc-500 leading-snug">{c.description}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {synergies.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-[10px] font-semibold text-blue-400 uppercase tracking-wider">Synergies</p>
+                      {synergies.map((s, i) => (
+                        <div key={i} className="space-y-0.5">
+                          <p className="text-[11px] font-medium text-zinc-200">{s.cards.join(' + ')}</p>
+                          <p className="text-[11px] text-zinc-500 leading-snug">{s.description}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {!combosLoading && combos.length === 0 && synergies.length === 0 && !winCondition && (
+                    <p className="text-xs text-zinc-600">No notable combos detected.</p>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        )}
     </div>
   );
 }
