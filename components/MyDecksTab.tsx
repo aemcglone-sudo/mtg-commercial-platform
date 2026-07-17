@@ -31,6 +31,7 @@ export default function MyDecksTab({ collection }: Props) {
   const [resumeSessionId, setResumeSessionId] = useState<string | null>(null);
   const [resumeBannerDismissed, setResumeBannerDismissed] = useState(false);
   const [showNewList, setShowNewList] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [loading, setLoading] = useState(true);
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
 
@@ -80,6 +81,16 @@ export default function MyDecksTab({ collection }: Props) {
     );
   }
 
+  if (showImport) {
+    return (
+      <NewDeckForm
+        startWithImport
+        onCancel={() => setShowImport(false)}
+        onSave={() => { setShowImport(false); loadDecks(); }}
+      />
+    );
+  }
+
   if (decks.length === 0 && !showNew && !showNewList) {
     return (
       <div className="text-center space-y-6 py-16">
@@ -88,13 +99,20 @@ export default function MyDecksTab({ collection }: Props) {
         <p className="text-zinc-400 max-w-md mx-auto">
           Build and manage your custom Magic decks. Add cards from your collection or import from suggested decks.
         </p>
-        <div className="flex gap-3 justify-center">
+        <div className="flex gap-3 justify-center flex-wrap">
           <button
             type="button"
             onClick={() => setShowNewList(true)}
             className="px-6 py-3 rounded-xl font-semibold text-zinc-100 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 transition-colors"
           >
             + New List
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowImport(true)}
+            className="px-6 py-3 rounded-xl font-semibold text-zinc-100 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 transition-colors"
+          >
+            ↓ Import Deck
           </button>
           <button
             type="button"
@@ -189,6 +207,13 @@ export default function MyDecksTab({ collection }: Props) {
             className="px-4 py-2 rounded-lg text-sm font-semibold text-zinc-100 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 transition-colors"
           >
             + New List
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowImport(true)}
+            className="px-4 py-2 rounded-lg text-sm font-semibold text-zinc-100 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 transition-colors"
+          >
+            ↓ Import
           </button>
           <button
             type="button"
@@ -622,7 +647,7 @@ function NewListForm({ onCancel, onSave }: { onCancel: () => void; onSave: () =>
   );
 }
 
-function NewDeckForm({ onCancel, onSave }: { onCancel: () => void; onSave: () => void }) {
+function NewDeckForm({ onCancel, onSave, startWithImport = false }: { onCancel: () => void; onSave: () => void; startWithImport?: boolean }) {
   const [name, setName] = useState('');
   const [format, setFormat] = useState('Commander');
   const [deckType, setDeckType] = useState<'paper' | 'arena'>('paper');
@@ -636,7 +661,7 @@ function NewDeckForm({ onCancel, onSave }: { onCancel: () => void; onSave: () =>
   const [searchInput, setSearchInput] = useState('');
   const [searchResults, setSearchResults] = useState<Array<{ name: string; imageUrl: string | null }>>([]);
   const [searching, setSearching] = useState(false);
-  const [showPasteDeckList, setShowPasteDeckList] = useState(false);
+  const [showPasteDeckList, setShowPasteDeckList] = useState(startWithImport);
   const [pasteInput, setPasteInput] = useState('');
   const [validating, setValidating] = useState(false);
   const [pasteReview, setPasteReview] = useState<PasteReview | null>(null);
@@ -1032,13 +1057,21 @@ function NewDeckForm({ onCancel, onSave }: { onCancel: () => void; onSave: () =>
             )}
           </div>
 
-          <button
-            type="button"
-            onClick={() => setShowPasteDeckList(!showPasteDeckList)}
-            className="text-xs text-zinc-400 hover:text-amber-400 transition-colors"
-          >
-            {showPasteDeckList ? '▼ Hide' : '▶ Show'} paste deck list
-          </button>
+          {!startWithImport && (
+            <button
+              type="button"
+              onClick={() => setShowPasteDeckList(!showPasteDeckList)}
+              className="text-xs text-zinc-400 hover:text-amber-400 transition-colors"
+            >
+              {showPasteDeckList ? '▼ Hide' : '▶ Show'} paste deck list
+            </button>
+          )}
+          {startWithImport && (
+            <div>
+              <p className="text-sm font-semibold text-zinc-200">Paste your deck list</p>
+              <p className="text-xs text-zinc-500 mt-0.5">Supports MTGO, Moxfield, Archidekt formats (e.g. <span className="font-mono">4 Lightning Bolt</span>). Set name and format above first.</p>
+            </div>
+          )}
 
           {showPasteDeckList && (
             <div className="space-y-3">
@@ -2203,17 +2236,15 @@ function DeckDetail({
               {manaCurve.every(v => v === 0) ? (
                 <p className="text-xs text-zinc-600">Loading card data…</p>
               ) : (
-                <div className="flex items-end gap-2 h-28">
+                <div className="flex items-end gap-1.5">
                   {manaCurve.map((count, i) => {
                     const max = Math.max(...manaCurve, 1);
-                    const pct = (count / max) * 100;
+                    const barPx = Math.round((count / max) * 80);
                     return (
                       <div key={i} className="flex flex-col items-center gap-1 flex-1">
-                        {count > 0 && (
-                          <span className="text-[10px] text-zinc-400 font-medium">{count}</span>
-                        )}
-                        <div className="w-full rounded-t-sm bg-amber-500/80 transition-all"
-                          style={{ height: `${Math.max(pct, count > 0 ? 4 : 0)}%` }} />
+                        <span className="text-[10px] text-zinc-400 font-medium" style={{ visibility: count > 0 ? 'visible' : 'hidden' }}>{count}</span>
+                        <div className="w-full rounded-t bg-amber-500/80"
+                          style={{ height: `${count > 0 ? Math.max(barPx, 4) : 0}px` }} />
                         <span className="text-[10px] text-zinc-500">{i === 7 ? '7+' : i}</span>
                       </div>
                     );
