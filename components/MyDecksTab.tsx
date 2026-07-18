@@ -1556,6 +1556,49 @@ function DeckDetail({
     'Snow-Covered Plains', 'Snow-Covered Island', 'Snow-Covered Swamp',
     'Snow-Covered Mountain', 'Snow-Covered Forest']);
 
+  // Official WotC Game Changers list (53 cards, February 2026)
+  const GAME_CHANGERS = new Set([
+    // White
+    'Drannith Magistrate', 'Enlightened Tutor', 'Farewell', 'Humility', 'Smothering Tithe', "Teferi's Protection",
+    // Blue
+    'Consecrated Sphinx', 'Cyclonic Rift', 'Fierce Guardianship', 'Force of Will', 'Gifts Ungiven',
+    'Intuition', 'Mystical Tutor', 'Narset, Parter of Veils', "Rhystic Study", "Thassa's Oracle",
+    // Black
+    'Ad Nauseam', "Bolas's Citadel", 'Braids, Cabal Minion', 'Demonic Tutor', 'Imperial Seal',
+    'Necropotence', 'Opposition Agent', 'Orcish Bowmasters', 'Tergrid, God of Fright', 'Vampiric Tutor',
+    // Red
+    "Gamble", "Jeska's Will", 'Underworld Breach',
+    // Green
+    'Biorhythm', 'Crop Rotation', 'Natural Order', 'Seedborn Muse', 'Survival of the Fittest', 'Worldly Tutor',
+    // Multi
+    'Grand Arbiter Augustin IV', 'Notion Thief', 'Aura Shards', 'Coalition Victory',
+    // Artifacts / Colorless
+    'Chrome Mox', 'Grim Monolith', "Lion's Eye Diamond", 'Mana Crypt', 'Mana Vault',
+    'Sensei\'s Divining Top', 'Sol Ring', 'The One Ring', 'Time Vault',
+    // Extra turns
+    'Time Walk', 'Time Warp', 'Temporal Manipulation', 'Capture of Jingzhou', 'Temporal Mastery',
+    'Nexus of Fate', 'Expropriate',
+    // Mass land denial
+    'Armageddon', 'Ravages of War', 'Catastrophe', 'Decree of Annihilation', 'Jokulhaups',
+  ]);
+
+  // Extra turn cards (Bracket 3+ regardless of Game Changer status)
+  const EXTRA_TURNS = new Set([
+    'Time Walk', 'Time Warp', 'Temporal Manipulation', 'Capture of Jingzhou',
+    'Temporal Mastery', 'Nexus of Fate', 'Expropriate', 'Alrund\'s Epiphany',
+    'Beacon of Tomorrows', 'Part the Waterveil', 'Savor the Moment', 'Walk the Aeons',
+    'Karn\'s Temporal Sundering', 'Magistrate\'s Scepter', 'Medomai the Ageless',
+    'Echo of Eons', 'Emrakul, the Promised End',
+  ]);
+
+  // Mass land denial (Bracket 4 trigger)
+  const MASS_LAND_DENIAL = new Set([
+    'Armageddon', 'Ravages of War', 'Catastrophe', 'Decree of Annihilation',
+    'Jokulhaups', 'Obliterate', 'Sunder', 'Boom // Bust', 'Cataclysm',
+    'Fall of the Thran', 'Epicenter', 'Ruination', 'Price of Glory',
+    'Wildfire', 'Keldon Firebombers',
+  ]);
+
   type ColorKey = 'W' | 'U' | 'B' | 'R' | 'G' | 'M' | 'C';
   const COLOR_ORDER: ColorKey[] = ['W', 'U', 'B', 'R', 'G', 'M', 'C'];
   const COLOR_BG: Record<ColorKey, string> = {
@@ -1606,6 +1649,40 @@ function DeckDetail({
     }
     return TYPE_ORDER.map(t => ({ type: t, count: counts[t] })).filter(r => r.count > 0);
   }, [deck.cards, scryCardCache]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Commander bracket rating
+  const bracketRating = useMemo(() => {
+    const isCommander = ['commander', 'brawl', 'oathbreaker'].includes((deck.format ?? '').toLowerCase());
+    if (!isCommander) return null;
+
+    const cardNames = Object.keys(deck.cards || {});
+    const gameChangersInDeck = cardNames.filter(n => GAME_CHANGERS.has(n));
+    const extraTurnsInDeck = cardNames.filter(n => EXTRA_TURNS.has(n));
+    const massLandInDeck = cardNames.filter(n => MASS_LAND_DENIAL.has(n));
+    const hasInfiniteCombos = combos.length > 0;
+    const gcCount = gameChangersInDeck.length;
+
+    let bracket: 1 | 2 | 3 | 4 | 5;
+    let reasons: string[] = [];
+
+    if (gcCount >= 4 || massLandInDeck.length > 0) {
+      bracket = 4;
+      if (gcCount >= 4) reasons.push(`${gcCount} Game Changers`);
+      if (massLandInDeck.length > 0) reasons.push(`Mass land denial (${massLandInDeck[0]})`);
+    } else if (gcCount >= 1 || hasInfiniteCombos || extraTurnsInDeck.length > 0) {
+      bracket = 3;
+      if (gcCount > 0) reasons.push(`${gcCount} Game Changer${gcCount > 1 ? 's' : ''}: ${gameChangersInDeck.slice(0, 2).join(', ')}${gcCount > 2 ? '…' : ''}`);
+      if (hasInfiniteCombos) reasons.push(`${combos.length} combo${combos.length > 1 ? 's' : ''} detected`);
+      if (extraTurnsInDeck.length > 0) reasons.push(`Extra turns (${extraTurnsInDeck[0]})`);
+    } else if (cardNames.length > 0) {
+      bracket = 2;
+      reasons.push('No Game Changers, no infinite combos');
+    } else {
+      bracket = 1;
+    }
+
+    return { bracket, reasons, gcCount, gameChangersInDeck };
+  }, [deck.cards, deck.format, combos]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch combos once when deck has enough cards
   useEffect(() => {
@@ -2335,6 +2412,53 @@ function DeckDetail({
                       })}
                     </tbody>
                   </table>
+                </div>
+              )}
+
+              {/* Commander Bracket */}
+              {bracketRating && (
+                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+                  <h3 className="text-sm font-semibold text-zinc-100 mb-3">Commander Bracket</h3>
+                  {(() => {
+                    const { bracket, reasons, gcCount, gameChangersInDeck } = bracketRating;
+                    const BRACKET_META: Record<number, { label: string; color: string; bg: string; desc: string }> = {
+                      1: { label: 'Exhibition',  color: 'text-zinc-400',   bg: 'bg-zinc-700',    desc: 'Theme/flavor deck, minimal synergy' },
+                      2: { label: 'Core',        color: 'text-green-400',  bg: 'bg-green-900/40', desc: 'Focused strategy, no Game Changers or infinite combos' },
+                      3: { label: 'Upgraded',    color: 'text-blue-400',   bg: 'bg-blue-900/40',  desc: '1–3 Game Changers or some combos' },
+                      4: { label: 'Optimized',   color: 'text-amber-400',  bg: 'bg-amber-900/40', desc: '4+ Game Changers, fast combos, or mass land denial' },
+                      5: { label: 'cEDH',        color: 'text-red-400',    bg: 'bg-red-900/40',   desc: 'Fully tuned, tournament competitive' },
+                    };
+                    const meta = BRACKET_META[bracket];
+                    return (
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-3">
+                          {[1,2,3,4,5].map(b => (
+                            <div key={b} className={`flex-1 h-2 rounded-full transition-colors ${b <= bracket ? meta.bg.replace('/40','') : 'bg-zinc-800'}`} />
+                          ))}
+                        </div>
+                        <div className="flex items-baseline gap-2">
+                          <span className={`text-2xl font-black ${meta.color}`}>{bracket}</span>
+                          <span className={`text-sm font-semibold ${meta.color}`}>{meta.label}</span>
+                        </div>
+                        <p className="text-xs text-zinc-500">{meta.desc}</p>
+                        {reasons.length > 0 && (
+                          <ul className="space-y-0.5">
+                            {reasons.map((r, i) => (
+                              <li key={i} className="text-xs text-zinc-400 flex items-start gap-1.5">
+                                <span className={`mt-0.5 ${meta.color}`}>•</span>{r}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        {gameChangersInDeck.length > 0 && (
+                          <div className="pt-1 border-t border-zinc-800">
+                            <p className="text-[10px] text-zinc-600 uppercase tracking-wider font-semibold mb-1">Game Changers in deck ({gcCount})</p>
+                            <p className="text-xs text-zinc-500">{gameChangersInDeck.join(', ')}</p>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
             </div>
