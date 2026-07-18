@@ -1552,23 +1552,59 @@ function DeckDetail({
     }).catch(() => {});
   }, [missingCards.map(([n]) => n).join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Mana curve: count non-land cards by CMC (0–7+)
+  const BASIC_LANDS_SET = new Set(['Plains', 'Island', 'Swamp', 'Mountain', 'Forest', 'Wastes',
+    'Snow-Covered Plains', 'Snow-Covered Island', 'Snow-Covered Swamp',
+    'Snow-Covered Mountain', 'Snow-Covered Forest']);
+
+  type ColorKey = 'W' | 'U' | 'B' | 'R' | 'G' | 'M' | 'C';
+  const COLOR_ORDER: ColorKey[] = ['W', 'U', 'B', 'R', 'G', 'M', 'C'];
+  const COLOR_BG: Record<ColorKey, string> = {
+    W: '#f9fafb', U: '#3b82f6', B: '#6b7280', R: '#ef4444', G: '#22c55e', M: '#f59e0b', C: '#78716c',
+  };
+
+  // Mana curve: stacked by color, non-land cards only
   const manaCurve = useMemo(() => {
-    const BASIC_LANDS = new Set(['Plains', 'Island', 'Swamp', 'Mountain', 'Forest', 'Wastes',
-      'Snow-Covered Plains', 'Snow-Covered Island', 'Snow-Covered Swamp',
-      'Snow-Covered Mountain', 'Snow-Covered Forest']);
-    const buckets: number[] = [0, 0, 0, 0, 0, 0, 0, 0]; // 0,1,2,3,4,5,6,7+
+    type Bucket = Record<ColorKey, number> & { total: number };
+    const empty = (): Bucket => ({ W: 0, U: 0, B: 0, R: 0, G: 0, M: 0, C: 0, total: 0 });
+    const buckets: Bucket[] = Array.from({ length: 8 }, empty);
     for (const [name, qty] of Object.entries(deck.cards || {})) {
-      if (BASIC_LANDS.has(name)) continue;
+      if (BASIC_LANDS_SET.has(name)) continue;
       const data = getCardData(name);
       const typeLine = (data?.typeLine ?? '').toLowerCase();
       if (typeLine.includes('land')) continue;
       const cmc = data?.cmc ?? null;
       if (cmc === null) continue;
-      const bucket = Math.min(Math.floor(cmc), 7);
-      buckets[bucket] += qty;
+      const colors: string[] = data?.colors ?? [];
+      let colorKey: ColorKey;
+      if (colors.length === 0) colorKey = 'C';
+      else if (colors.length > 1) colorKey = 'M';
+      else colorKey = colors[0] as ColorKey;
+      const b = Math.min(Math.floor(cmc), 7);
+      buckets[b][colorKey] += qty;
+      buckets[b].total += qty;
     }
     return buckets;
+  }, [deck.cards, scryCardCache]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Card type breakdown
+  const cardTypeCounts = useMemo(() => {
+    const TYPE_ORDER = ['Creature', 'Instant', 'Sorcery', 'Enchantment', 'Artifact', 'Planeswalker', 'Battle', 'Land', 'Other'];
+    const counts: Record<string, number> = Object.fromEntries(TYPE_ORDER.map(t => [t, 0]));
+    for (const [name, qty] of Object.entries(deck.cards || {})) {
+      const data = getCardData(name);
+      const tl = (data?.typeLine ?? (BASIC_LANDS_SET.has(name) ? 'Basic Land' : '')).toLowerCase();
+      if (tl.includes('creature')) counts['Creature'] += qty;
+      else if (tl.includes('instant')) counts['Instant'] += qty;
+      else if (tl.includes('sorcery')) counts['Sorcery'] += qty;
+      else if (tl.includes('enchantment')) counts['Enchantment'] += qty;
+      else if (tl.includes('artifact')) counts['Artifact'] += qty;
+      else if (tl.includes('planeswalker')) counts['Planeswalker'] += qty;
+      else if (tl.includes('battle')) counts['Battle'] += qty;
+      else if (tl.includes('land')) counts['Land'] += qty;
+      else if (!data) counts['Other'] += qty; // unknown (data not loaded yet)
+      else counts['Other'] += qty;
+    }
+    return TYPE_ORDER.map(t => ({ type: t, count: counts[t] })).filter(r => r.count > 0);
   }, [deck.cards, scryCardCache]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch combos once when deck has enough cards
@@ -2230,25 +2266,75 @@ function DeckDetail({
       {!editMode && (
           <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
 
-            {/* Mana Curve */}
-            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
-              <h3 className="text-sm font-semibold text-zinc-100 mb-4">Mana Curve</h3>
-              {manaCurve.every(v => v === 0) ? (
-                <p className="text-xs text-zinc-600">Loading card data…</p>
-              ) : (
-                <div className="flex items-end gap-1.5">
-                  {manaCurve.map((count, i) => {
-                    const max = Math.max(...manaCurve, 1);
-                    const barPx = Math.round((count / max) * 80);
-                    return (
-                      <div key={i} className="flex flex-col items-center gap-1 flex-1">
-                        <span className="text-[10px] text-zinc-400 font-medium" style={{ visibility: count > 0 ? 'visible' : 'hidden' }}>{count}</span>
-                        <div className="w-full rounded-t bg-amber-500/80"
-                          style={{ height: `${count > 0 ? Math.max(barPx, 4) : 0}px` }} />
-                        <span className="text-[10px] text-zinc-500">{i === 7 ? '7+' : i}</span>
-                      </div>
-                    );
-                  })}
+            {/* Mana Curve + Type Breakdown */}
+            <div className="space-y-5">
+              <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+                <h3 className="text-sm font-semibold text-zinc-100 mb-4">Mana Curve</h3>
+                {manaCurve.every(b => b.total === 0) ? (
+                  <p className="text-xs text-zinc-600">Loading card data…</p>
+                ) : (
+                  <>
+                    <div className="flex items-end gap-1.5 mb-2">
+                      {manaCurve.map((bucket, i) => {
+                        const max = Math.max(...manaCurve.map(b => b.total), 1);
+                        const totalPx = Math.round((bucket.total / max) * 88);
+                        return (
+                          <div key={i} className="flex flex-col items-center gap-1 flex-1">
+                            <span className="text-[10px] text-zinc-400 font-medium" style={{ visibility: bucket.total > 0 ? 'visible' : 'hidden' }}>{bucket.total}</span>
+                            <div className="w-full rounded-t overflow-hidden flex flex-col-reverse" style={{ height: `${bucket.total > 0 ? Math.max(totalPx, 4) : 0}px` }}>
+                              {COLOR_ORDER.map(c => bucket[c] > 0 && (
+                                <div key={c} style={{ height: `${Math.round((bucket[c] / bucket.total) * Math.max(totalPx, 4))}px`, backgroundColor: COLOR_BG[c] }} />
+                              ))}
+                            </div>
+                            <span className="text-[10px] text-zinc-500">{i === 7 ? '7+' : i}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {/* Color legend */}
+                    <div className="flex flex-wrap gap-x-3 gap-y-1 mt-3">
+                      {COLOR_ORDER.map(c => {
+                        const total = manaCurve.reduce((s, b) => s + b[c], 0);
+                        if (total === 0) return null;
+                        const labels: Record<ColorKey, string> = { W: 'White', U: 'Blue', B: 'Black', R: 'Red', G: 'Green', M: 'Multi', C: 'Colorless' };
+                        return (
+                          <span key={c} className="flex items-center gap-1 text-[10px] text-zinc-400">
+                            <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: COLOR_BG[c] }} />
+                            {labels[c]} ({total})
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Card Type Breakdown */}
+              {cardTypeCounts.length > 0 && (
+                <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+                  <h3 className="text-sm font-semibold text-zinc-100 mb-3">Card Types</h3>
+                  <table className="w-full text-xs">
+                    <tbody>
+                      {cardTypeCounts.map(({ type, count }) => {
+                        const total = cardTypeCounts.reduce((s, r) => s + r.count, 0);
+                        const pct = Math.round((count / total) * 100);
+                        return (
+                          <tr key={type} className="border-b border-zinc-800 last:border-0">
+                            <td className="py-1.5 text-zinc-400 w-28">{type}</td>
+                            <td className="py-1.5 text-zinc-100 font-semibold w-8 text-right">{count}</td>
+                            <td className="py-1.5 pl-3 w-full">
+                              <div className="flex items-center gap-2">
+                                <div className="flex-1 bg-zinc-800 rounded-full h-1.5">
+                                  <div className="bg-amber-500/70 h-1.5 rounded-full" style={{ width: `${pct}%` }} />
+                                </div>
+                                <span className="text-zinc-600 w-7 text-right">{pct}%</span>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </div>
