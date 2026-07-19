@@ -881,6 +881,23 @@ export default function ShopInventoryBrowser({ items: rawItems, onRefresh, total
               </option>
             ))}
           </select>
+
+          <span className="text-xs text-zinc-500 ml-auto">Sort</span>
+          <select value={sortKey} onChange={e => setSortKey(e.target.value as SortKey)}
+            title="Sort by" aria-label="Sort by"
+            className="bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 text-xs text-zinc-300 focus:outline-none focus:border-amber-500">
+            <option value="name">Name</option>
+            <option value="price">Price</option>
+            <option value="quantity">Quantity</option>
+            <option value="cmc">Mana value</option>
+            <option value="rarity">Rarity</option>
+            <option value="condition">Condition</option>
+          </select>
+          <button type="button" onClick={() => setSortAsc(v => !v)}
+            title={sortAsc ? 'Ascending' : 'Descending'}
+            className="bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 text-xs text-zinc-300 hover:text-zinc-100 hover:border-zinc-600">
+            {sortAsc ? '↑' : '↓'}
+          </button>
         </div>
         {activeFilterCount > 0 && (
           <button type="button" onClick={clearAllFilters}

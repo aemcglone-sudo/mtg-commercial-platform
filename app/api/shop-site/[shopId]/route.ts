@@ -20,12 +20,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ shop
   const row = await findOne<{
     site_status: string; template: string;
     theme_primary_hex: string; theme_accent_hex: string; theme_mode: string; font_pairing: string;
-    about_text: string | null; published_at: string | null;
+    about_text: string | null; description: string | null; published_at: string | null;
     hours: string | null; social_links: string; slug: string; name: string;
     banner_url: string | null;
   }>(
     `SELECT site_status, template, theme_primary_hex, theme_accent_hex, theme_mode, font_pairing,
-            about_text, published_at::text, hours::text, social_links::text, slug, name,
+            about_text, description, published_at::text, hours::text, social_links::text, slug, name,
             "bannerUrl" AS banner_url
      FROM shops WHERE id = ?`,
     [shopId]
@@ -73,7 +73,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ shop
     themeAccentHex: row.theme_accent_hex,
     themeMode: row.theme_mode ?? 'dark',
     fontPairing: row.font_pairing,
-    aboutText: row.about_text,
+    aboutText: row.about_text ?? row.description,
     publishedAt: row.published_at,
     hours: row.hours ? JSON.parse(row.hours) : {},
     socialLinks: row.social_links ? JSON.parse(row.social_links) : {},

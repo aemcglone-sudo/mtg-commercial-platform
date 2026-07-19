@@ -409,7 +409,7 @@ export default function CollectionBrowser({ cards, totalCards, detectedFormat, d
             ))}
           </FilterRow>
 
-          <div className="flex items-center gap-1.5 ml-auto">
+          <div className="flex items-center gap-1.5">
             <span className="text-xs text-zinc-500">Set</span>
             <select value={selectedSet} onChange={(e) => setSelectedSet(e.target.value)}
               title="Filter by set" aria-label="Filter by set"
@@ -418,6 +418,28 @@ export default function CollectionBrowser({ cards, totalCards, detectedFormat, d
               <option value="">All sets</option>
               {setOptions.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
+          </div>
+
+          <div className="flex items-center gap-1.5 ml-auto">
+            <span className="text-xs text-zinc-500">Sort</span>
+            <select value={sortKey} onChange={(e) => setSortKey(e.target.value as SortKey)}
+              title="Sort by" aria-label="Sort by"
+              className="bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 text-xs text-zinc-300 focus:outline-none focus:border-amber-500"
+            >
+              <option value="name">Name</option>
+              <option value="price">Price</option>
+              <option value="quantity">Quantity</option>
+              <option value="cmc">Mana value</option>
+              <option value="rarity">Rarity</option>
+              <option value="type">Type</option>
+              <option value="colors">Colors</option>
+            </select>
+            <button type="button" onClick={() => setSortAsc((v) => !v)}
+              title={sortAsc ? 'Ascending' : 'Descending'}
+              className="bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 text-xs text-zinc-300 hover:text-zinc-100 hover:border-zinc-600"
+            >
+              {sortAsc ? '↑' : '↓'}
+            </button>
           </div>
         </div>
 

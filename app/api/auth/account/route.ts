@@ -6,13 +6,19 @@ export async function GET(req: NextRequest) {
   const session = getSession(req);
   if (!session) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
-  const user = await findOne<{ name: string | null; email: string }>(
-    'SELECT name, email FROM users WHERE id = ?',
+  const user = await findOne<{ name: string | null; email: string; avatar_url: string | null; allowed_roles: string[]; role: string }>(
+    `SELECT name, email, "avatarUrl" AS avatar_url, allowed_roles, role FROM users WHERE id = ?`,
     [session.userId]
   );
 
   if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
-  return NextResponse.json(user);
+  return NextResponse.json({
+    name: user.name,
+    email: user.email,
+    avatarUrl: user.avatar_url,
+    allowedRoles: user.allowed_roles ?? [],
+    role: session.role,
+  });
 }
 
 export async function PATCH(req: NextRequest) {

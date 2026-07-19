@@ -14,6 +14,7 @@ const PUBLIC_PATHS = [
 const PUBLIC_PREFIXES = [
   '/register',
   '/api/auth/register',
+  '/api/auth/google',
   '/api/background/',
   '/api/cron/',
   '/storefront/',

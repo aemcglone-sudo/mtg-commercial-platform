@@ -8,14 +8,16 @@ export async function GET(req: NextRequest) {
   const session = getSession(req);
   if (session?.role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
-  const users = await findMany<{
+  const rows = await findMany<{
     id: string;
     name: string | null;
     email: string;
     role: string;
+    allowed_roles: string[];
     createdAt: string;
-  }>('SELECT id, name, email, role, "createdAt" FROM users ORDER BY "createdAt" DESC', []);
+  }>('SELECT id, name, email, role, allowed_roles, "createdAt" FROM users ORDER BY "createdAt" DESC', []);
 
+  const users = rows.map(u => ({ ...u, allowedRoles: u.allowed_roles ?? [] }));
   return NextResponse.json({ users });
 }
 

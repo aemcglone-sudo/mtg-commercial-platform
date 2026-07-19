@@ -7,6 +7,7 @@ interface User {
   name: string | null;
   email: string;
   role: string;
+  allowedRoles: string[];
   createdAt: string;
 }
 
@@ -56,6 +57,17 @@ export default function AdminUsersPage() {
     } finally {
       setAddSaving(false);
     }
+  }
+
+  async function handleRoleToggle(user: User, role: string) {
+    const hasRole = user.allowedRoles.includes(role);
+    const body = hasRole ? { revoke: role } : { grant: role };
+    const res = await fetch(`/api/admin/users/${user.id}/roles`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (res.ok) load();
   }
 
   async function handleDelete(user: User) {
@@ -149,6 +161,7 @@ export default function AdminUsersPage() {
                 <th className="text-left px-5 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Name</th>
                 <th className="text-left px-5 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Email</th>
                 <th className="text-left px-5 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Role</th>
+                <th className="text-left px-5 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Can Switch To</th>
                 <th className="text-left px-5 py-3 text-xs font-semibold text-zinc-500 uppercase tracking-wide">Joined</th>
                 <th className="px-5 py-3" scope="col"><span className="sr-only">Actions</span></th>
               </tr>
@@ -162,6 +175,30 @@ export default function AdminUsersPage() {
                     <span className={`px-2 py-0.5 rounded-md text-xs font-medium border ${ROLE_STYLES[u.role] ?? ROLE_STYLES.collector}`}>
                       {u.role.replace('_', ' ')}
                     </span>
+                  </td>
+                  <td className="px-5 py-3.5">
+                    {u.role !== 'admin' && (
+                      <div className="flex items-center gap-1.5">
+                        {(['collector', 'shop_owner'] as const).map(r => {
+                          const has = (u.allowedRoles ?? []).includes(r);
+                          return (
+                            <button
+                              key={r}
+                              type="button"
+                              onClick={() => handleRoleToggle(u, r)}
+                              className={`px-2 py-0.5 rounded text-xs font-medium border transition-colors ${
+                                has
+                                  ? 'bg-emerald-950 text-emerald-400 border-emerald-800 hover:bg-red-950 hover:text-red-400 hover:border-red-800'
+                                  : 'bg-zinc-800 text-zinc-500 border-zinc-700 hover:bg-emerald-950 hover:text-emerald-400 hover:border-emerald-800'
+                              }`}
+                              title={has ? `Revoke ${r.replace('_',' ')}` : `Grant ${r.replace('_',' ')}`}
+                            >
+                              {r.replace('_', ' ')}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                   </td>
                   <td className="px-5 py-3.5 text-zinc-500">
                     {new Date(u.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}

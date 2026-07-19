@@ -14,8 +14,9 @@ model User {
   googleId             String?  @unique
   appleId              String?  @unique
   avatarUrl            String?
+  allowedRoles         String[] @default([])
   magicPreferencesJson String?
-  role                 String   @default("enthusiast")
+  role                 String   @default("collector")
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 

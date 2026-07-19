@@ -12,6 +12,83 @@ interface SavedInfo {
   savedAt: string;
 }
 
+function AvatarUploadSection() {
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const [msg, setMsg] = useState('');
+
+  useEffect(() => {
+    fetch('/api/auth/account')
+      .then(r => r.ok ? r.json() : null)
+      .then((d: { avatarUrl?: string | null } | null) => { if (d) setAvatarUrl(d.avatarUrl ?? null); })
+      .catch(() => {});
+  }, []);
+
+  async function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setMsg('');
+    const form = new FormData();
+    form.append('file', file);
+    const res = await fetch('/api/user/avatar', { method: 'POST', body: form });
+    if (res.ok) {
+      const data = await res.json() as { url: string };
+      setAvatarUrl(data.url + '?t=' + Date.now());
+      setMsg('Photo updated.');
+    } else {
+      const err = await res.json().catch(() => ({})) as { error?: string };
+      setMsg(err.error ?? 'Upload failed.');
+    }
+    setUploading(false);
+    e.target.value = '';
+  }
+
+  async function handleRemove() {
+    setRemoving(true);
+    setMsg('');
+    const res = await fetch('/api/user/avatar', { method: 'DELETE' });
+    if (res.ok) { setAvatarUrl(null); setMsg('Photo removed.'); }
+    setRemoving(false);
+  }
+
+  const initials = '??';
+
+  return (
+    <div className="border-t border-zinc-800 pt-6 max-w-sm space-y-3">
+      <h3 className="text-sm font-semibold text-zinc-300">Profile Photo</h3>
+      <div className="flex items-center gap-4">
+        {avatarUrl ? (
+          <img src={avatarUrl} alt="" className="w-14 h-14 rounded-full object-cover border-2 border-zinc-700" />
+        ) : (
+          <div className="w-14 h-14 rounded-full bg-amber-500 flex items-center justify-center text-lg font-bold text-black border-2 border-zinc-700">
+            {initials}
+          </div>
+        )}
+        <div className="space-y-2">
+          <label className="cursor-pointer inline-block px-4 py-2 rounded-xl text-sm border border-zinc-700 text-zinc-300 hover:border-zinc-500 hover:text-zinc-100 transition-colors">
+            {uploading ? 'Uploading…' : 'Upload photo'}
+            <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handleFile} disabled={uploading} />
+          </label>
+          {avatarUrl && (
+            <button
+              type="button"
+              onClick={handleRemove}
+              disabled={removing}
+              className="block text-xs text-red-400 hover:text-red-300 transition-colors"
+            >
+              {removing ? 'Removing…' : 'Remove photo'}
+            </button>
+          )}
+        </div>
+      </div>
+      {msg && <p className="text-sm text-emerald-400">{msg}</p>}
+      <p className="text-xs text-zinc-600">JPG, PNG, or WebP · max 2 MB</p>
+    </div>
+  );
+}
+
 function SettingsContent() {
   const router = useRouter();
   const params = useSearchParams();
@@ -250,6 +327,8 @@ function SettingsContent() {
                   </button>
                 </form>
               )}
+
+              <AvatarUploadSection />
 
               <div className="border-t border-zinc-800 pt-6 max-w-sm space-y-3">
                 <h3 className="text-sm font-semibold text-zinc-300">Password</h3>
