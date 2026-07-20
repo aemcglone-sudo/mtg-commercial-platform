@@ -21,7 +21,26 @@ export interface CollectionCardData {
   oracleText?: string | null;
   artist?: string | null;
   collectionType?: 'paper' | 'arena';
+  categories?: string[];
 }
+
+export const CARD_CATEGORY_LIST = [
+  'Ramp', 'Draw', 'Tutors', 'Removal', 'Board Wipes',
+  'Counters', 'Recursion', 'Evasion', 'Pillow Fort', 'Utility',
+] as const;
+
+const CATEGORY_COLORS: Record<string, string> = {
+  'Ramp': 'bg-green-950 text-green-400 border-green-800',
+  'Draw': 'bg-blue-950 text-blue-400 border-blue-800',
+  'Tutors': 'bg-purple-950 text-purple-400 border-purple-800',
+  'Removal': 'bg-red-950 text-red-400 border-red-800',
+  'Board Wipes': 'bg-rose-950 text-rose-400 border-rose-800',
+  'Counters': 'bg-cyan-950 text-cyan-400 border-cyan-800',
+  'Recursion': 'bg-amber-950 text-amber-400 border-amber-800',
+  'Evasion': 'bg-indigo-950 text-indigo-400 border-indigo-800',
+  'Pillow Fort': 'bg-pink-950 text-pink-400 border-pink-800',
+  'Utility': 'bg-zinc-800 text-zinc-400 border-zinc-700',
+};
 
 interface Props {
   cards: CollectionCardData[];
@@ -144,6 +163,7 @@ export default function CollectionBrowser({ cards, totalCards, detectedFormat, d
   const [qtyFilter, setQtyFilter] = useState<QtyFilter>('all');
   const [selectedSet, setSelectedSet] = useState<string>('');
   const [legendaryOnly, setLegendaryOnly] = useState(false);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [hoveredCard, setHoveredCard] = useState<CollectionCardData | null>(null);
   const [hoveredRulesHint, setHoveredRulesHint] = useState<string | null>(null);
   const [removingName, setRemovingName] = useState<string | null>(null);
@@ -210,6 +230,7 @@ export default function CollectionBrowser({ cards, totalCards, detectedFormat, d
       }
       if (selectedRarities.length && c.rarity && !selectedRarities.includes(c.rarity as Rarity)) return false;
       if (!matchesCmc(c.cmc, selectedCmc)) return false;
+      if (selectedCategories.length && !selectedCategories.some((cat) => c.categories?.includes(cat))) return false;
       return true;
     });
     list.sort((a, b) => {
@@ -225,18 +246,19 @@ export default function CollectionBrowser({ cards, totalCards, detectedFormat, d
     });
     return list;
   }, [localCards, search, sortKey, sortAsc, priceTier, qtyFilter, selectedSet,
-      selectedColors, selectedTypes, selectedRarities, selectedCmc, legendaryOnly]);
+      selectedColors, selectedTypes, selectedRarities, selectedCmc, legendaryOnly, selectedCategories]);
 
   const activeFilterCount = [
     selectedColors.length > 0, selectedTypes.length > 0,
     selectedRarities.length > 0, selectedCmc.length > 0,
     priceTier !== 'all', qtyFilter !== 'all', !!selectedSet, legendaryOnly,
+    selectedCategories.length > 0,
   ].filter(Boolean).length;
 
   function clearAllFilters() {
     setSelectedColors([]); setSelectedTypes([]); setSelectedRarities([]);
     setSelectedCmc([]); setPriceTier('all'); setQtyFilter('all'); setSelectedSet('');
-    setLegendaryOnly(false);
+    setLegendaryOnly(false); setSelectedCategories([]);
   }
 
   const totalValue = localCards.reduce((s, c) => s + c.quantity * (c.priceUsd ?? 0), 0);
@@ -393,6 +415,15 @@ export default function CollectionBrowser({ cards, totalCards, detectedFormat, d
           ))}
         </FilterRow>
 
+        {/* Category */}
+        <FilterRow label="Category">
+          {CARD_CATEGORY_LIST.map((cat) => (
+            <Pill key={cat} active={selectedCategories.includes(cat)}
+              title={`Filter by ${cat}`}
+              onClick={() => setSelectedCategories(toggleItem(selectedCategories, cat))}>{cat}</Pill>
+          ))}
+        </FilterRow>
+
         {/* Price + Copies + Collection Type + Set */}
         <div className="flex flex-wrap gap-x-4 gap-y-2 pt-1 border-t border-zinc-800">
           <FilterRow label="Price">
@@ -496,6 +527,16 @@ export default function CollectionBrowser({ cards, totalCards, detectedFormat, d
                   ${card.priceUsd.toFixed(2)}
                 </span>
               )}
+              {/* Category badges */}
+              {card.categories && card.categories.length > 0 && (
+                <div className="absolute top-7 left-1 right-1 flex flex-wrap gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                  {card.categories.slice(0, 2).map((cat) => (
+                    <span key={cat} className={`text-[9px] font-semibold px-1 py-0.5 rounded border ${CATEGORY_COLORS[cat] ?? 'bg-zinc-800 text-zinc-400 border-zinc-700'}`}>
+                      {cat}
+                    </span>
+                  ))}
+                </div>
+              )}
               {/* Rules hint indicator */}
               {getRulesHint(card.typeLine) && (
                 <button
@@ -548,6 +589,7 @@ export default function CollectionBrowser({ cards, totalCards, detectedFormat, d
                   </button>
                 </th>
                 <th className="text-left px-3 py-3 text-zinc-400 font-medium hidden lg:table-cell w-24">Rarity</th>
+                <th className="text-left px-3 py-3 text-zinc-400 font-medium hidden xl:table-cell">Category</th>
                 <th className="text-right px-3 py-3">
                   <button type="button" onClick={() => toggleSort('quantity')} className="text-zinc-400 hover:text-zinc-200 font-medium">
                     Qty{sortIcon('quantity')}
@@ -598,6 +640,15 @@ export default function CollectionBrowser({ cards, totalCards, detectedFormat, d
                         {card.rarity[0].toUpperCase()}
                       </span>
                     ) : '—'}
+                  </td>
+                  <td className="px-3 py-2.5 hidden xl:table-cell">
+                    <div className="flex flex-wrap gap-1">
+                      {(card.categories ?? []).map((cat) => (
+                        <span key={cat} className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${CATEGORY_COLORS[cat] ?? 'bg-zinc-800 text-zinc-400 border-zinc-700'}`}>
+                          {cat}
+                        </span>
+                      ))}
+                    </div>
                   </td>
                   <td className="px-3 py-2.5 text-right tabular-nums">×{card.quantity}</td>
                   <td className="px-3 py-2.5 text-right tabular-nums">

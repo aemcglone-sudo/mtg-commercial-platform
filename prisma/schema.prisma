@@ -203,6 +203,18 @@ model DeckAnalysis {
   @@map("deck_analysis")
 }
 
+model CardCategory {
+  id                     String   @id @default(cuid())
+  cardName               String   @unique
+  categories             String[]
+  classificationMethod   String   @default("rules")
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@index([cardName])
+  @@map("card_categories")
+}
+
 model CardSynergy {
   id             String  @id @default(cuid())
   cardName       String

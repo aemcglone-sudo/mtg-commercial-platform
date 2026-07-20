@@ -1,6 +1,7 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { getAuthenticatedUserId } from '@/lib/auth';
 import { findOne, findMany } from '@/lib/db';
+import { getCategoriesForCards } from '@/lib/card-categories';
 
 interface Row { parsedData: string; rawText: string; detectedFormat: string | null; createdAt: string }
 interface InventoryItem { name: string; quantity: number; collectionType?: string | null }
@@ -81,6 +82,9 @@ export async function GET(req: NextRequest) {
     const paperCards = collectionCards.filter(c => c.collectionType !== 'arena');
     console.log(`Returning collection with ${paperCards.length} paper cards (${collectionCards.length - paperCards.length} arena cards excluded)`);
 
+    const categoryMap = await getCategoriesForCards(paperCards);
+    const categorizedCards = paperCards.map((c) => ({ ...c, categories: categoryMap.get(c.name) ?? [] }));
+
     const collectionSize = paperCards.length;
     const totalCards = paperCards.reduce((sum, item) => sum + item.quantity, 0);
 
@@ -88,7 +92,7 @@ export async function GET(req: NextRequest) {
       collectionSize,
       totalCards,
       detectedFormat: latestUpload?.detectedFormat || 'Unknown',
-      collectionCards: paperCards,
+      collectionCards: categorizedCards,
       rawText: latestUpload?.rawText || '',
       savedAt: latestUpload?.createdAt || new Date().toISOString(),
     });
