@@ -102,7 +102,7 @@ function getColorGroup(colors: string[] | null | undefined): ColorId {
 function FilterRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-center gap-2 flex-wrap">
-      <span className="text-xs text-zinc-500 w-10 shrink-0">{label}</span>
+      <span className="text-xs text-zinc-500 w-16 shrink-0">{label}</span>
       <div className="flex flex-wrap gap-1">{children}</div>
     </div>
   );
