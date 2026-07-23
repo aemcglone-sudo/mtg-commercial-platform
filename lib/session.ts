@@ -7,6 +7,7 @@ export interface Session {
   userId: string;
   role: Role;
   email: string;
+  mustChangePassword?: boolean;
 }
 
 const COOKIE_NAME = 'session';

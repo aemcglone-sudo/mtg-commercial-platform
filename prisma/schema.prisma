@@ -17,6 +17,7 @@ model User {
   allowedRoles         String[] @default([])
   magicPreferencesJson String?
   role                 String   @default("collector")
+  mustChangePassword   Boolean  @default(false)
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 

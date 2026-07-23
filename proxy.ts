@@ -6,7 +6,9 @@ const PUBLIC_PATHS = [
   '/collector/login',
   '/shop/login',
   '/admin/login',
+  '/portal',
   '/api/auth/login',
+  '/api/auth/portal-login',
   '/api/auth/logout',
   '/api/health',
 ];
@@ -49,6 +51,15 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
+  // Forced password change — locks the account to this one page until done
+  if (
+    session.mustChangePassword &&
+    pathname !== '/portal/change-password' &&
+    pathname !== '/api/auth/portal-change-password'
+  ) {
+    return NextResponse.redirect(new URL('/portal/change-password', request.url));
+  }
+
   // Admin routes — only admin role
   if (pathname.startsWith('/admin') && session.role !== 'admin') {
     return NextResponse.redirect(new URL('/login', request.url));
@@ -60,7 +71,7 @@ export function proxy(request: NextRequest) {
   }
 
   // Redirect already-authenticated users away from login/register pages
-  const isLoginPage = ['/login', '/collector/login', '/shop/login', '/admin/login'].includes(pathname);
+  const isLoginPage = ['/login', '/collector/login', '/shop/login', '/admin/login', '/portal'].includes(pathname);
   if (isLoginPage || pathname.startsWith('/register')) {
     if (session.role === 'admin') return NextResponse.redirect(new URL('/admin', request.url));
     if (session.role === 'shop_owner') return NextResponse.redirect(new URL('/shop/dashboard', request.url));
