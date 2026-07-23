@@ -153,7 +153,7 @@ function HomeContent() {
           <>
             {/* No collection yet - only on collection tab */}
             {!collection && activeTab === 'collection' && (
-              <div className="text-center py-24 space-y-6">
+              <div className="text-center py-24 space-y-6" data-tour="collection-upload">
                 <div className="text-6xl">🃏</div>
                 <div className="space-y-2">
                   <h2 className="text-2xl font-bold">No collection yet</h2>
@@ -183,10 +183,12 @@ function HomeContent() {
               />
             )}
             {activeTab === 'insights' && collection && (
-              <CollectionInsightsTab cards={collection.collectionCards} />
+              <div data-tour="insights-panel">
+                <CollectionInsightsTab cards={collection.collectionCards} />
+              </div>
             )}
             {activeTab === 'insights' && !collection && (
-              <div className="text-center py-24 space-y-6">
+              <div className="text-center py-24 space-y-6" data-tour="insights-panel">
                 <div className="text-6xl">📊</div>
                 <div className="space-y-2">
                   <h2 className="text-2xl font-bold">Upload a collection first</h2>
@@ -203,23 +205,29 @@ function HomeContent() {
               </div>
             )}
             {activeTab === 'mydecks' && (
-              <MyDecksTab collection={collection?.collectionCards || []} />
+              <div data-tour="mydecks-panel">
+                <MyDecksTab collection={collection?.collectionCards || []} />
+              </div>
             )}
             {activeTab === 'decks' && (
-              <DeckFinderTab
-                decks={decks}
-                analyzing={analyzing}
-                error={analyzeError}
-                onAnalyze={handleAnalyze}
-                collection={collection?.collectionCards || []}
-              />
+              <div data-tour="topdecks-panel">
+                <DeckFinderTab
+                  decks={decks}
+                  analyzing={analyzing}
+                  error={analyzeError}
+                  onAnalyze={handleAnalyze}
+                  collection={collection?.collectionCards || []}
+                />
+              </div>
             )}
-            {activeTab === 'news' && <MTGNewsTab />}
+            {activeTab === 'news' && <div data-tour="news-panel"><MTGNewsTab /></div>}
             {activeTab === 'chat' && collection && (
-              <CollectionChatTab collection={collection} prefillMessage={chatMessage} onMessageSent={() => setChatMessage('')} />
+              <div data-tour="khoa-chat-panel">
+                <CollectionChatTab collection={collection} prefillMessage={chatMessage} onMessageSent={() => setChatMessage('')} />
+              </div>
             )}
             {activeTab === 'chat' && !collection && (
-              <div className="text-center py-24 space-y-6">
+              <div className="text-center py-24 space-y-6" data-tour="khoa-chat-panel">
                 <div className="text-6xl">💬</div>
                 <div className="space-y-2">
                   <h2 className="text-2xl font-bold">Upload a collection first</h2>

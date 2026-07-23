@@ -3,22 +3,23 @@
 import { useState, useEffect, useCallback } from 'react';
 import NavSidebar from '@/components/NavSidebar';
 import ComboToast from '@/components/ComboToast';
+import ProductTour from '@/components/ProductTour';
 import { findCombos, type Combo } from '@/lib/combo-finder';
 
 const NAV = [
-  { href: '/?tab=collection', label: 'My Collection', exact: true },
-  { href: '/?tab=insights',   label: 'Insights' },
-  { href: '/?tab=mydecks',    label: 'My Decks & Lists' },
-  { href: '/?tab=decks',      label: 'Top Decks' },
-  { href: '/?tab=news',       label: 'News' },
-  { href: '/?tab=chat',       label: 'Ask Khoa' },
-  { href: '/local-play',      label: 'Local Play' },
-  { label: 'Shop', dividerAfter: true, children: [
+  { href: '/?tab=collection', label: 'My Collection', exact: true, tourId: 'nav-collection' },
+  { href: '/?tab=insights',   label: 'Insights', tourId: 'nav-insights' },
+  { href: '/?tab=mydecks',    label: 'My Decks & Lists', tourId: 'nav-mydecks' },
+  { href: '/?tab=decks',      label: 'Top Decks', tourId: 'nav-decks' },
+  { href: '/?tab=news',       label: 'News', tourId: 'nav-news' },
+  { href: '/?tab=chat',       label: 'Ask Khoa', tourId: 'nav-chat' },
+  { href: '/local-play',      label: 'Local Play', tourId: 'nav-local-play' },
+  { label: 'Shop', dividerAfter: true, tourId: 'nav-shop-group', children: [
     { href: '/stores',            label: 'Nearby Shops' },
     { href: '/marketplace/find',  label: 'Card Finder' },
     { href: '/products',          label: 'MTG Products' },
   ]},
-  { href: '/settings',        label: 'Settings' },
+  { href: '/settings',        label: 'Settings', tourId: 'nav-settings' },
 ];
 
 const SEEN_KEY = 'grimoire_seen_combos';
@@ -69,6 +70,7 @@ export default function CollectorLayout({ children }: { children: React.ReactNod
       {newCombos.length > 0 && (
         <ComboToast newCombos={newCombos} onDismiss={() => setNewCombos([])} />
       )}
+      <ProductTour />
     </div>
   );
 }

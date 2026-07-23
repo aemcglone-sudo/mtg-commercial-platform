@@ -11,7 +11,8 @@ export interface NavItem {
   label: string;
   exact?: boolean;
   dividerAfter?: boolean;
-  children?: { href: string; label: string; exact?: boolean }[];
+  tourId?: string;
+  children?: { href: string; label: string; exact?: boolean; tourId?: string }[];
 }
 
 interface NavSidebarProps {
@@ -76,6 +77,7 @@ function NavContent({ items, brandLabel, onNavigate }: NavSidebarProps & { onNav
                 <>
                   <button
                     type="button"
+                    data-tour={item.tourId}
                     onClick={() => toggleGroup(item.label)}
                     className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                       active
@@ -97,6 +99,7 @@ function NavContent({ items, brandLabel, onNavigate }: NavSidebarProps & { onNav
                         <Link
                           key={child.href}
                           href={child.href}
+                          data-tour={child.tourId}
                           onClick={onNavigate}
                           className={`block px-3 py-2 rounded-lg text-sm transition-colors ${
                             isActive(child.href, child.exact)
@@ -113,6 +116,7 @@ function NavContent({ items, brandLabel, onNavigate }: NavSidebarProps & { onNav
               ) : (
                 <Link
                   href={item.href!}
+                  data-tour={item.tourId}
                   onClick={onNavigate}
                   className={`block px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                     active
@@ -131,7 +135,7 @@ function NavContent({ items, brandLabel, onNavigate }: NavSidebarProps & { onNav
         })}
       </nav>
 
-      <div className="px-4 py-4 border-t border-zinc-800">
+      <div className="px-4 py-4 border-t border-zinc-800" data-tour="avatar-menu">
         <div className="flex items-center justify-between">
           <UserAvatarMenu />
           <NotificationBell />

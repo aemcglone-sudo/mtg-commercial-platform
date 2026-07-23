@@ -99,9 +99,9 @@ function getColorGroup(colors: string[] | null | undefined): ColorId {
   return (colors[0] ?? 'C') as ColorId;
 }
 
-function FilterRow({ label, children }: { label: string; children: React.ReactNode }) {
+function FilterRow({ label, children, tourId }: { label: string; children: React.ReactNode; tourId?: string }) {
   return (
-    <div className="flex items-center gap-2 flex-wrap">
+    <div className="flex items-center gap-2 flex-wrap" data-tour={tourId}>
       <span className="text-xs text-zinc-500 w-16 shrink-0">{label}</span>
       <div className="flex flex-wrap gap-1">{children}</div>
     </div>
@@ -295,7 +295,7 @@ export default function CollectionBrowser({ cards, totalCards, detectedFormat, d
         </div>
 
         {/* View + Zoom controls */}
-        <div className="flex gap-2">
+        <div className="flex gap-2" data-tour="view-toggle">
           <div className="flex bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden text-sm">
             <button
               type="button"
@@ -345,7 +345,9 @@ export default function CollectionBrowser({ cards, totalCards, detectedFormat, d
         </div>
 
         {/* Add card quick search */}
-        <QuickAddCard onAdd={handleAdd} onCollectionChange={() => onCollectionChange?.({ collectionCards: localCards, collectionSize: localCards.length, totalCards, detectedFormat: detectedFormat ?? '' })} />
+        <div data-tour="add-card-input">
+          <QuickAddCard onAdd={handleAdd} onCollectionChange={() => onCollectionChange?.({ collectionCards: localCards, collectionSize: localCards.length, totalCards, detectedFormat: detectedFormat ?? '' })} />
+        </div>
       </div>
 
       {/* Search */}
@@ -358,7 +360,7 @@ export default function CollectionBrowser({ cards, totalCards, detectedFormat, d
       />
 
       {/* ── Filters ───────────────────────────────────────────────── */}
-      <div className="space-y-2.5 bg-zinc-900/50 border border-zinc-800 rounded-xl p-3">
+      <div className="space-y-2.5 bg-zinc-900/50 border border-zinc-800 rounded-xl p-3" data-tour="filter-panel">
 
         {/* Color */}
         <div className="flex items-center gap-2 flex-wrap">
@@ -416,7 +418,7 @@ export default function CollectionBrowser({ cards, totalCards, detectedFormat, d
         </FilterRow>
 
         {/* Category */}
-        <FilterRow label="Category">
+        <FilterRow label="Category" tourId="category-filter">
           {CARD_CATEGORY_LIST.map((cat) => (
             <Pill key={cat} active={selectedCategories.includes(cat)}
               title={`Filter by ${cat}`}
@@ -451,7 +453,7 @@ export default function CollectionBrowser({ cards, totalCards, detectedFormat, d
             </select>
           </div>
 
-          <div className="flex items-center gap-1.5 ml-auto">
+          <div className="flex items-center gap-1.5 ml-auto" data-tour="sort-control">
             <span className="text-xs text-zinc-500">Sort</span>
             <select value={sortKey} onChange={(e) => setSortKey(e.target.value as SortKey)}
               title="Sort by" aria-label="Sort by"
@@ -499,6 +501,7 @@ export default function CollectionBrowser({ cards, totalCards, detectedFormat, d
           {filtered.map((card) => (
             <div
               key={card.name}
+              data-tour="card-preview-target"
               className="group relative block text-left hover:cursor-pointer"
               onClick={() => setPreviewCard(card)}
               onMouseEnter={() => setHoveredCard(card)}

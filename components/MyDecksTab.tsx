@@ -109,6 +109,7 @@ export default function MyDecksTab({ collection }: Props) {
           </button>
           <button
             type="button"
+            data-tour="import-deck-button"
             onClick={() => setShowImport(true)}
             className="px-6 py-3 rounded-xl font-semibold text-zinc-100 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 transition-colors"
           >

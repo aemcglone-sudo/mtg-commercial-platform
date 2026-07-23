@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useState, FormEvent, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import PasswordStrengthMeter from '@/components/PasswordStrengthMeter';
 
 function CollectorRegisterForm() {
   const router = useRouter();
@@ -61,11 +62,14 @@ function CollectorRegisterForm() {
         value={form.email} onChange={set('email')}
         className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-amber-500 transition-colors"
       />
-      <input
-        type="password" placeholder="Password (8+ characters)" autoComplete="new-password" required minLength={8}
-        value={form.password} onChange={set('password')}
-        className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-amber-500 transition-colors"
-      />
+      <div className="space-y-2">
+        <input
+          type="password" placeholder="Password (8+ characters)" autoComplete="new-password" required minLength={8}
+          value={form.password} onChange={set('password')}
+          className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-amber-500 transition-colors"
+        />
+        <PasswordStrengthMeter password={form.password} />
+      </div>
       <input
         type="password" placeholder="Confirm password" autoComplete="new-password" required
         value={form.confirm} onChange={set('confirm')}

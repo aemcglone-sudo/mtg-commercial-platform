@@ -2,6 +2,7 @@
 
 import { useState, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
+import PasswordStrengthMeter from '@/components/PasswordStrengthMeter';
 
 export default function PortalChangePasswordPage() {
   const router = useRouter();
@@ -47,11 +48,14 @@ export default function PortalChangePasswordPage() {
             value={currentPassword} onChange={e => setCurrentPassword(e.target.value)}
             className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-amber-500 transition-colors"
           />
-          <input
-            type="password" placeholder="New password (min 8 characters)" autoComplete="new-password" required
-            value={newPassword} onChange={e => setNewPassword(e.target.value)}
-            className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-amber-500 transition-colors"
-          />
+          <div className="space-y-2">
+            <input
+              type="password" placeholder="New password (min 8 characters)" autoComplete="new-password" required
+              value={newPassword} onChange={e => setNewPassword(e.target.value)}
+              className="w-full bg-zinc-900 border border-zinc-700 rounded-xl px-4 py-3 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-amber-500 transition-colors"
+            />
+            <PasswordStrengthMeter password={newPassword} />
+          </div>
           <input
             type="password" placeholder="Confirm new password" autoComplete="new-password" required
             value={confirm} onChange={e => setConfirm(e.target.value)}

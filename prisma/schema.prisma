@@ -18,6 +18,7 @@ model User {
   magicPreferencesJson String?
   role                 String   @default("collector")
   mustChangePassword   Boolean  @default(false)
+  hasSeenTour          Boolean  @default(false)
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 
