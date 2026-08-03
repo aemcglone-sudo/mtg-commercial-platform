@@ -75,13 +75,48 @@ export async function getCards(names: string[]): Promise<Map<string, ScryfallCar
   return result;
 }
 
+/** Bulk-fetch cards by exact Scryfall ID — pins down the specific printing rather than
+ * letting Scryfall pick an arbitrary default for a name that has multiple prints. */
+export async function getCardsByIds(ids: string[]): Promise<Map<string, ScryfallCard>> {
+  const result = new Map<string, ScryfallCard>();
+  const unique = [...new Set(ids)];
+
+  for (let i = 0; i < unique.length; i += 75) {
+    const chunk = unique.slice(i, i + 75);
+    try {
+      const identifiers = chunk.map((id) => ({ id }));
+      const res = await fetch(`${BASE}/cards/collection`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'User-Agent': USER_AGENT },
+        body: JSON.stringify({ identifiers }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        for (const card of data.data as ScryfallCard[]) {
+          result.set(card.id, card);
+        }
+      }
+    } catch {
+      // partial failure — continue
+    }
+    if (i + 75 < unique.length) {
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  }
+  return result;
+}
+
 export function cardImageUrl(card: ScryfallCard, size: 'small' | 'normal' | 'large' = 'normal'): string {
   if (card.image_uris) return card.image_uris[size as keyof typeof card.image_uris];
   if (card.card_faces?.[0]?.image_uris) return card.card_faces[0].image_uris[size as 'small' | 'normal'];
   return '';
 }
 
-export function cardPrice(card: ScryfallCard): number {
+export function cardPrice(card: ScryfallCard, finish?: string | null): number {
+  if (finish === 'foil' || finish === 'etched') {
+    const foilPrice = parseFloat(card.prices.usd_foil ?? '0') || 0;
+    if (foilPrice > 0) return foilPrice;
+  }
   return parseFloat(card.prices.usd ?? '0') || 0;
 }
 

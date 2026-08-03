@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import { getAuthenticatedUserId } from '@/lib/auth';
 import { parseCollectionWithGemini } from '@/lib/parse-with-gemini';
-import { parseCollection } from '@/lib/parse-collection';
-import { getCards, cardPrice, cardImageUrl } from '@/lib/scryfall';
+import { parseCollectionWithPrintings, type PrintingMeta } from '@/lib/parse-collection';
+import { getCards, getCardsByIds, cardPrice, cardImageUrl } from '@/lib/scryfall';
 import { findOne, run } from '@/lib/db';
 
 export const maxDuration = 540; // 9 minutes - near Vercel limit
@@ -18,19 +18,27 @@ export async function POST(req: NextRequest) {
 
   if (!text.trim()) return NextResponse.json({ error: 'Empty collection' }, { status: 400 });
 
-  let collection: Map<string, number>;
+  let collection: Map<string, PrintingMeta>;
   let detectedFormat: string;
 
-  // Try fast CSV parser first
-  collection = parseCollection(text);
+  // Try fast CSV parser first — captures per-printing identity (Scryfall ID,
+  // set, collector number, finish) when the source export provides it, e.g.
+  // ManaBox CSVs. This is what lets us pin a specific printing's price/image
+  // instead of an arbitrary name-only Scryfall match.
+  collection = parseCollectionWithPrintings(text);
   if (collection.size > 0) {
     detectedFormat = 'CSV';
     console.log(`Fast CSV parser recognized ${collection.size} cards`);
   } else {
-    // Fall back to Gemini for complex formats
+    // Fall back to Gemini for complex formats (name/quantity only — no printing identity)
     console.log('Fast parser found 0 cards, trying Gemini for complex formats...');
     try {
-      ({ collection, detectedFormat } = await parseCollectionWithGemini(text));
+      const geminiResult = await parseCollectionWithGemini(text);
+      detectedFormat = geminiResult.detectedFormat;
+      collection = new Map();
+      for (const [name, quantity] of geminiResult.collection) {
+        collection.set(name, { quantity });
+      }
       console.log(`Gemini parsed collection as ${detectedFormat}`);
     } catch (err) {
       console.error('Gemini parsing failed:', err);
@@ -45,24 +53,34 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Could not parse any cards from the file' }, { status: 422 });
   }
 
-
   console.log(`Parsed ${collection.size} unique cards from collection`);
-  const cardData = await getCards([...collection.keys()]);
-  console.log(`Scryfall returned data for ${cardData.size} cards`);
 
-  const notFoundNames = [...collection.keys()].filter(name => !cardData.has(name));
-  if (notFoundNames.length > 0) {
-    console.log(`${notFoundNames.length} cards not found in Scryfall batch lookup — kept with null metadata: ${notFoundNames.slice(0, 10).join(', ')}${notFoundNames.length > 10 ? '…' : ''}`);
+  const entries = [...collection.entries()];
+  const withScryfallId = entries.filter(([, meta]) => meta.scryfallId);
+  const withoutScryfallId = entries.filter(([, meta]) => !meta.scryfallId);
+
+  const [idCardData, nameCardData] = await Promise.all([
+    withScryfallId.length > 0 ? getCardsByIds(withScryfallId.map(([, meta]) => meta.scryfallId!)) : Promise.resolve(new Map()),
+    withoutScryfallId.length > 0 ? getCards(withoutScryfallId.map(([name]) => name)) : Promise.resolve(new Map()),
+  ]);
+
+  if (withScryfallId.length > 0) {
+    console.log(`Resolved ${idCardData.size}/${withScryfallId.length} cards by exact Scryfall printing`);
   }
 
-  const collectionCards = [...collection.entries()]
-    .map(([name, quantity]) => {
-      const card = cardData.get(name);
+  const notFoundNames = withoutScryfallId.filter(([name]) => !nameCardData.has(name));
+  if (notFoundNames.length > 0) {
+    console.log(`${notFoundNames.length} cards not found in Scryfall batch lookup — kept with null metadata: ${notFoundNames.slice(0, 10).map(([n]) => n).join(', ')}${notFoundNames.length > 10 ? '…' : ''}`);
+  }
+
+  const collectionCards = entries
+    .map(([name, meta]) => {
+      const card = meta.scryfallId ? idCardData.get(meta.scryfallId) : nameCardData.get(name);
       const colors = card?.colors ?? card?.card_faces?.[0]?.colors ?? [];
       return {
         name,
-        quantity,
-        priceUsd: card ? cardPrice(card) : null,
+        quantity: meta.quantity,
+        priceUsd: card ? cardPrice(card, meta.finish) : null,
         imageUrl: card ? cardImageUrl(card, 'normal') : null,
         scryfallUri: card?.scryfall_uri ?? null,
         setName: card?.set_name ?? null,
@@ -72,13 +90,17 @@ export async function POST(req: NextRequest) {
         rarity: card?.rarity ?? null,
         oracleText: card?.oracle_text ?? null,
         artist: card?.artist ?? null,
+        scryfallId: card?.id ?? meta.scryfallId ?? null,
+        setCode: card?.set ?? meta.setCode ?? null,
+        collectorNumber: card?.collector_number ?? meta.collectorNumber ?? null,
+        finish: meta.finish ?? null,
       };
     })
     .sort((a, b) => a.name.localeCompare(b.name));
 
   const result = {
     collectionSize: collection.size,
-    totalCards: [...collection.values()].reduce((a, b) => a + b, 0),
+    totalCards: entries.reduce((sum, [, meta]) => sum + meta.quantity, 0),
     detectedFormat,
     collectionCards,
     cardNames: collectionCards.map(c => c.name),
@@ -114,13 +136,14 @@ export async function POST(req: NextRequest) {
         const batchSize = 100;
         for (let i = 0; i < collectionCards.length; i += batchSize) {
           const batch = collectionCards.slice(i, i + batchSize);
-          const placeholders = batch.map(() => '(?, ?, ?, ?, ?, ?, NOW(), NOW())').join(',');
+          const placeholders = batch.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())').join(',');
           const values = batch.flatMap(card => [
-            crypto.randomUUID(), userId, card.name, 'cards', collectionType, card.quantity
+            randomUUID(), userId, card.name, 'cards', collectionType, card.quantity,
+            card.scryfallId, card.setCode, card.collectorNumber, card.finish,
           ]);
 
           await run(
-            `INSERT INTO inventory_items (id, "userId", name, "itemType", "collectionType", quantity, "createdAt", "updatedAt")
+            `INSERT INTO inventory_items (id, "userId", name, "itemType", "collectionType", quantity, "scryfallId", "setCode", "collectorNumber", finish, "createdAt", "updatedAt")
              VALUES ${placeholders}`,
             values
           );
@@ -129,23 +152,30 @@ export async function POST(req: NextRequest) {
         // For add mode, merge with existing quantities
         for (const card of collectionCards) {
           // Check if card exists
-          const existing = await findOne(
-            `SELECT id, quantity FROM inventory_items WHERE "userId" = ? AND name = ? AND "itemType" = 'cards' AND "collectionType" = ?`,
+          const existing = await findOne<{ id: string; scryfallId: string | null }>(
+            `SELECT id, "scryfallId" FROM inventory_items WHERE "userId" = ? AND name = ? AND "itemType" = 'cards' AND "collectionType" = ?`,
             [userId, card.name, collectionType]
           );
 
           if (existing) {
-            // Update quantity
-            await run(
-              `UPDATE inventory_items SET quantity = quantity + ?, "updatedAt" = NOW() WHERE id = ?`,
-              [Number(card.quantity), (existing as any).id]
-            );
+            // Update quantity, and backfill printing identity if we now have it and didn't before
+            if (!existing.scryfallId && card.scryfallId) {
+              await run(
+                `UPDATE inventory_items SET quantity = quantity + ?, "scryfallId" = ?, "setCode" = ?, "collectorNumber" = ?, finish = ?, "updatedAt" = NOW() WHERE id = ?`,
+                [Number(card.quantity), card.scryfallId, card.setCode, card.collectorNumber, card.finish, existing.id]
+              );
+            } else {
+              await run(
+                `UPDATE inventory_items SET quantity = quantity + ?, "updatedAt" = NOW() WHERE id = ?`,
+                [Number(card.quantity), existing.id]
+              );
+            }
           } else {
             // Insert new card
             await run(
-              `INSERT INTO inventory_items (id, "userId", name, "itemType", "collectionType", quantity, "createdAt", "updatedAt")
-               VALUES (?, ?, ?, 'cards', ?, ?, NOW(), NOW())`,
-              [randomUUID(), userId, card.name, collectionType, Number(card.quantity)]
+              `INSERT INTO inventory_items (id, "userId", name, "itemType", "collectionType", quantity, "scryfallId", "setCode", "collectorNumber", finish, "createdAt", "updatedAt")
+               VALUES (?, ?, ?, 'cards', ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+              [randomUUID(), userId, card.name, collectionType, Number(card.quantity), card.scryfallId, card.setCode, card.collectorNumber, card.finish]
             );
           }
         }

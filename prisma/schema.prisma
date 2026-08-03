@@ -45,6 +45,10 @@ model InventoryItem {
   name            String
   itemType        String
   collectionType  String?
+  scryfallId      String?
+  setCode         String?
+  collectorNumber String?
+  finish          String?
   statusLocation  String   @default("storage")
   brandSet        String?
   estimatedValue  Float?

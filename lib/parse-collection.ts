@@ -5,6 +5,14 @@ export interface CollectionCard {
 
 export type Collection = Map<string, number>;
 
+export interface PrintingMeta {
+  quantity: number;
+  scryfallId?: string;
+  setCode?: string;
+  collectorNumber?: string;
+  finish?: string; // 'foil' | 'nonfoil' | 'etched'
+}
+
 /**
  * Parses CSV format (ManaBox, TCGPlayer, etc.):
  *   Name,Quantity,...
@@ -122,6 +130,77 @@ export function parseCollection(text: string): Collection {
 
   // Otherwise try plain text format
   return parsePlainText(text);
+}
+
+/**
+ * Same auto-detection as parseCollection, but also captures per-printing
+ * identity (Scryfall ID, set code, collector number, finish) when the CSV
+ * provides it — e.g. ManaBox exports include a "Scryfall ID" column that
+ * pins down the exact printing, rather than leaving it to an arbitrary
+ * name-only Scryfall lookup that could land on a $1 or a $100 version of
+ * the same card name.
+ */
+export function parseCollectionWithPrintings(text: string): Map<string, PrintingMeta> {
+  const firstLine = text.split('\n')[0].toLowerCase();
+  const isCSV = firstLine.includes('name') && firstLine.includes('quantity');
+
+  if (!isCSV) {
+    const base = parsePlainText(text);
+    const out = new Map<string, PrintingMeta>();
+    for (const [name, quantity] of base) out.set(name, { quantity });
+    return out;
+  }
+
+  const out = new Map<string, PrintingMeta>();
+  const lines = text.split('\n');
+  if (lines.length < 2) return out;
+
+  const headerFields = parseCSVLine(lines[0]);
+  const header = headerFields.map(h => h.toLowerCase().trim());
+  const nameIdx = header.findIndex(h => h === 'name');
+  const qtyIdx = header.findIndex(h => h === 'quantity' || h === 'qty');
+  if (nameIdx === -1 || qtyIdx === -1) return out;
+
+  const scryfallIdx = header.findIndex(h => h === 'scryfall id' || h === 'scryfallid' || h === 'scryfall_id');
+  const setIdx = header.findIndex(h => h === 'set code' || h === 'setcode' || h === 'set' || h === 'edition');
+  const cnIdx = header.findIndex(h => h === 'collector number' || h === 'collectornumber' || h === 'card number' || h === 'number');
+  const foilIdx = header.findIndex(h => h === 'foil' || h === 'finish' || h === 'printing');
+
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+
+    const fields = parseCSVLine(line);
+    if (fields.length <= Math.max(nameIdx, qtyIdx)) continue;
+
+    const name = fields[nameIdx];
+    const qty = parseInt(fields[qtyIdx], 10);
+    if (!name || !(qty > 0)) continue;
+
+    const scryfallId = scryfallIdx !== -1 ? (fields[scryfallIdx]?.trim() || undefined) : undefined;
+    const setCode = setIdx !== -1 ? (fields[setIdx]?.trim() || undefined) : undefined;
+    const collectorNumber = cnIdx !== -1 ? (fields[cnIdx]?.trim() || undefined) : undefined;
+    let finish = foilIdx !== -1 ? (fields[foilIdx]?.trim().toLowerCase() || undefined) : undefined;
+    if (finish === 'normal') finish = 'nonfoil';
+
+    const existing = out.get(name);
+    if (existing) {
+      existing.quantity += qty;
+      // Keep the first printing identity we see for this name rather than overwrite —
+      // still fixes the "arbitrary Scryfall default" problem since it anchors to a
+      // printing the collector actually owns.
+      if (!existing.scryfallId && scryfallId) {
+        existing.scryfallId = scryfallId;
+        existing.setCode = setCode;
+        existing.collectorNumber = collectorNumber;
+        existing.finish = finish;
+      }
+    } else {
+      out.set(name, { quantity: qty, scryfallId, setCode, collectorNumber, finish });
+    }
+  }
+
+  return out;
 }
 
 export function collectionToMap(cards: CollectionCard[]): Collection {
