@@ -70,12 +70,15 @@ export default function CardDetailModal({ cardName, onClose, collectionCard, dec
     setIsEditingQty(false);
     setDisplayQty(collectionCard?.quantity ?? 0);
     setEditQty(collectionCard?.quantity ?? 1);
-    fetch(`/api/card/lookup?name=${encodeURIComponent(cardName)}`)
+    const lookupUrl = collectionCard?.scryfallId
+      ? `/api/card/lookup?scryfallId=${encodeURIComponent(collectionCard.scryfallId)}`
+      : `/api/card/lookup?name=${encodeURIComponent(cardName)}`;
+    fetch(lookupUrl)
       .then(r => r.json())
       .then(d => { if (d.object === 'error' || d.error) setError('Card not found on Scryfall'); else setScryfallCard(d); })
       .catch(() => setError('Failed to load card'))
       .finally(() => setLoading(false));
-  }, [cardName, retryCount]);
+  }, [cardName, retryCount, collectionCard?.scryfallId]);
 
   if (!cardName) return null;
 

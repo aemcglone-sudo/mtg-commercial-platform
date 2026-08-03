@@ -4,15 +4,24 @@ import { findOne, findMany } from '@/lib/db';
 import { getCategoriesForCards } from '@/lib/card-categories';
 
 interface Row { parsedData: string; rawText: string; detectedFormat: string | null; createdAt: string }
-interface InventoryItem { name: string; quantity: number; collectionType?: string | null }
+interface InventoryItem {
+  name: string;
+  quantity: number;
+  collectionType?: string | null;
+  scryfallId: string | null;
+  setCode: string | null;
+  collectorNumber: string | null;
+  finish: string | null;
+}
 
 export async function GET(req: NextRequest) {
   const userId = await getAuthenticatedUserId(req);
   if (!userId) return NextResponse.json(null);
 
-  // Load all inventory items (source of truth for quantities and types)
+  // Load all inventory items (source of truth for quantities, types, and printing identity)
   const items = await findMany<InventoryItem>(
-    `SELECT name, quantity, "collectionType" FROM inventory_items WHERE "userId" = ? AND "itemType" = 'cards' ORDER BY name`,
+    `SELECT name, quantity, "collectionType", "scryfallId", "setCode", "collectorNumber", finish
+     FROM inventory_items WHERE "userId" = ? AND "itemType" = 'cards' ORDER BY name`,
     [userId]
   );
 
@@ -75,6 +84,10 @@ export async function GET(req: NextRequest) {
         rarity: metadata.rarity ?? null,
         oracleText: metadata.oracleText ?? null,
         artist: metadata.artist ?? null,
+        scryfallId: item.scryfallId ?? metadata.scryfallId ?? null,
+        setCode: item.setCode ?? metadata.setCode ?? null,
+        collectorNumber: item.collectorNumber ?? metadata.collectorNumber ?? null,
+        finish: item.finish ?? metadata.finish ?? null,
       };
     });
 

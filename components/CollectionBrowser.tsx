@@ -22,6 +22,10 @@ export interface CollectionCardData {
   artist?: string | null;
   collectionType?: 'paper' | 'arena';
   categories?: string[];
+  scryfallId?: string | null;
+  setCode?: string | null;
+  collectorNumber?: string | null;
+  finish?: string | null;
 }
 
 export const CARD_CATEGORY_LIST = [
