@@ -42,8 +42,11 @@ export async function GET(req: NextRequest) {
     // Build complete card metadata map from all uploads
     let cardMetadata: Map<string, any> = new Map();
     if (uploads && uploads.length > 0) {
-      // Process in reverse order so older uploads fill in gaps
-      for (let i = uploads.length - 1; i >= 0; i--) {
+      // `uploads` is already newest-first (ORDER BY "createdAt" DESC), so processing
+      // it in that order and skipping names we've already set means the newest
+      // upload wins for any card, and older uploads only fill in gaps for cards
+      // that aren't in a more recent upload.
+      for (let i = 0; i < uploads.length; i++) {
         const upload = uploads[i];
         if (upload.parsedData) {
           try {

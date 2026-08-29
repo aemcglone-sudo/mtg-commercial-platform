@@ -23,6 +23,38 @@ export interface ScryfallCard {
 
 const cardCache = new Map<string, ScryfallCard | null>();
 
+/** POST to /cards/collection with retry + backoff on 429 (Scryfall rate limit).
+ * Without this, a large collection (1000s of cards, 75/batch) reliably hits
+ * the rate limit partway through and every remaining batch fails silently,
+ * leaving those cards with no price/image at all. */
+async function postCollectionWithRetry(identifiers: Array<{ id: string } | { name: string }>): Promise<{ data: ScryfallCard[] } | null> {
+  const MAX_RETRIES = 5;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const res = await fetch(`${BASE}/cards/collection`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'User-Agent': USER_AGENT },
+        body: JSON.stringify({ identifiers }),
+      });
+      if (res.status === 429 && attempt < MAX_RETRIES) {
+        const retryAfter = parseFloat(res.headers.get('retry-after') ?? '');
+        const backoffMs = !isNaN(retryAfter) ? retryAfter * 1000 : Math.min(1000 * 2 ** attempt, 15000);
+        await new Promise((r) => setTimeout(r, backoffMs));
+        continue;
+      }
+      if (!res.ok) return null;
+      return await res.json();
+    } catch {
+      if (attempt < MAX_RETRIES) {
+        await new Promise((r) => setTimeout(r, Math.min(1000 * 2 ** attempt, 15000)));
+        continue;
+      }
+      return null;
+    }
+  }
+  return null;
+}
+
 export async function getCard(name: string): Promise<ScryfallCard | null> {
   if (cardCache.has(name)) return cardCache.get(name)!;
 
@@ -52,21 +84,12 @@ export async function getCards(names: string[]): Promise<Map<string, ScryfallCar
   // Scryfall collection endpoint: up to 75 cards per request
   for (let i = 0; i < unique.length; i += 75) {
     const chunk = unique.slice(i, i + 75);
-    try {
-      const identifiers = chunk.map((name) => ({ name }));
-      const res = await fetch(`${BASE}/cards/collection`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'User-Agent': USER_AGENT },
-        body: JSON.stringify({ identifiers }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        for (const card of data.data as ScryfallCard[]) {
-          result.set(card.name, card);
-        }
+    const identifiers = chunk.map((name) => ({ name }));
+    const data = await postCollectionWithRetry(identifiers);
+    if (data) {
+      for (const card of data.data) {
+        result.set(card.name, card);
       }
-    } catch {
-      // partial failure — continue
     }
     if (i + 75 < unique.length) {
       await new Promise((r) => setTimeout(r, 100));
@@ -83,21 +106,12 @@ export async function getCardsByIds(ids: string[]): Promise<Map<string, Scryfall
 
   for (let i = 0; i < unique.length; i += 75) {
     const chunk = unique.slice(i, i + 75);
-    try {
-      const identifiers = chunk.map((id) => ({ id }));
-      const res = await fetch(`${BASE}/cards/collection`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'User-Agent': USER_AGENT },
-        body: JSON.stringify({ identifiers }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        for (const card of data.data as ScryfallCard[]) {
-          result.set(card.id, card);
-        }
+    const identifiers = chunk.map((id) => ({ id }));
+    const data = await postCollectionWithRetry(identifiers);
+    if (data) {
+      for (const card of data.data) {
+        result.set(card.id, card);
       }
-    } catch {
-      // partial failure — continue
     }
     if (i + 75 < unique.length) {
       await new Promise((r) => setTimeout(r, 100));

@@ -210,9 +210,9 @@ export default function CollectionBrowser({ cards, totalCards, detectedFormat, d
 
 
   const setOptions = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const c of cards) if (c.setName) counts.set(c.setName, (counts.get(c.setName) ?? 0) + 1);
-    return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([name]) => name);
+    const names = new Set<string>();
+    for (const c of cards) if (c.setName) names.add(c.setName);
+    return [...names].sort((a, b) => a.localeCompare(b));
   }, [cards]);
 
   const filtered = useMemo(() => {

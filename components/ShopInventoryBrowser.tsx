@@ -474,9 +474,9 @@ export default function ShopInventoryBrowser({ items: rawItems, onRefresh, total
   }, [items]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const setOptions = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const c of items) if (c.setCode) counts.set(c.setCode, (counts.get(c.setCode) ?? 0) + 1);
-    return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([code]) => code);
+    const codes = new Set<string>();
+    for (const c of items) if (c.setCode) codes.add(c.setCode);
+    return [...codes].sort((a, b) => a.localeCompare(b));
   }, [items]);
 
   const filtered = useMemo(() => {
