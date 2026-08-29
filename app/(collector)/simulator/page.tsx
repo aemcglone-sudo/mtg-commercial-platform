@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { parseDeckFromText } from '@/lib/parse-deck';
 import { computeBracketRating, BRACKET_META } from '@/lib/commander-bracket';
 import { computeManaCurve, computeCardTypeCounts, COLOR_ORDER, COLOR_BG, COLOR_LABELS, type CardStats, type ColorKey } from '@/lib/deck-stats';
+import { expandDeckToCards, shuffle } from '@/lib/deck-shuffle';
 import type { ResolvedCard } from '@/app/api/simulator/resolve-cards/route';
 import type { CommanderOption } from '@/app/api/simulator/commander-search/route';
 
@@ -118,7 +119,8 @@ interface SavedDeck {
   cards: Record<string, number>;
 }
 
-type Step = 'import' | 'analysis';
+type Step = 'import' | 'analysis' | 'mulligan';
+type MulliganPhase = 'deciding' | 'bottoming' | 'kept';
 
 export default function SimulatorPage() {
   const [step, setStep] = useState<Step>('import');
@@ -145,6 +147,13 @@ export default function SimulatorPage() {
   const [synergies, setSynergies] = useState<{ cards: string[]; description: string }[]>([]);
   const [winCondition, setWinCondition] = useState<string | null>(null);
   const [combosLoading, setCombosLoading] = useState(false);
+
+  // Mulligan
+  const [library, setLibrary] = useState<string[]>([]);
+  const [hand, setHand] = useState<string[]>([]);
+  const [mulliganCount, setMulliganCount] = useState(0);
+  const [mulliganPhase, setMulliganPhase] = useState<MulliganPhase>('deciding');
+  const [bottomSelection, setBottomSelection] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     fetch('/api/decks')
@@ -318,6 +327,57 @@ export default function SimulatorPage() {
     setCommanderResults([]);
     setPasteText('');
     setParseError('');
+    setLibrary([]);
+    setHand([]);
+    setMulliganCount(0);
+    setMulliganPhase('deciding');
+    setBottomSelection(new Set());
+  }
+
+  // ── Mulligan (London mulligan: always draw 7, bottom N cards equal to mulligans taken) ──
+
+  function startMulligan() {
+    const pool = shuffle(expandDeckToCards(deckCards, commander));
+    setLibrary(pool.slice(7));
+    setHand(pool.slice(0, 7));
+    setMulliganCount(0);
+    setMulliganPhase('deciding');
+    setBottomSelection(new Set());
+    setStep('mulligan');
+  }
+
+  function takeMulligan() {
+    const pool = shuffle([...hand, ...library]);
+    setLibrary(pool.slice(7));
+    setHand(pool.slice(0, 7));
+    setMulliganCount(c => c + 1);
+    setBottomSelection(new Set());
+  }
+
+  function keepHand() {
+    if (mulliganCount === 0) {
+      setMulliganPhase('kept');
+    } else {
+      setMulliganPhase('bottoming');
+    }
+  }
+
+  function toggleBottomCard(index: number) {
+    setBottomSelection(prev => {
+      const next = new Set(prev);
+      if (next.has(index)) next.delete(index);
+      else if (next.size < mulliganCount) next.add(index);
+      return next;
+    });
+  }
+
+  function confirmBottoming() {
+    if (bottomSelection.size !== mulliganCount) return;
+    const bottomed = [...bottomSelection].map(i => hand[i]);
+    const keptHand = hand.filter((_, i) => !bottomSelection.has(i));
+    setLibrary(prev => [...prev, ...bottomed]);
+    setHand(keptHand);
+    setMulliganPhase('kept');
   }
 
   return (
@@ -627,10 +687,10 @@ export default function SimulatorPage() {
                 </div>
 
                 <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 text-center space-y-2">
-                  <p className="text-sm text-zinc-400">Mulligan & the 4-player game table are coming in a future update.</p>
-                  <button type="button" disabled
-                    className="px-5 py-2.5 rounded-xl font-semibold text-zinc-500 bg-zinc-800 cursor-not-allowed text-sm">
-                    Continue to Game Table →
+                  <p className="text-sm text-zinc-400">Ready to see your opening hand? The full 4-player game table is coming in a future update.</p>
+                  <button type="button" onClick={startMulligan} disabled={cardNames.length === 0}
+                    className="px-5 py-2.5 rounded-xl font-semibold text-black bg-amber-400 hover:bg-amber-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-sm">
+                    Draw Opening Hand →
                   </button>
                 </div>
               </div>
@@ -676,6 +736,92 @@ export default function SimulatorPage() {
                     </div>
                   ))}
                 </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {step === 'mulligan' && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div>
+                <h2 className="text-lg font-bold">Opening Hand</h2>
+                <p className="text-sm text-zinc-500 mt-0.5">
+                  {mulliganCount === 0 ? 'No mulligans taken' : `Mulligan${mulliganCount > 1 ? 'ed' : ''} ${mulliganCount} time${mulliganCount > 1 ? 's' : ''}`}
+                  {mulliganPhase === 'bottoming' && ` — put ${mulliganCount} card${mulliganCount > 1 ? 's' : ''} on the bottom`}
+                </p>
+              </div>
+              <button type="button" onClick={() => setStep('analysis')} className="text-xs text-zinc-500 hover:text-zinc-300">
+                ← Back to Analysis
+              </button>
+            </div>
+
+            {mulliganPhase === 'bottoming' && (
+              <p className="text-xs text-amber-500 bg-amber-950/30 border border-amber-900 rounded-lg px-3 py-2">
+                Select {mulliganCount} card{mulliganCount > 1 ? 's' : ''} to put on the bottom of your library ({bottomSelection.size}/{mulliganCount} selected).
+              </p>
+            )}
+
+            <div className="flex flex-wrap gap-3">
+              {hand.map((name, i) => {
+                const img = cardData.get(name.toLowerCase())?.imageUrl ?? cardImgFallback(name);
+                const selected = bottomSelection.has(i);
+                const selectable = mulliganPhase === 'bottoming';
+                return (
+                  <button
+                    key={`${name}-${i}`}
+                    type="button"
+                    disabled={!selectable}
+                    onClick={() => toggleBottomCard(i)}
+                    onMouseEnter={() => setHoveredDeckCard({ name, imageUrl: cardData.get(name.toLowerCase())?.imageUrl ?? null })}
+                    onMouseLeave={() => setHoveredDeckCard(null)}
+                    className={`w-36 rounded-lg border-2 transition-all overflow-hidden ${
+                      selected ? 'border-amber-400 opacity-50' : 'border-transparent'
+                    } ${selectable ? 'cursor-pointer hover:border-zinc-600' : 'cursor-default'}`}
+                  >
+                    <img src={img} alt={name} className="w-full rounded" />
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="flex items-center gap-3">
+              {mulliganPhase === 'deciding' && (
+                <>
+                  <button type="button" onClick={keepHand}
+                    className="px-5 py-2.5 rounded-xl font-semibold text-black bg-amber-400 hover:bg-amber-300 transition-colors text-sm">
+                    Keep Hand
+                  </button>
+                  <button type="button" onClick={takeMulligan}
+                    className="px-5 py-2.5 rounded-xl font-semibold text-zinc-100 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 transition-colors text-sm">
+                    Mulligan
+                  </button>
+                </>
+              )}
+              {mulliganPhase === 'bottoming' && (
+                <button type="button" onClick={confirmBottoming} disabled={bottomSelection.size !== mulliganCount}
+                  className="px-5 py-2.5 rounded-xl font-semibold text-black bg-amber-400 hover:bg-amber-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-sm">
+                  Confirm & Keep Hand
+                </button>
+              )}
+              {mulliganPhase === 'kept' && (
+                <>
+                  <span className="text-sm text-green-400 font-medium">✓ Hand kept</span>
+                  <button type="button" onClick={startMulligan}
+                    className="px-4 py-2 rounded-lg font-semibold text-zinc-100 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 transition-colors text-sm">
+                    Draw a New Hand
+                  </button>
+                </>
+              )}
+            </div>
+
+            {mulliganPhase === 'kept' && (
+              <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 text-center space-y-2">
+                <p className="text-sm text-zinc-400">The full 4-player game table is coming in a future update.</p>
+                <button type="button" disabled
+                  className="px-5 py-2.5 rounded-xl font-semibold text-zinc-500 bg-zinc-800 cursor-not-allowed text-sm">
+                  Continue to Game Table →
+                </button>
               </div>
             )}
           </div>
