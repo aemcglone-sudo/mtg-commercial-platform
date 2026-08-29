@@ -14,6 +14,7 @@ const NAV = [
   { href: '/?tab=news',       label: 'News', tourId: 'nav-news' },
   { href: '/?tab=chat',       label: 'Ask Khoa', tourId: 'nav-chat' },
   { href: '/local-play',      label: 'Local Play', tourId: 'nav-local-play' },
+  { href: '/simulator',       label: 'Commander Simulator' },
   { label: 'Shop', dividerAfter: true, tourId: 'nav-shop-group', children: [
     { href: '/stores',            label: 'Nearby Shops' },
     { href: '/marketplace/find',  label: 'Card Finder' },
