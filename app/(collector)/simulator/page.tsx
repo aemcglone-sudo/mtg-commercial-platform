@@ -5,6 +5,7 @@ import { parseDeckFromText } from '@/lib/parse-deck';
 import { computeBracketRating, BRACKET_META } from '@/lib/commander-bracket';
 import { computeManaCurve, computeCardTypeCounts, COLOR_ORDER, COLOR_BG, COLOR_LABELS, type CardStats, type ColorKey } from '@/lib/deck-stats';
 import type { ResolvedCard } from '@/app/api/simulator/resolve-cards/route';
+import type { CommanderOption } from '@/app/api/simulator/commander-search/route';
 
 const EXAMPLE_DECK = `1 Atraxa, Grand Unifier
 1 Sol Ring
@@ -113,6 +114,7 @@ interface SavedDeck {
   id: string;
   name: string;
   format?: string;
+  commander?: string | null;
   cards: Record<string, number>;
 }
 
@@ -128,6 +130,12 @@ export default function SimulatorPage() {
 
   const [deckCards, setDeckCards] = useState<Record<string, number>>({});
   const [commander, setCommander] = useState('');
+  const [commanderCardImg, setCommanderCardImg] = useState<string | null>(null);
+
+  // Commander lookup for the paste-import path
+  const [commanderQuery, setCommanderQuery] = useState('');
+  const [commanderResults, setCommanderResults] = useState<CommanderOption[]>([]);
+  const [commanderSearching, setCommanderSearching] = useState(false);
 
   const [cardData, setCardData] = useState<Map<string, CardStats & { imageUrl: string | null; priceUsd: number | null; oracleText: string | null; scryfallUri: string | null; rarity: string | null; name: string }>>(new Map());
   const [loadingAnalysis, setLoadingAnalysis] = useState(false);
@@ -145,6 +153,28 @@ export default function SimulatorPage() {
       .catch(() => {});
   }, []);
 
+  // Debounced commander lookup as the user types
+  useEffect(() => {
+    if (commanderQuery.trim().length < 2) { setCommanderResults([]); return; }
+    let cancelled = false;
+    setCommanderSearching(true);
+    const t = setTimeout(() => {
+      fetch(`/api/simulator/commander-search?q=${encodeURIComponent(commanderQuery)}`)
+        .then(r => r.ok ? r.json() : { results: [] })
+        .then((d: { results: CommanderOption[] }) => { if (!cancelled) setCommanderResults(d.results ?? []); })
+        .catch(() => {})
+        .finally(() => { if (!cancelled) setCommanderSearching(false); });
+    }, 300);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [commanderQuery]);
+
+  function pickCommander(option: CommanderOption) {
+    setCommander(option.name);
+    setCommanderCardImg(option.imageUrl);
+    setCommanderQuery('');
+    setCommanderResults([]);
+  }
+
   function handleParse(text: string) {
     setParseError('');
     const result = parseDeckFromText(text);
@@ -152,9 +182,12 @@ export default function SimulatorPage() {
       setParseError('Could not find any cards in that text. Expected lines like "1 Sol Ring".');
       return;
     }
-    setDeckCards(result.cards);
-    // Best-effort commander guess: resolved after card data loads (see below)
-    setCommander('');
+    const cards = { ...result.cards };
+    // If a commander was picked via search and isn't already in the pasted list, include it
+    if (commander && !Object.keys(cards).some(n => n.toLowerCase() === commander.toLowerCase())) {
+      cards[commander] = 1;
+    }
+    setDeckCards(cards);
     setStep('analysis');
   }
 
@@ -163,7 +196,10 @@ export default function SimulatorPage() {
     if (!deck) return;
     setDeckCards(deck.cards);
     if (deck.format) setFormat(deck.format.toLowerCase());
-    setCommander('');
+    // A saved deck already carries its own commander — use it directly rather
+    // than re-guessing or requiring the user to pick it again.
+    setCommander(deck.commander ?? '');
+    setCommanderCardImg(null);
     setStep('analysis');
   }
 
@@ -240,6 +276,9 @@ export default function SimulatorPage() {
     setSynergies([]);
     setWinCondition(null);
     setCommander('');
+    setCommanderCardImg(null);
+    setCommanderQuery('');
+    setCommanderResults([]);
     setPasteText('');
     setParseError('');
   }
@@ -278,6 +317,51 @@ export default function SimulatorPage() {
                   <option value="other">Other</option>
                 </select>
               </div>
+
+              {(format === 'commander' || format === 'brawl' || format === 'oathbreaker') && (
+                <div className="space-y-2">
+                  <label className="text-xs text-zinc-500">Commander</label>
+                  {commander ? (
+                    <div className="flex items-center gap-2 bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2">
+                      {commanderCardImg && <img src={commanderCardImg} alt={commander} className="w-8 rounded" />}
+                      <span className="text-sm text-amber-400 flex-1">{commander}</span>
+                      <button type="button" onClick={() => { setCommander(''); setCommanderCardImg(null); }} className="text-xs text-zinc-500 hover:text-zinc-300">
+                        Change
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={commanderQuery}
+                        onChange={e => setCommanderQuery(e.target.value)}
+                        placeholder="Search for a legendary creature…"
+                        className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-amber-500"
+                      />
+                      {commanderSearching && <p className="text-xs text-zinc-600 mt-1">Searching…</p>}
+                      {commanderResults.length > 0 && (
+                        <div className="absolute z-10 mt-1 w-full bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl max-h-80 overflow-y-auto">
+                          {commanderResults.map(opt => (
+                            <button
+                              key={opt.scryfallId}
+                              type="button"
+                              onClick={() => pickCommander(opt)}
+                              className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-zinc-800 transition-colors text-left"
+                            >
+                              {opt.imageUrl && <img src={opt.imageUrl} alt={opt.name} className="w-8 rounded shrink-0" />}
+                              <div className="min-w-0">
+                                <p className="text-sm text-zinc-200 truncate">{opt.name}</p>
+                                <p className="text-xs text-zinc-500 truncate">{opt.typeLine}</p>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {parseError && <p className="text-xs text-red-400">{parseError}</p>}
               <button type="button" onClick={() => handleParse(pasteText)} disabled={!pasteText.trim()}
                 className="px-5 py-2.5 rounded-xl font-semibold text-black bg-amber-400 hover:bg-amber-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-sm">
@@ -293,7 +377,9 @@ export default function SimulatorPage() {
                     className="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-300 focus:outline-none focus:border-amber-500">
                     <option value="">Choose a deck…</option>
                     {savedDecks.map(d => (
-                      <option key={d.id} value={d.id}>{d.name} ({Object.values(d.cards).reduce((s, q) => s + q, 0)} cards)</option>
+                      <option key={d.id} value={d.id}>
+                        {d.name} ({Object.values(d.cards).reduce((s, q) => s + q, 0)} cards{d.commander ? ` — Commander: ${d.commander}` : ''})
+                      </option>
                     ))}
                   </select>
                   <button type="button" onClick={loadSavedDeck} disabled={!selectedSavedDeckId}
@@ -301,6 +387,13 @@ export default function SimulatorPage() {
                     Load & Analyze
                   </button>
                 </div>
+                {(() => {
+                  const selected = savedDecks.find(d => d.id === selectedSavedDeckId);
+                  if (!selected) return null;
+                  return selected.commander
+                    ? <p className="text-xs text-amber-400">Commander: {selected.commander} — will be used automatically.</p>
+                    : <p className="text-xs text-zinc-600">No commander saved with this deck — you can pick one after loading.</p>;
+                })()}
               </div>
             )}
           </div>

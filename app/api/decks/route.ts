@@ -10,6 +10,7 @@ export interface DeckData {
   name: string;
   format?: string;
   strategy?: string;
+  commander?: string | null;
   deckType?: 'paper' | 'arena';
   cards: Record<string, number>;
   createdAt: string;
@@ -23,7 +24,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const decks = await findMany<any>(
-      `SELECT id, "userId", name, format, strategy, "deckType", cards, "personaType", "coreGoal", "lastAnalyzed", "createdAt", "updatedAt" FROM decks WHERE "userId" = ? ORDER BY "createdAt" DESC`,
+      `SELECT id, "userId", name, format, strategy, commander, "deckType", cards, "personaType", "coreGoal", "lastAnalyzed", "createdAt", "updatedAt" FROM decks WHERE "userId" = ? ORDER BY "createdAt" DESC`,
       [userId]
     );
 
@@ -46,7 +47,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { name, format, strategy, deckType, cards } = body;
+  const { name, format, strategy, deckType, cards, commander } = body;
 
   if (!name || !format) {
     return NextResponse.json(
@@ -62,9 +63,9 @@ export async function POST(req: NextRequest) {
     const cardsJson = JSON.stringify(cards || {});
 
     await run(
-      `INSERT INTO decks (id, "userId", name, format, strategy, "deckType", cards, "createdAt", "updatedAt")
-       VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
-      [id, userId, name, format, strategy || null, resolvedDeckType, cardsJson]
+      `INSERT INTO decks (id, "userId", name, format, strategy, commander, "deckType", cards, "createdAt", "updatedAt")
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+      [id, userId, name, format, strategy || null, commander || null, resolvedDeckType, cardsJson]
     );
 
     return NextResponse.json({
@@ -72,6 +73,7 @@ export async function POST(req: NextRequest) {
       name,
       format,
       strategy: strategy || null,
+      commander: commander || null,
       deckType: resolvedDeckType,
       cards: cards || {},
     });

@@ -45,7 +45,7 @@ export async function PATCH(
   }
 
   const body = await req.json();
-  const { name, format, strategy, deckType, cards, addCards } = body;
+  const { name, format, strategy, commander, deckType, cards, addCards } = body;
 
   try {
     // Fetch current deck and verify ownership
@@ -86,6 +86,10 @@ export async function PATCH(
     if (strategy !== undefined) {
       updates.push('strategy = ?');
       values.push(strategy);
+    }
+    if (commander !== undefined) {
+      updates.push('commander = ?');
+      values.push(commander);
     }
     if (deckType !== undefined) {
       updates.push('"deckType" = ?');
