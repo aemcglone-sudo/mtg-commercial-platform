@@ -268,6 +268,43 @@ export default function SimulatorPage() {
 
   const commanderCard = commander ? cardData.get(commander.toLowerCase()) : undefined;
 
+  const [hoveredDeckCard, setHoveredDeckCard] = useState<{ name: string; imageUrl: string | null } | null>(null);
+
+  const DECK_LIST_TYPE_ORDER = ['Creature', 'Instant', 'Sorcery', 'Enchantment', 'Artifact', 'Planeswalker', 'Battle', 'Other', 'Land'];
+
+  function colorKeyForColors(colors: string[]): ColorKey {
+    if (colors.length === 0) return 'C';
+    if (colors.length > 1) return 'M';
+    return colors[0] as ColorKey;
+  }
+
+  const deckColumns = useMemo(() => {
+    const groups: Record<string, { name: string; qty: number; colors: string[] }[]> = {};
+    for (const t of DECK_LIST_TYPE_ORDER) groups[t] = [];
+    for (const [name, qty] of Object.entries(deckCards)) {
+      if (commander && name.toLowerCase() === commander.toLowerCase()) continue; // shown in its own column
+      const data = cardData.get(name.toLowerCase());
+      const tl = (data?.typeLine ?? '').toLowerCase();
+      let bucket = 'Other';
+      if (tl.includes('creature')) bucket = 'Creature';
+      else if (tl.includes('instant')) bucket = 'Instant';
+      else if (tl.includes('sorcery')) bucket = 'Sorcery';
+      else if (tl.includes('enchantment')) bucket = 'Enchantment';
+      else if (tl.includes('artifact')) bucket = 'Artifact';
+      else if (tl.includes('planeswalker')) bucket = 'Planeswalker';
+      else if (tl.includes('battle')) bucket = 'Battle';
+      else if (tl.includes('land')) bucket = 'Land';
+      groups[bucket].push({ name, qty, colors: data?.colors ?? [] });
+    }
+    for (const t of Object.keys(groups)) groups[t].sort((a, b) => a.name.localeCompare(b.name));
+    return DECK_LIST_TYPE_ORDER.filter(t => groups[t].length > 0).map(t => ({ type: t, cards: groups[t] }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deckCards, cardData, commander]);
+
+  function cardImgFallback(name: string): string {
+    return `https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}&format=image&version=normal`;
+  }
+
   function reset() {
     setStep('import');
     setDeckCards({});
@@ -598,9 +635,63 @@ export default function SimulatorPage() {
                 </div>
               </div>
             </div>
+
+            {/* Deck List */}
+            {(commander || deckColumns.length > 0) && (
+              <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+                <h3 className="text-sm font-semibold text-zinc-100 mb-4">Deck List</h3>
+                <div className="flex gap-4 overflow-x-auto pb-2">
+                  {commander && (
+                    <div className="shrink-0 w-40">
+                      <p className="text-[10px] uppercase tracking-wide text-zinc-500 mb-1.5">Commander</p>
+                      <button
+                        type="button"
+                        onMouseEnter={() => setHoveredDeckCard({ name: commander, imageUrl: commanderCard?.imageUrl ?? null })}
+                        onMouseLeave={() => setHoveredDeckCard(null)}
+                        className="w-full text-left text-xs px-2 py-1.5 rounded border-l-4 bg-zinc-950 hover:bg-zinc-800 transition-colors truncate"
+                        style={{ borderLeftColor: COLOR_BG[colorKeyForColors(commanderCard?.colors ?? [])] }}
+                      >
+                        <span className="truncate text-zinc-200">{commander}</span>
+                      </button>
+                    </div>
+                  )}
+                  {deckColumns.map(col => (
+                    <div key={col.type} className="shrink-0 w-40 space-y-1">
+                      <p className="text-[10px] uppercase tracking-wide text-zinc-500 mb-1.5">
+                        {col.type} ({col.cards.reduce((s, c) => s + c.qty, 0)})
+                      </p>
+                      {col.cards.map(c => (
+                        <button
+                          key={c.name}
+                          type="button"
+                          onMouseEnter={() => setHoveredDeckCard({ name: c.name, imageUrl: cardData.get(c.name.toLowerCase())?.imageUrl ?? null })}
+                          onMouseLeave={() => setHoveredDeckCard(null)}
+                          className="w-full text-left text-xs px-2 py-1.5 rounded border-l-4 bg-zinc-950 hover:bg-zinc-800 transition-colors truncate flex items-center justify-between gap-1"
+                          style={{ borderLeftColor: COLOR_BG[colorKeyForColors(c.colors)] }}
+                        >
+                          <span className="truncate text-zinc-200">{c.name}</span>
+                          {c.qty > 1 && <span className="text-zinc-500 shrink-0">×{c.qty}</span>}
+                        </button>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
+
+      {/* Card image preview on hover */}
+      {hoveredDeckCard && (
+        <div className="fixed bottom-6 right-6 z-50 pointer-events-none">
+          <img
+            src={hoveredDeckCard.imageUrl ?? cardImgFallback(hoveredDeckCard.name)}
+            alt={hoveredDeckCard.name}
+            className="w-56 rounded-xl border border-zinc-700 shadow-2xl"
+          />
+        </div>
+      )}
     </main>
   );
 }
