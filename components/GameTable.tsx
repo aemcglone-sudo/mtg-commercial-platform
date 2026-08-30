@@ -358,14 +358,13 @@ export default function GameTable({ handoff, onExit }: { handoff: TableHandoff; 
                           <div className="flex flex-wrap gap-1.5">
                             {items.map(c => (
                               <div key={c.id}
-                                className={`group relative w-20 rounded border transition-all ${c.tapped ? 'opacity-50 border-zinc-700' : 'border-zinc-700'} ${justPlayedId === c.id ? 'ring-2 ring-amber-400 scale-105' : ''}`}
+                                className={`group relative w-12 rounded border transition-all ${c.tapped ? 'opacity-50 border-zinc-700' : 'border-zinc-700'} ${justPlayedId === c.id ? 'ring-2 ring-amber-400 scale-105' : ''}`}
                                 onMouseEnter={() => hover(c.name)} onMouseLeave={() => setHoveredCard(null)}
                               >
                                 <button type="button" onClick={() => toggleTap(c.id)} className="w-full text-left">
-                                  <div className="h-14 bg-zinc-950 rounded-t flex items-center justify-center text-[8px] text-zinc-600 overflow-hidden">
-                                    {cardInfo(c.name)?.imageUrl ? <img src={cardInfo(c.name)!.imageUrl!} alt={c.name} className="w-full h-full object-cover" /> : 'art'}
+                                  <div className="bg-zinc-950 rounded-t flex items-center justify-center text-[7px] text-zinc-600">
+                                    {cardInfo(c.name)?.imageUrl ? <img src={cardInfo(c.name)!.imageUrl!} alt={c.name} className="w-full h-auto rounded-t" /> : 'art'}
                                   </div>
-                                  <div className="text-[9px] px-1 py-0.5 truncate">{c.name}</div>
                                 </button>
                                 <button type="button" onClick={() => removePermanent(c.id, 'graveyard')}
                                   title="Send to graveyard"
@@ -412,13 +411,12 @@ export default function GameTable({ handoff, onExit }: { handoff: TableHandoff; 
                         <div className="flex flex-wrap gap-1.5">
                           {items.map(chip => (
                             <div key={chip.id}
-                              className="group relative w-20 rounded border border-zinc-700"
+                              className="group relative w-12 rounded border border-zinc-700"
                               onMouseEnter={() => hover(chip.name, chip.imageUrl)} onMouseLeave={() => setHoveredCard(null)}
                             >
-                              <div className="h-14 bg-zinc-950 rounded-t flex items-center justify-center text-[8px] text-zinc-600 overflow-hidden">
-                                {chip.imageUrl ? <img src={chip.imageUrl} alt={chip.name} className="w-full h-full object-cover" /> : 'art'}
+                              <div className="bg-zinc-950 rounded flex items-center justify-center text-[7px] text-zinc-600">
+                                {chip.imageUrl ? <img src={chip.imageUrl} alt={chip.name} className="w-full h-auto rounded" /> : 'art'}
                               </div>
-                              <div className="text-[9px] px-1 py-0.5 truncate">{chip.name}</div>
                               <button type="button" onClick={() => removeOpponentChip(oppIndex, chip.id)}
                                 title="Remove"
                                 className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-600 text-white text-[9px] opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
