@@ -947,8 +947,7 @@ export default function SimulatorPage() {
                   <button
                     key={`${name}-${i}`}
                     type="button"
-                    disabled={!selectable}
-                    onClick={() => toggleBottomCard(i)}
+                    onClick={() => { if (selectable) toggleBottomCard(i); }}
                     onMouseEnter={() => setHoveredDeckCard({ name, imageUrl: cardData.get(name.toLowerCase())?.imageUrl ?? null })}
                     onMouseLeave={() => setHoveredDeckCard(null)}
                     className={`w-36 rounded-lg border-2 transition-all overflow-hidden ${
