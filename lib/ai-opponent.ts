@@ -126,3 +126,37 @@ export function declareAttackers(candidates: AttackerCandidate[], yourUntappedBl
     return !wouldDieForFree;
   });
 }
+
+/**
+ * The mirror of declareAttackers, for when the AI is the one being attacked:
+ * always take a free kill (blocker survives, attacker dies); otherwise only
+ * trade or chump-block if the incoming damage would meaningfully hurt them
+ * (defined as: taking it all unblocked would leave them at 5 life or less) —
+ * preserving board state is treated as more valuable than every single point
+ * of damage. Returns a map of attacker id -> chosen blocker id (or null).
+ */
+export function chooseBlocks(
+  attackers: AttackerCandidate[],
+  defenders: BlockerCandidate[],
+  defenderLife: number
+): Record<string, string | null> {
+  const assignments: Record<string, string | null> = {};
+  const available = [...defenders];
+  const totalIncoming = attackers.reduce((s, a) => s + Math.max(a.power, 0), 0);
+  const inDanger = defenderLife - totalIncoming <= 5;
+
+  const byPowerDesc = [...attackers].sort((a, b) => b.power - a.power);
+
+  for (const atk of byPowerDesc) {
+    let chosen = available.find(d => d.power >= atk.toughness && atk.power < d.toughness); // free kill
+    if (!chosen && inDanger) {
+      chosen = available.find(d => d.power >= atk.toughness); // trade, both may die
+    }
+    if (!chosen && inDanger) {
+      chosen = [...available].sort((a, b) => a.power - b.power)[0]; // chump block with the weakest
+    }
+    assignments[atk.id] = chosen?.id ?? null;
+    if (chosen) available.splice(available.indexOf(chosen), 1);
+  }
+  return assignments;
+}

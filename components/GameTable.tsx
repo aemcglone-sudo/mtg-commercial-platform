@@ -7,7 +7,7 @@ import { groupByLane } from '@/lib/battlefield-lanes';
 import { AI_DECKS } from '@/lib/ai-opponent-decks';
 import { parseDeckFromText } from '@/lib/parse-deck';
 import { expandDeckToCards, shuffle } from '@/lib/deck-shuffle';
-import { isLand, isCreature, isManaSource, planMainPhaseActions, declareAttackers } from '@/lib/ai-opponent';
+import { isLand, isCreature, isManaSource, planMainPhaseActions, declareAttackers, chooseBlocks } from '@/lib/ai-opponent';
 
 type Phase = 'untap' | 'upkeep' | 'draw' | 'main1' | 'combat' | 'main2' | 'end';
 const PHASES: Phase[] = ['untap', 'upkeep', 'draw', 'main1', 'combat', 'main2', 'end'];
@@ -391,6 +391,99 @@ export default function GameTable({ handoff, onExit }: { handoff: TableHandoff; 
     });
   }
 
+  // ── Your attacks (mirrors the AI's attack-you flow, reversed) ──────────────
+
+  // attacker battlefield id -> opponent array index (0-2) or null (not attacking).
+  // Local, transient UI state — not persisted, since it's only meaningful mid-decision on your own turn.
+  const [attackTargets, setAttackTargets] = useState<Record<string, number | null>>({});
+  const [declaringAttack, setDeclaringAttack] = useState(false);
+
+  const eligibleAttackers = useMemo(() => {
+    if (state.activeSeatIndex !== 0 || state.phase !== 'combat') return [];
+    return state.you.battlefield.filter(c => !c.tapped && isCreature(cardInfo(c.name)) && c.enteredTurn !== state.turnNumber);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.activeSeatIndex, state.phase, state.you.battlefield, state.turnNumber, allCardData]);
+
+  async function declareYourAttacks() {
+    const entries = Object.entries(attackTargets).filter((e): e is [string, number] => e[1] !== null && e[1] !== undefined);
+    if (entries.length === 0) return;
+    setDeclaringAttack(true);
+
+    const names = entries.map(([id]) => gameRef.current.you.battlefield.find(c => c.id === id)?.name).filter(Boolean).join(', ');
+    updateState(s => ({
+      ...s,
+      you: { ...s.you, battlefield: s.you.battlefield.map(c => attackTargets[c.id] != null ? { ...c, tapped: true } : c) },
+      log: pushLog(s.log, `You attack with ${names}.`),
+    }));
+    await delay(500);
+
+    const byOpponent = new Map<number, { id: string; name: string; power: number; toughness: number }[]>();
+    for (const [attackerId, oppIdx] of entries) {
+      const card = gameRef.current.you.battlefield.find(c => c.id === attackerId);
+      if (!card) continue;
+      const info = cardInfo(card.name);
+      const list = byOpponent.get(oppIdx) ?? [];
+      list.push({ id: card.id, name: card.name, power: info?.power ?? 0, toughness: info?.toughness ?? 0 });
+      byOpponent.set(oppIdx, list);
+    }
+
+    for (const [oppIdx, atks] of byOpponent) {
+      const opp = gameRef.current.opponents[oppIdx];
+      const availableDefenders = opp.battlefield
+        .filter(c => !c.tapped && isCreature(cardInfo(c.name)))
+        .map(c => ({ id: c.id, name: c.name, power: cardInfo(c.name)?.power ?? 0, toughness: cardInfo(c.name)?.toughness ?? 0 }));
+      const blocks = chooseBlocks(atks, availableDefenders, opp.life);
+
+      updateState(s => {
+        const opponents = [...s.opponents];
+        const oppSeat = { ...opponents[oppIdx] };
+        let oppBattlefield = [...oppSeat.battlefield];
+        const you = { ...s.you };
+        let yourBattlefield = [...you.battlefield];
+        let log = s.log;
+        let lifeLoss = 0;
+
+        for (const atk of atks) {
+          const blockerId = blocks[atk.id];
+          const blockerCard = blockerId ? oppBattlefield.find(c => c.id === blockerId) : undefined;
+
+          if (!blockerCard) {
+            lifeLoss += atk.power;
+            log = pushLog(log, `${atk.name} hits ${oppSeat.name} for ${atk.power}.`);
+            continue;
+          }
+
+          const bInfo = cardInfo(blockerCard.name);
+          const bPower = bInfo?.power ?? 0;
+          const bToughness = bInfo?.toughness ?? 0;
+          const attackerDies = bPower >= atk.toughness;
+          const blockerDies = atk.power >= bToughness;
+
+          if (attackerDies) {
+            yourBattlefield = yourBattlefield.filter(c => c.id !== atk.id);
+            you.graveyard = [...you.graveyard, atk.name];
+          }
+          if (blockerDies) {
+            oppBattlefield = oppBattlefield.filter(c => c.id !== blockerCard.id);
+            oppSeat.graveyard = [...oppSeat.graveyard, blockerCard.name];
+          }
+          const outcome = [attackerDies && `${atk.name} dies`, blockerDies && `${blockerCard.name} dies`].filter(Boolean).join(', ');
+          log = pushLog(log, `${oppSeat.name} blocks ${atk.name} with ${blockerCard.name}${outcome ? ` — ${outcome}` : ''}.`);
+        }
+
+        oppSeat.life -= lifeLoss;
+        oppSeat.battlefield = oppBattlefield;
+        opponents[oppIdx] = oppSeat;
+        you.battlefield = yourBattlefield;
+        return { ...s, you, opponents, log };
+      });
+      await delay(500);
+    }
+
+    setAttackTargets({});
+    setDeclaringAttack(false);
+  }
+
   // ── Your actions ──────────────────────────────────────────────────────────
 
   function playCard(name: string) {
@@ -658,6 +751,36 @@ export default function GameTable({ handoff, onExit }: { handoff: TableHandoff; 
               <button type="button" onClick={confirmBlocks}
                 className="px-4 py-1.5 rounded-lg bg-amber-400 text-black text-xs font-semibold hover:bg-amber-300 transition-colors">
                 Confirm Blocks
+              </button>
+            </div>
+          )}
+
+          {/* Your attackers panel */}
+          {eligibleAttackers.length > 0 && !state.pendingBlocks && (
+            <div className="bg-amber-950/20 border-l-4 border-amber-600 rounded-lg px-3 py-3 shrink-0 space-y-2">
+              <p className="text-[10px] uppercase tracking-wide text-amber-400 font-bold">Attack</p>
+              <div className="space-y-1.5">
+                {eligibleAttackers.map(c => {
+                  const info = cardInfo(c.name);
+                  return (
+                    <div key={c.id} className="flex items-center gap-2 text-sm">
+                      <span className="text-zinc-200 w-48 truncate">{c.name} ({info?.power ?? 0}/{info?.toughness ?? 0})</span>
+                      <select
+                        value={attackTargets[c.id] ?? ''}
+                        onChange={e => setAttackTargets(prev => ({ ...prev, [c.id]: e.target.value === '' ? null : Number(e.target.value) }))}
+                        disabled={declaringAttack}
+                        className="bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1 text-xs text-zinc-300 focus:outline-none focus:border-amber-500"
+                      >
+                        <option value="">Not attacking</option>
+                        {state.opponents.map((opp, i) => <option key={i} value={i}>{opp.name}</option>)}
+                      </select>
+                    </div>
+                  );
+                })}
+              </div>
+              <button type="button" onClick={declareYourAttacks} disabled={declaringAttack || !Object.values(attackTargets).some(v => v !== null && v !== undefined)}
+                className="px-4 py-1.5 rounded-lg bg-amber-400 text-black text-xs font-semibold hover:bg-amber-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                {declaringAttack ? 'Resolving…' : 'Declare Attacks'}
               </button>
             </div>
           )}
