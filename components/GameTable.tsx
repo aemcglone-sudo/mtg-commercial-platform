@@ -404,6 +404,36 @@ export default function GameTable({ handoff, onExit }: { handoff: TableHandoff; 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.activeSeatIndex, state.phase, state.you.battlefield, state.turnNumber, allCardData]);
 
+  // ── Auto-advance your own turn ──────────────────────────────────────────
+  // Untap/Upkeep/Draw/End have nothing to decide, so they advance on their
+  // own — same pacing as opponent turns. Main phases and Combat only pause
+  // and wait for you when there's an actual choice available: a playable
+  // card in hand, or a creature that could attack. Otherwise they skip
+  // forward too, so you're never stuck clicking through empty steps.
+  const hasPriorityPlay = useMemo(() => {
+    if (state.activeSeatIndex !== 0) return false;
+    if (state.phase === 'combat') return eligibleAttackers.length > 0;
+    if (state.phase === 'main1' || state.phase === 'main2') {
+      const untappedMana = state.you.battlefield.filter(c => !c.tapped && isManaSource(cardInfo(c.name))).length;
+      return state.you.hand.some(name => {
+        const info = cardInfo(name);
+        if (isLand(info)) return !state.you.landPlayedThisTurn;
+        return (info?.cmc ?? 0) <= untappedMana;
+      });
+    }
+    return false;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.activeSeatIndex, state.phase, state.you.hand, state.you.battlefield, state.you.landPlayedThisTurn, eligibleAttackers.length, allCardData]);
+
+  useEffect(() => {
+    if (state.activeSeatIndex !== 0) return; // opponent turns run themselves
+    if (state.pendingBlocks || declaringAttack) return; // don't race an in-flight decision
+    if (hasPriorityPlay) return; // something to do — wait for you
+    const t = setTimeout(() => nextPhase(), 500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.activeSeatIndex, state.phase, state.pendingBlocks, declaringAttack, hasPriorityPlay]);
+
   async function declareYourAttacks() {
     const entries = Object.entries(attackTargets).filter((e): e is [string, number] => e[1] !== null && e[1] !== undefined);
     if (entries.length === 0) return;
