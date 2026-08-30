@@ -131,6 +131,11 @@ export default function SimulatorPage() {
   const [parseError, setParseError] = useState('');
 
   const [deckCards, setDeckCards] = useState<Record<string, number>>({});
+  const [loadedDeckId, setLoadedDeckId] = useState<string | null>(null);
+  const [saveDeckName, setSaveDeckName] = useState('');
+  const [savingDeck, setSavingDeck] = useState(false);
+  const [saveDeckError, setSaveDeckError] = useState('');
+  const [showSaveForm, setShowSaveForm] = useState(false);
   const [commander, setCommander] = useState('');
   const [commanderCardImg, setCommanderCardImg] = useState<string | null>(null);
 
@@ -184,6 +189,51 @@ export default function SimulatorPage() {
     setCommanderResults([]);
   }
 
+  // Commander lookup for a saved deck that doesn't have one stored yet (e.g. saved
+  // before commander persistence existed) — setting it here saves it back to the
+  // deck too, so it's remembered next time instead of asking again.
+  const [savedDeckCommanderQuery, setSavedDeckCommanderQuery] = useState('');
+  const [savedDeckCommanderResults, setSavedDeckCommanderResults] = useState<CommanderOption[]>([]);
+  const [savedDeckCommanderSearching, setSavedDeckCommanderSearching] = useState(false);
+  const [savingCommander, setSavingCommander] = useState(false);
+
+  useEffect(() => {
+    setSavedDeckCommanderQuery('');
+    setSavedDeckCommanderResults([]);
+  }, [selectedSavedDeckId]);
+
+  useEffect(() => {
+    if (savedDeckCommanderQuery.trim().length < 2) { setSavedDeckCommanderResults([]); return; }
+    let cancelled = false;
+    setSavedDeckCommanderSearching(true);
+    const t = setTimeout(() => {
+      fetch(`/api/simulator/commander-search?q=${encodeURIComponent(savedDeckCommanderQuery)}`)
+        .then(r => r.ok ? r.json() : { results: [] })
+        .then((d: { results: CommanderOption[] }) => { if (!cancelled) setSavedDeckCommanderResults(d.results ?? []); })
+        .catch(() => {})
+        .finally(() => { if (!cancelled) setSavedDeckCommanderSearching(false); });
+    }, 300);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [savedDeckCommanderQuery]);
+
+  async function setCommanderForSavedDeck(deckId: string, option: CommanderOption) {
+    setSavingCommander(true);
+    try {
+      await fetch(`/api/decks/${deckId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ commander: option.name }),
+      });
+      setSavedDecks(prev => prev.map(d => d.id === deckId ? { ...d, commander: option.name } : d));
+      setSavedDeckCommanderQuery('');
+      setSavedDeckCommanderResults([]);
+    } catch {
+      // best effort — worst case they just have to pick it again next time
+    } finally {
+      setSavingCommander(false);
+    }
+  }
+
   function handleParse(text: string) {
     setParseError('');
     const result = parseDeckFromText(text);
@@ -197,6 +247,7 @@ export default function SimulatorPage() {
       cards[commander] = 1;
     }
     setDeckCards(cards);
+    setLoadedDeckId(null); // pasted deck — not yet in My Decks
     setStep('analysis');
   }
 
@@ -209,7 +260,35 @@ export default function SimulatorPage() {
     // than re-guessing or requiring the user to pick it again.
     setCommander(deck.commander ?? '');
     setCommanderCardImg(null);
+    setLoadedDeckId(deck.id); // already in My Decks — no need to offer saving it again
     setStep('analysis');
+  }
+
+  async function saveDeckToMyDecks() {
+    if (!saveDeckName.trim()) { setSaveDeckError('Give the deck a name first.'); return; }
+    setSavingDeck(true);
+    setSaveDeckError('');
+    try {
+      const res = await fetch('/api/decks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: saveDeckName.trim(),
+          format: format.charAt(0).toUpperCase() + format.slice(1),
+          commander: commander || undefined,
+          cards: deckCards,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setSaveDeckError(data.error ?? 'Failed to save deck'); return; }
+      setLoadedDeckId(data.id);
+      setSavedDecks(prev => [{ id: data.id, name: data.name, format: data.format, commander: data.commander, cards: deckCards }, ...prev]);
+      setShowSaveForm(false);
+    } catch {
+      setSaveDeckError('Something went wrong. Please try again.');
+    } finally {
+      setSavingDeck(false);
+    }
   }
 
   const cardNames = useMemo(() => Object.keys(deckCards), [deckCards]);
@@ -336,6 +415,10 @@ export default function SimulatorPage() {
     setMulliganCount(0);
     setMulliganPhase('deciding');
     setBottomSelection(new Set());
+    setLoadedDeckId(null);
+    setSaveDeckName('');
+    setSaveDeckError('');
+    setShowSaveForm(false);
   }
 
   // ── Mulligan (London mulligan: always draw 7, bottom N cards equal to mulligans taken) ──
@@ -491,9 +574,44 @@ export default function SimulatorPage() {
                 {(() => {
                   const selected = savedDecks.find(d => d.id === selectedSavedDeckId);
                   if (!selected) return null;
-                  return selected.commander
-                    ? <p className="text-xs text-amber-400">Commander: {selected.commander} — will be used automatically.</p>
-                    : <p className="text-xs text-zinc-600">No commander saved with this deck — you can pick one after loading.</p>;
+                  if (selected.commander) {
+                    return <p className="text-xs text-amber-400">Commander: {selected.commander} — will be used automatically.</p>;
+                  }
+                  return (
+                    <div className="space-y-2">
+                      <p className="text-xs text-zinc-600">
+                        No commander saved with this deck yet — search to set one{savingCommander ? ' (saving…)' : ''}:
+                      </p>
+                      <div className="relative max-w-sm">
+                        <input
+                          type="text"
+                          value={savedDeckCommanderQuery}
+                          onChange={e => setSavedDeckCommanderQuery(e.target.value)}
+                          placeholder="Search for a legendary creature…"
+                          className="w-full bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-amber-500"
+                        />
+                        {savedDeckCommanderSearching && <p className="text-xs text-zinc-600 mt-1">Searching…</p>}
+                        {savedDeckCommanderResults.length > 0 && (
+                          <div className="absolute z-10 mt-1 w-full bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl max-h-80 overflow-y-auto">
+                            {savedDeckCommanderResults.map(opt => (
+                              <button
+                                key={opt.scryfallId}
+                                type="button"
+                                onClick={() => setCommanderForSavedDeck(selected.id, opt)}
+                                className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-zinc-800 transition-colors text-left"
+                              >
+                                {opt.imageUrl && <img src={opt.imageUrl} alt={opt.name} className="w-8 rounded shrink-0" />}
+                                <div className="min-w-0">
+                                  <p className="text-sm text-zinc-200 truncate">{opt.name}</p>
+                                  <p className="text-xs text-zinc-500 truncate">{opt.typeLine}</p>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
                 })()}
               </div>
             )}
@@ -531,6 +649,35 @@ export default function SimulatorPage() {
                 </button>
               </div>
             </div>
+
+            {loadedDeckId === null && !showSaveForm && (
+              <button type="button" onClick={() => { setShowSaveForm(true); setSaveDeckName(commander ? `${commander} Deck` : 'New Deck'); }}
+                className="text-xs px-3 py-1.5 rounded-lg font-semibold text-black bg-amber-400 hover:bg-amber-300 transition-colors">
+                💾 Save to My Decks
+              </button>
+            )}
+            {loadedDeckId !== null && (
+              <p className="text-xs text-green-400">✓ Saved to My Decks</p>
+            )}
+            {showSaveForm && (
+              <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex items-center gap-3 flex-wrap">
+                <input
+                  type="text"
+                  value={saveDeckName}
+                  onChange={e => setSaveDeckName(e.target.value)}
+                  placeholder="Deck name"
+                  className="flex-1 min-w-48 bg-zinc-950 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-amber-500"
+                />
+                <button type="button" onClick={saveDeckToMyDecks} disabled={savingDeck}
+                  className="px-4 py-2 rounded-lg font-semibold text-black bg-amber-400 hover:bg-amber-300 disabled:opacity-40 transition-colors text-sm">
+                  {savingDeck ? 'Saving…' : 'Save'}
+                </button>
+                <button type="button" onClick={() => setShowSaveForm(false)} className="text-xs text-zinc-500 hover:text-zinc-300">
+                  Cancel
+                </button>
+                {saveDeckError && <p className="text-xs text-red-400 w-full">{saveDeckError}</p>}
+              </div>
+            )}
 
             {loadingAnalysis && <p className="text-sm text-zinc-500">Looking up {cardNames.length} cards…</p>}
             {analysisError && <p className="text-sm text-red-400">{analysisError}</p>}
