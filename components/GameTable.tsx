@@ -619,6 +619,44 @@ export default function GameTable({ handoff, onExit }: { handoff: TableHandoff; 
     [state.you.battlefield, cardInfo]
   );
 
+  function renderOpponentSeat(oppIndex: number) {
+    const opp = state.opponents[oppIndex];
+    const isActive = state.activeSeatIndex === oppIndex + 1;
+    const oppLanes = groupByLane(opp.battlefield, c => cardInfo(c.name)?.typeLine);
+    return (
+      <div key={oppIndex} className={`bg-zinc-900 border rounded-xl p-4 flex flex-col min-h-0 ${isActive ? 'border-amber-500' : 'border-zinc-800'}`}>
+        <div className="flex items-center gap-2 mb-2 shrink-0">
+          <span className="text-base font-semibold flex-1">{opp.name}</span>
+          <span className="text-[10px] text-zinc-600">{opp.hand.length} in hand</span>
+          <span className="text-2xl font-black text-amber-400 w-10 text-center">{opp.life}</span>
+        </div>
+
+        <div className="flex-1 min-h-0 overflow-y-auto space-y-2 pr-1">
+          {oppLanes.map(({ lane, items }) => (
+            <div key={lane}>
+              <p className="text-[9px] uppercase tracking-wide text-zinc-600 mb-1">{lane} ({items.length})</p>
+              <div className="flex flex-wrap gap-1.5">
+                {items.map(c => (
+                  <div key={c.id}
+                    className={`relative w-12 rounded border ${c.tapped ? 'opacity-50 border-zinc-700' : 'border-zinc-700'}`}
+                    onMouseEnter={() => hover(c.name)} onMouseLeave={() => setHoveredCard(null)}
+                  >
+                    <div className="bg-zinc-950 rounded flex items-center justify-center text-[7px] text-zinc-600">
+                      {cardInfo(c.name)?.imageUrl ? <img src={cardInfo(c.name)!.imageUrl!} alt={c.name} className="w-full h-auto rounded" /> : 'art'}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+          {oppLanes.length === 0 && <p className="text-xs text-zinc-600">No permanents yet.</p>}
+        </div>
+
+        <p className="text-[10px] text-zinc-600 mt-2 shrink-0">Library: {opp.library.length} · Graveyard: {opp.graveyard.length}</p>
+      </div>
+    );
+  }
+
   if (!ready) {
     return (
       <div className="h-screen bg-zinc-950 text-zinc-100 flex items-center justify-center">
@@ -653,6 +691,9 @@ export default function GameTable({ handoff, onExit }: { handoff: TableHandoff; 
         <div className="flex-1 flex flex-col gap-3 min-w-0">
           {/* Quad grid */}
           <div className="flex-1 min-h-0 grid grid-cols-2 gap-3">
+            {renderOpponentSeat(0)}
+            {renderOpponentSeat(1)}
+
             <div className="bg-zinc-900 border border-amber-700 rounded-xl p-4 flex flex-col min-h-0">
               <div className="flex items-center gap-2 mb-2 shrink-0">
                 <span className="text-base font-semibold flex-1">You</span>
@@ -660,21 +701,6 @@ export default function GameTable({ handoff, onExit }: { handoff: TableHandoff; 
                 <span className="text-2xl font-black text-amber-400 w-10 text-center">{state.you.life}</span>
                 <button type="button" onClick={() => adjustLife(1)} className="w-7 h-7 rounded bg-zinc-800 hover:bg-zinc-700 text-sm">+</button>
               </div>
-
-              {handoff.commander && (
-                <div className="flex items-center gap-2 mb-2 text-xs shrink-0">
-                  <span className="text-zinc-500">Commander:</span>
-                  {state.you.commanderInZone ? (
-                    <button type="button" onClick={castCommander}
-                      onMouseEnter={() => hover(handoff.commander!)} onMouseLeave={() => setHoveredCard(null)}
-                      className="px-2 py-1 rounded bg-purple-950 text-purple-300 border border-purple-800 hover:border-purple-600">
-                      Cast {handoff.commander} {state.you.commanderCastCount > 0 ? `(+${state.you.commanderCastCount * 2} tax)` : ''}
-                    </button>
-                  ) : (
-                    <span className="text-purple-400">{handoff.commander} (on battlefield)</span>
-                  )}
-                </div>
-              )}
 
               <div className="flex-1 min-h-0 overflow-y-auto space-y-2 pr-1">
                 {yourLanes.map(({ lane, items }) => (
@@ -711,42 +737,7 @@ export default function GameTable({ handoff, onExit }: { handoff: TableHandoff; 
               </div>
             </div>
 
-            {state.opponents.map((opp, oppIndex) => {
-              const isActive = state.activeSeatIndex === oppIndex + 1;
-              const oppLanes = groupByLane(opp.battlefield, c => cardInfo(c.name)?.typeLine);
-              return (
-                <div key={oppIndex} className={`bg-zinc-900 border rounded-xl p-4 flex flex-col min-h-0 ${isActive ? 'border-amber-500' : 'border-zinc-800'}`}>
-                  <div className="flex items-center gap-2 mb-2 shrink-0">
-                    <span className="text-base font-semibold flex-1">{opp.name}</span>
-                    <span className="text-[10px] text-zinc-600">{opp.hand.length} in hand</span>
-                    <span className="text-2xl font-black text-amber-400 w-10 text-center">{opp.life}</span>
-                  </div>
-
-                  <div className="flex-1 min-h-0 overflow-y-auto space-y-2 pr-1">
-                    {oppLanes.map(({ lane, items }) => (
-                      <div key={lane}>
-                        <p className="text-[9px] uppercase tracking-wide text-zinc-600 mb-1">{lane} ({items.length})</p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {items.map(c => (
-                            <div key={c.id}
-                              className={`relative w-12 rounded border ${c.tapped ? 'opacity-50 border-zinc-700' : 'border-zinc-700'}`}
-                              onMouseEnter={() => hover(c.name)} onMouseLeave={() => setHoveredCard(null)}
-                            >
-                              <div className="bg-zinc-950 rounded flex items-center justify-center text-[7px] text-zinc-600">
-                                {cardInfo(c.name)?.imageUrl ? <img src={cardInfo(c.name)!.imageUrl!} alt={c.name} className="w-full h-auto rounded" /> : 'art'}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                    {oppLanes.length === 0 && <p className="text-xs text-zinc-600">No permanents yet.</p>}
-                  </div>
-
-                  <p className="text-[10px] text-zinc-600 mt-2 shrink-0">Library: {opp.library.length} · Graveyard: {opp.graveyard.length}</p>
-                </div>
-              );
-            })}
+            {renderOpponentSeat(2)}
           </div>
 
           {/* Blocking panel */}
@@ -823,39 +814,65 @@ export default function GameTable({ handoff, onExit }: { handoff: TableHandoff; 
             </div>
           )}
 
-          {/* Hand */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 shrink-0">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-[10px] uppercase tracking-wide text-zinc-500">Your Hand ({state.you.hand.length})</p>
-              <button type="button" onClick={() => setHandCollapsed(c => !c)} className="text-xs text-zinc-500 hover:text-zinc-300">
-                {handCollapsed ? 'Expand' : 'Collapse'}
-              </button>
-            </div>
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              {state.you.hand.map((name, i) => {
-                const info = cardInfo(name);
-                const land = isLand(info);
-                return (
-                  <button
-                    key={`${name}-${i}`}
-                    type="button"
-                    onClick={() => playCard(name)}
-                    onMouseEnter={() => hover(name)} onMouseLeave={() => setHoveredCard(null)}
-                    className={`shrink-0 rounded-lg border-2 border-green-700 bg-zinc-950 overflow-hidden hover:border-green-500 transition-all ${handCollapsed ? 'w-16' : 'w-28'}`}
-                  >
-                    <div className="bg-zinc-900 flex items-center justify-center text-[9px] text-zinc-600">
-                      <img src={info?.imageUrl ?? fallbackImg(name)} alt={name} className="w-full h-auto" />
-                    </div>
-                    {!handCollapsed && (
-                      <div className="p-1.5">
-                        <p className="text-[10px] font-medium truncate">{name}</p>
-                        <p className="text-[9px] text-green-500">{land ? 'Play land' : 'Cast'}</p>
+          {/* Command zone + Hand */}
+          <div className="flex gap-3 shrink-0 items-start">
+            {handoff.commander && (
+              <div className="w-28 shrink-0 rounded-lg border-2 border-purple-700 bg-zinc-950 overflow-hidden flex flex-col">
+                <p className="text-[9px] uppercase tracking-wide text-purple-400 text-center py-1 bg-purple-950/50 shrink-0">Command Zone</p>
+                <div
+                  onMouseEnter={() => hover(handoff.commander!)} onMouseLeave={() => setHoveredCard(null)}
+                  className="bg-zinc-900 flex items-center justify-center text-[9px] text-zinc-600"
+                >
+                  {commanderInfo?.imageUrl
+                    ? <img src={commanderInfo.imageUrl} alt={handoff.commander} className="w-full h-auto" />
+                    : <div className="aspect-[5/7] w-full" />}
+                </div>
+                <div className="p-1.5 shrink-0">
+                  {state.you.commanderInZone ? (
+                    <button type="button" onClick={castCommander}
+                      className="w-full text-[10px] font-semibold text-purple-300 hover:text-purple-100 text-center transition-colors">
+                      Cast{state.you.commanderCastCount > 0 ? ` (+${state.you.commanderCastCount * 2})` : ''}
+                    </button>
+                  ) : (
+                    <p className="text-[9px] text-zinc-500 text-center">On battlefield</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div className="flex-1 min-w-0 bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[10px] uppercase tracking-wide text-zinc-500">Your Hand ({state.you.hand.length})</p>
+                <button type="button" onClick={() => setHandCollapsed(c => !c)} className="text-xs text-zinc-500 hover:text-zinc-300">
+                  {handCollapsed ? 'Expand' : 'Collapse'}
+                </button>
+              </div>
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {state.you.hand.map((name, i) => {
+                  const info = cardInfo(name);
+                  const land = isLand(info);
+                  return (
+                    <button
+                      key={`${name}-${i}`}
+                      type="button"
+                      onClick={() => playCard(name)}
+                      onMouseEnter={() => hover(name)} onMouseLeave={() => setHoveredCard(null)}
+                      className={`shrink-0 rounded-lg border-2 border-green-700 bg-zinc-950 overflow-hidden hover:border-green-500 transition-all ${handCollapsed ? 'w-16' : 'w-28'}`}
+                    >
+                      <div className="bg-zinc-900 flex items-center justify-center text-[9px] text-zinc-600">
+                        <img src={info?.imageUrl ?? fallbackImg(name)} alt={name} className="w-full h-auto" />
                       </div>
-                    )}
-                  </button>
-                );
-              })}
-              {state.you.hand.length === 0 && <p className="text-xs text-zinc-600 py-4">No cards in hand.</p>}
+                      {!handCollapsed && (
+                        <div className="p-1.5">
+                          <p className="text-[10px] font-medium truncate">{name}</p>
+                          <p className="text-[9px] text-green-500">{land ? 'Play land' : 'Cast'}</p>
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+                {state.you.hand.length === 0 && <p className="text-xs text-zinc-600 py-4">No cards in hand.</p>}
+              </div>
             </div>
           </div>
         </div>
