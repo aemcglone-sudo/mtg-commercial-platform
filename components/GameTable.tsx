@@ -3,6 +3,8 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import type { TableHandoff, TableCardInfo } from '@/lib/game-table-types';
 import { TABLE_STATE_KEY } from '@/lib/game-table-types';
+import { groupByLane, type Lane } from '@/lib/battlefield-lanes';
+import type { CardSearchOption } from '@/app/api/simulator/card-search/route';
 
 type Phase = 'untap' | 'upkeep' | 'draw' | 'main1' | 'combat' | 'main2' | 'end';
 const PHASES: Phase[] = ['untap', 'upkeep', 'draw', 'main1', 'combat', 'main2', 'end'];
@@ -12,6 +14,7 @@ const PHASE_LABELS: Record<Phase, string> = {
 };
 
 interface BattlefieldCard { id: string; name: string; tapped: boolean; }
+interface OpponentChip { id: string; name: string; imageUrl: string | null; typeLine: string | null; }
 type ThreatLevel = 'safe' | 'building' | 'lethal';
 
 interface YourSeatState {
@@ -29,7 +32,7 @@ interface YourSeatState {
 interface OpponentSeatState {
   name: string;
   life: number;
-  chips: string[];
+  chips: OpponentChip[];
   handCount: number;
   threat: ThreatLevel;
 }
@@ -77,11 +80,25 @@ const THREAT_STYLES: Record<ThreatLevel, { label: string; className: string }> =
 };
 const THREAT_ORDER: ThreatLevel[] = ['safe', 'building', 'lethal'];
 
+// Migrates game state saved before opponent chips carried real card data
+// (plain strings) to the current shape, so a resume doesn't crash.
+function migrateState(raw: any): TableState {
+  if (raw?.opponents) {
+    raw.opponents = raw.opponents.map((o: any) => ({
+      ...o,
+      chips: (o.chips ?? []).map((c: any) =>
+        typeof c === 'string' ? { id: uid(), name: c, imageUrl: null, typeLine: null } : c
+      ),
+    }));
+  }
+  return raw as TableState;
+}
+
 export default function GameTable({ handoff, onExit }: { handoff: TableHandoff; onExit: () => void }) {
   const [state, setState] = useState<TableState>(() => {
     try {
       const saved = localStorage.getItem(TABLE_STATE_KEY);
-      if (saved) return JSON.parse(saved) as TableState;
+      if (saved) return migrateState(JSON.parse(saved));
     } catch { /* ignore */ }
     return makeInitialState(handoff);
   });
@@ -220,13 +237,23 @@ export default function GameTable({ handoff, onExit }: { handoff: TableHandoff; 
     });
   }
 
-  function addOpponentChip(i: number, name: string) {
-    if (!name.trim()) return;
-    updateOpponent(i, { chips: [...state.opponents[i].chips, name.trim()] });
+  function addOpponentChip(i: number, option: CardSearchOption) {
+    setState(s => {
+      const opponents = [...s.opponents];
+      opponents[i] = {
+        ...opponents[i],
+        chips: [...opponents[i].chips, { id: uid(), name: option.name, imageUrl: option.imageUrl, typeLine: option.typeLine }],
+      };
+      return { ...s, opponents };
+    });
   }
 
-  function removeOpponentChip(i: number, chipIndex: number) {
-    updateOpponent(i, { chips: state.opponents[i].chips.filter((_, idx) => idx !== chipIndex) });
+  function removeOpponentChip(i: number, chipId: string) {
+    setState(s => {
+      const opponents = [...s.opponents];
+      opponents[i] = { ...opponents[i], chips: opponents[i].chips.filter(c => c.id !== chipId) };
+      return { ...s, opponents };
+    });
   }
 
   function cycleThreat(i: number) {
@@ -262,14 +289,19 @@ export default function GameTable({ handoff, onExit }: { handoff: TableHandoff; 
 
   // ── Rendering ────────────────────────────────────────────────────────────
 
-  function hover(name: string) {
-    setHoveredCard({ name, imageUrl: cardInfo(name)?.imageUrl ?? null });
+  function hover(name: string, imageUrl?: string | null) {
+    setHoveredCard({ name, imageUrl: imageUrl ?? cardInfo(name)?.imageUrl ?? null });
   }
+
+  const yourLanes = useMemo(
+    () => groupByLane(state.you.battlefield, c => cardInfo(c.name)?.typeLine),
+    [state.you.battlefield, cardInfo]
+  );
 
   const seatSlots = [state.opponents[0], state.opponents[1], 'you' as const, state.opponents[2]];
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col">
+    <div className="h-screen bg-zinc-950 text-zinc-100 flex flex-col overflow-hidden">
       {/* Phase header */}
       <div className="flex items-center justify-between px-4 py-3 bg-zinc-900 border-b border-zinc-800 shrink-0">
         <div className="flex items-baseline gap-3">
@@ -289,23 +321,23 @@ export default function GameTable({ handoff, onExit }: { handoff: TableHandoff; 
         </div>
       </div>
 
-      <div className="flex-1 flex gap-4 p-4 overflow-hidden">
-        <div className="flex-1 flex flex-col gap-4 min-w-0 overflow-y-auto">
-          {/* Quad grid */}
-          <div className="grid grid-cols-2 gap-3">
+      <div className="flex-1 flex gap-4 p-4 min-h-0">
+        <div className="flex-1 flex flex-col gap-3 min-w-0">
+          {/* Quad grid — takes up the bulk of the screen */}
+          <div className="flex-1 min-h-0 grid grid-cols-2 gap-3">
             {seatSlots.map((slot, i) => {
               if (slot === 'you') {
                 return (
-                  <div key="you" className="bg-zinc-900 border border-amber-700 rounded-xl p-3">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="text-sm font-semibold flex-1">You</span>
-                      <button type="button" onClick={() => adjustLife('you', -1)} className="w-6 h-6 rounded bg-zinc-800 hover:bg-zinc-700 text-xs">−</button>
-                      <span className="text-xl font-black text-amber-400 w-8 text-center">{state.you.life}</span>
-                      <button type="button" onClick={() => adjustLife('you', 1)} className="w-6 h-6 rounded bg-zinc-800 hover:bg-zinc-700 text-xs">+</button>
+                  <div key="you" className="bg-zinc-900 border border-amber-700 rounded-xl p-4 flex flex-col min-h-0">
+                    <div className="flex items-center gap-2 mb-2 shrink-0">
+                      <span className="text-base font-semibold flex-1">You</span>
+                      <button type="button" onClick={() => adjustLife('you', -1)} className="w-7 h-7 rounded bg-zinc-800 hover:bg-zinc-700 text-sm">−</button>
+                      <span className="text-2xl font-black text-amber-400 w-10 text-center">{state.you.life}</span>
+                      <button type="button" onClick={() => adjustLife('you', 1)} className="w-7 h-7 rounded bg-zinc-800 hover:bg-zinc-700 text-sm">+</button>
                     </div>
 
                     {handoff.commander && (
-                      <div className="flex items-center gap-2 mb-2 text-xs">
+                      <div className="flex items-center gap-2 mb-2 text-xs shrink-0">
                         <span className="text-zinc-500">Commander:</span>
                         {state.you.commanderInZone ? (
                           <button type="button" onClick={castCommander}
@@ -319,28 +351,36 @@ export default function GameTable({ handoff, onExit }: { handoff: TableHandoff; 
                       </div>
                     )}
 
-                    <div className="flex flex-wrap gap-1.5">
-                      {state.you.battlefield.map(c => (
-                        <div key={c.id}
-                          className={`group relative w-16 rounded border transition-all ${c.tapped ? 'opacity-50 border-zinc-700' : 'border-zinc-700'} ${justPlayedId === c.id ? 'ring-2 ring-amber-400 scale-105' : ''}`}
-                          onMouseEnter={() => hover(c.name)} onMouseLeave={() => setHoveredCard(null)}
-                        >
-                          <button type="button" onClick={() => toggleTap(c.id)} className="w-full text-left">
-                            <div className="h-10 bg-zinc-950 rounded-t flex items-center justify-center text-[8px] text-zinc-600 overflow-hidden">
-                              {cardInfo(c.name)?.imageUrl ? <img src={cardInfo(c.name)!.imageUrl!} alt={c.name} className="w-full h-full object-cover" /> : 'art'}
-                            </div>
-                            <div className="text-[9px] px-1 py-0.5 truncate">{c.name}</div>
-                          </button>
-                          <button type="button" onClick={() => removePermanent(c.id, 'graveyard')}
-                            title="Send to graveyard"
-                            className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-600 text-white text-[9px] opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                            ×
-                          </button>
+                    <div className="flex-1 min-h-0 overflow-y-auto space-y-2 pr-1">
+                      {yourLanes.map(({ lane, items }) => (
+                        <div key={lane}>
+                          <p className="text-[9px] uppercase tracking-wide text-zinc-600 mb-1">{lane} ({items.length})</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {items.map(c => (
+                              <div key={c.id}
+                                className={`group relative w-20 rounded border transition-all ${c.tapped ? 'opacity-50 border-zinc-700' : 'border-zinc-700'} ${justPlayedId === c.id ? 'ring-2 ring-amber-400 scale-105' : ''}`}
+                                onMouseEnter={() => hover(c.name)} onMouseLeave={() => setHoveredCard(null)}
+                              >
+                                <button type="button" onClick={() => toggleTap(c.id)} className="w-full text-left">
+                                  <div className="h-14 bg-zinc-950 rounded-t flex items-center justify-center text-[8px] text-zinc-600 overflow-hidden">
+                                    {cardInfo(c.name)?.imageUrl ? <img src={cardInfo(c.name)!.imageUrl!} alt={c.name} className="w-full h-full object-cover" /> : 'art'}
+                                  </div>
+                                  <div className="text-[9px] px-1 py-0.5 truncate">{c.name}</div>
+                                </button>
+                                <button type="button" onClick={() => removePermanent(c.id, 'graveyard')}
+                                  title="Send to graveyard"
+                                  className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-600 text-white text-[9px] opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                  ×
+                                </button>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       ))}
+                      {yourLanes.length === 0 && <p className="text-xs text-zinc-600">No permanents on the battlefield yet.</p>}
                     </div>
 
-                    <div className="flex gap-3 mt-2 text-[10px] text-zinc-500">
+                    <div className="flex gap-3 mt-2 text-[10px] text-zinc-500 shrink-0">
                       <button type="button" onClick={drawFromLibrary} className="hover:text-zinc-300">Library: {state.you.library.length} (click to draw)</button>
                       <span>Graveyard: {state.you.graveyard.length}</span>
                       <span>Exile: {state.you.exile.length}</span>
@@ -352,29 +392,47 @@ export default function GameTable({ handoff, onExit }: { handoff: TableHandoff; 
               const oppIndex = state.opponents.indexOf(slot as OpponentSeatState);
               const opp = slot as OpponentSeatState;
               const isActive = state.activeSeatIndex === oppIndex + 1;
+              const oppLanes = groupByLane(opp.chips, c => c.typeLine);
               return (
-                <div key={oppIndex} className={`bg-zinc-900 border rounded-xl p-3 ${isActive ? 'border-amber-500' : 'border-zinc-800'}`}>
-                  <div className="flex items-center gap-2 mb-2">
+                <div key={oppIndex} className={`bg-zinc-900 border rounded-xl p-4 flex flex-col min-h-0 ${isActive ? 'border-amber-500' : 'border-zinc-800'}`}>
+                  <div className="flex items-center gap-2 mb-2 shrink-0">
                     <input
                       type="text" value={opp.name} onChange={e => updateOpponent(oppIndex, { name: e.target.value })}
-                      className="flex-1 bg-transparent text-sm font-semibold focus:outline-none focus:bg-zinc-800 rounded px-1"
+                      className="flex-1 bg-transparent text-base font-semibold focus:outline-none focus:bg-zinc-800 rounded px-1"
                     />
-                    <button type="button" onClick={() => adjustLife(oppIndex, -1)} className="w-6 h-6 rounded bg-zinc-800 hover:bg-zinc-700 text-xs">−</button>
-                    <span className="text-xl font-black text-amber-400 w-8 text-center">{opp.life}</span>
-                    <button type="button" onClick={() => adjustLife(oppIndex, 1)} className="w-6 h-6 rounded bg-zinc-800 hover:bg-zinc-700 text-xs">+</button>
+                    <button type="button" onClick={() => adjustLife(oppIndex, -1)} className="w-7 h-7 rounded bg-zinc-800 hover:bg-zinc-700 text-sm">−</button>
+                    <span className="text-2xl font-black text-amber-400 w-10 text-center">{opp.life}</span>
+                    <button type="button" onClick={() => adjustLife(oppIndex, 1)} className="w-7 h-7 rounded bg-zinc-800 hover:bg-zinc-700 text-sm">+</button>
                   </div>
 
-                  <div className="flex flex-wrap gap-1.5 mb-2">
-                    {opp.chips.map((chip, ci) => (
-                      <span key={ci} className="text-[10px] px-1.5 py-1 rounded bg-zinc-800 border border-zinc-700 flex items-center gap-1">
-                        {chip}
-                        <button type="button" onClick={() => removeOpponentChip(oppIndex, ci)} className="text-zinc-500 hover:text-red-400">×</button>
-                      </span>
+                  <div className="flex-1 min-h-0 overflow-y-auto space-y-2 pr-1">
+                    {oppLanes.map(({ lane, items }) => (
+                      <div key={lane}>
+                        <p className="text-[9px] uppercase tracking-wide text-zinc-600 mb-1">{lane} ({items.length})</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {items.map(chip => (
+                            <div key={chip.id}
+                              className="group relative w-20 rounded border border-zinc-700"
+                              onMouseEnter={() => hover(chip.name, chip.imageUrl)} onMouseLeave={() => setHoveredCard(null)}
+                            >
+                              <div className="h-14 bg-zinc-950 rounded-t flex items-center justify-center text-[8px] text-zinc-600 overflow-hidden">
+                                {chip.imageUrl ? <img src={chip.imageUrl} alt={chip.name} className="w-full h-full object-cover" /> : 'art'}
+                              </div>
+                              <div className="text-[9px] px-1 py-0.5 truncate">{chip.name}</div>
+                              <button type="button" onClick={() => removeOpponentChip(oppIndex, chip.id)}
+                                title="Remove"
+                                className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-red-600 text-white text-[9px] opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                ×
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     ))}
-                    <ChipAdder onAdd={name => addOpponentChip(oppIndex, name)} />
+                    <OpponentCardPicker onAdd={opt => addOpponentChip(oppIndex, opt)} />
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 mt-2 shrink-0">
                     <button type="button" onClick={() => cycleThreat(oppIndex)}
                       className={`text-[10px] px-2 py-1 rounded font-medium ${THREAT_STYLES[opp.threat].className}`}>
                       {THREAT_STYLES[opp.threat].label}
@@ -393,14 +451,14 @@ export default function GameTable({ handoff, onExit }: { handoff: TableHandoff; 
 
           {/* Advisor */}
           {!compact && (
-            <div className="bg-green-950/30 border-l-4 border-green-600 rounded-lg px-3 py-2">
+            <div className="bg-green-950/30 border-l-4 border-green-600 rounded-lg px-3 py-2 shrink-0">
               <p className="text-[10px] uppercase tracking-wide text-green-500 font-bold mb-1">Advisor</p>
               <p className="text-sm text-zinc-200">{advisorTip}</p>
             </div>
           )}
 
           {/* Hand */}
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 shrink-0">
             <div className="flex items-center justify-between mb-2">
               <p className="text-[10px] uppercase tracking-wide text-zinc-500">Your Hand ({state.you.hand.length})</p>
               <button type="button" onClick={() => setHandCollapsed(c => !c)} className="text-xs text-zinc-500 hover:text-zinc-300">
@@ -417,10 +475,10 @@ export default function GameTable({ handoff, onExit }: { handoff: TableHandoff; 
                     type="button"
                     onClick={() => playCard(name)}
                     onMouseEnter={() => hover(name)} onMouseLeave={() => setHoveredCard(null)}
-                    className={`shrink-0 rounded-lg border-2 border-green-700 bg-zinc-950 overflow-hidden hover:border-green-500 transition-all ${handCollapsed ? 'w-14' : 'w-24'}`}
+                    className={`shrink-0 rounded-lg border-2 border-green-700 bg-zinc-950 overflow-hidden hover:border-green-500 transition-all ${handCollapsed ? 'w-16' : 'w-28'}`}
                   >
-                    <div className={`${handCollapsed ? 'h-14' : 'h-20'} bg-zinc-900 flex items-center justify-center text-[9px] text-zinc-600 overflow-hidden`}>
-                      <img src={info?.imageUrl ?? fallbackImg(name)} alt={name} className="w-full h-full object-cover" />
+                    <div className="bg-zinc-900 flex items-center justify-center text-[9px] text-zinc-600">
+                      <img src={info?.imageUrl ?? fallbackImg(name)} alt={name} className="w-full h-auto" />
                     </div>
                     {!handCollapsed && (
                       <div className="p-1.5">
@@ -467,10 +525,26 @@ export default function GameTable({ handoff, onExit }: { handoff: TableHandoff; 
   );
 }
 
-function ChipAdder({ onAdd }: { onAdd: (name: string) => void }) {
+function OpponentCardPicker({ onAdd }: { onAdd: (option: CardSearchOption) => void }) {
   const [open, setOpen] = useState(false);
-  const [value, setValue] = useState('');
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<CardSearchOption[]>([]);
+  const [searching, setSearching] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (query.trim().length < 2) { setResults([]); return; }
+    let cancelled = false;
+    setSearching(true);
+    const t = setTimeout(() => {
+      fetch(`/api/simulator/card-search?q=${encodeURIComponent(query)}`)
+        .then(r => r.ok ? r.json() : { results: [] })
+        .then((d: { results: CardSearchOption[] }) => { if (!cancelled) setResults(d.results ?? []); })
+        .catch(() => {})
+        .finally(() => { if (!cancelled) setSearching(false); });
+    }, 300);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [query]);
 
   if (!open) {
     return (
@@ -480,19 +554,35 @@ function ChipAdder({ onAdd }: { onAdd: (name: string) => void }) {
       </button>
     );
   }
+
   return (
-    <input
-      ref={inputRef}
-      type="text"
-      value={value}
-      onChange={e => setValue(e.target.value)}
-      onKeyDown={e => {
-        if (e.key === 'Enter') { onAdd(value); setValue(''); setOpen(false); }
-        if (e.key === 'Escape') { setValue(''); setOpen(false); }
-      }}
-      onBlur={() => { if (value.trim()) onAdd(value); setValue(''); setOpen(false); }}
-      placeholder="Card name…"
-      className="text-[10px] px-1.5 py-1 rounded bg-zinc-800 border border-amber-600 text-zinc-200 w-24 focus:outline-none"
-    />
+    <div className="relative">
+      <input
+        ref={inputRef}
+        type="text"
+        value={query}
+        onChange={e => setQuery(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Escape') { setQuery(''); setResults([]); setOpen(false); } }}
+        onBlur={() => setTimeout(() => { setOpen(false); setQuery(''); setResults([]); }, 150)}
+        placeholder="Search card name…"
+        className="text-[10px] px-1.5 py-1 rounded bg-zinc-800 border border-amber-600 text-zinc-200 w-32 focus:outline-none"
+      />
+      {searching && <p className="text-[9px] text-zinc-600 mt-0.5">Searching…</p>}
+      {results.length > 0 && (
+        <div className="absolute z-10 mt-1 w-48 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl max-h-56 overflow-y-auto">
+          {results.map(opt => (
+            <button
+              key={opt.scryfallId}
+              type="button"
+              onMouseDown={() => { onAdd(opt); setOpen(false); setQuery(''); setResults([]); }}
+              className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-zinc-800 transition-colors text-left"
+            >
+              {opt.imageUrl && <img src={opt.imageUrl} alt={opt.name} className="w-6 rounded shrink-0" />}
+              <p className="text-[10px] text-zinc-200 truncate">{opt.name}</p>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
