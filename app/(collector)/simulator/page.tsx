@@ -144,7 +144,7 @@ export default function SimulatorPage() {
   const [commanderResults, setCommanderResults] = useState<CommanderOption[]>([]);
   const [commanderSearching, setCommanderSearching] = useState(false);
 
-  const [cardData, setCardData] = useState<Map<string, CardStats & { imageUrl: string | null; priceUsd: number | null; oracleText: string | null; scryfallUri: string | null; rarity: string | null; name: string }>>(new Map());
+  const [cardData, setCardData] = useState<Map<string, CardStats & { imageUrl: string | null; priceUsd: number | null; oracleText: string | null; scryfallUri: string | null; rarity: string | null; name: string; power: number | null; toughness: number | null }>>(new Map());
   const [loadingAnalysis, setLoadingAnalysis] = useState(false);
   const [analysisError, setAnalysisError] = useState('');
 
@@ -475,6 +475,8 @@ export default function SimulatorPage() {
         typeLine: card.typeLine,
         cmc: card.cmc,
         oracleText: card.oracleText,
+        power: card.power ?? null,
+        toughness: card.toughness ?? null,
       };
     }
     const payload: TableHandoff = { commander: commander || null, hand, library, cardData: cardDataRecord };

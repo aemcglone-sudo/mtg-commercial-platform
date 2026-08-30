@@ -10,9 +10,11 @@ export interface ScryfallCard {
   cmc?: number;              // converted mana cost / mana value
   rarity?: string;           // 'common' | 'uncommon' | 'rare' | 'mythic'
   oracle_text?: string;      // full card text
+  power?: string;            // creature power, e.g. "2" or "*" — not always numeric
+  toughness?: string;
   artist?: string;           // card illustrator name
   image_uris?: { small: string; normal: string; large: string };
-  card_faces?: Array<{ image_uris?: { small: string; normal: string }; colors?: string[] }>;
+  card_faces?: Array<{ image_uris?: { small: string; normal: string }; colors?: string[]; power?: string; toughness?: string }>;
   prices: { usd: string | null; usd_foil: string | null };
   scryfall_uri: string;
   set: string;

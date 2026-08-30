@@ -3,6 +3,8 @@ export interface TableCardInfo {
   typeLine: string | null;
   cmc: number | null;
   oracleText: string | null;
+  power: number | null;
+  toughness: number | null;
 }
 
 /** Handed off from the Simulator (via localStorage) to the standalone /table window. */

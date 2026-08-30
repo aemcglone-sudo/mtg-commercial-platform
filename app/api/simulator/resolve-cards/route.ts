@@ -12,6 +12,14 @@ export interface ResolvedCard {
   rarity: string | null;
   oracleText: string | null;
   scryfallUri: string | null;
+  power: number | null;
+  toughness: number | null;
+}
+
+function parsePT(value: string | undefined): number | null {
+  if (value === undefined) return null;
+  const n = parseFloat(value);
+  return Number.isFinite(n) ? n : null; // non-numeric (e.g. "*") — treated as unknown
 }
 
 export async function POST(req: NextRequest) {
@@ -37,6 +45,8 @@ export async function POST(req: NextRequest) {
       rarity: card?.rarity ?? null,
       oracleText: card?.oracle_text ?? null,
       scryfallUri: card?.scryfall_uri ?? null,
+      power: parsePT(card?.power ?? card?.card_faces?.[0]?.power),
+      toughness: parsePT(card?.toughness ?? card?.card_faces?.[0]?.toughness),
     };
   }
 
