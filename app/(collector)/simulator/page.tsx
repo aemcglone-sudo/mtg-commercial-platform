@@ -233,13 +233,17 @@ export default function SimulatorPage() {
         for (const [key, card] of Object.entries(d.cards)) map.set(key, card);
         setCardData(map);
 
-        // Best-effort commander guess: a single Legendary Creature/Planeswalker among the parsed names
+        // Best-effort commander guess — only when there's exactly one legendary
+        // creature/planeswalker in the list. Most Commander decks run several
+        // legendary creatures as support pieces, not just the commander, so
+        // picking "the first one found" is confidently wrong most of the time.
+        // Ambiguous or empty cases are left for the user to pick explicitly.
         if (!commander) {
           const candidates = cardNames.filter(n => {
             const tl = (map.get(n.toLowerCase())?.typeLine ?? '').toLowerCase();
             return tl.includes('legendary') && (tl.includes('creature') || tl.includes('planeswalker'));
           });
-          if (candidates.length >= 1) setCommander(candidates[0]);
+          if (candidates.length === 1) setCommander(candidates[0]);
         }
       })
       .catch(() => { if (!cancelled) setAnalysisError('Failed to look up card data. Please try again.'); })
@@ -509,11 +513,16 @@ export default function SimulatorPage() {
                     <span className="text-sm text-zinc-500">({cardNames.length} unique)</span>
                   </div>
                   {commander && <p className="text-sm text-amber-400">Commander: {commander}</p>}
+                  {!commander && !loadingAnalysis && (format === 'commander' || format === 'brawl' || format === 'oathbreaker') && (
+                    <p className="text-sm text-red-400">⚠ No commander selected — pick one →</p>
+                  )}
                 </div>
               </div>
               <div className="flex items-center gap-3">
                 <select value={commander} onChange={e => setCommander(e.target.value)}
-                  className="bg-zinc-800 border border-zinc-700 rounded-lg px-2 py-1.5 text-xs text-zinc-300 focus:outline-none focus:border-amber-500 max-w-56">
+                  className={`bg-zinc-800 border rounded-lg px-2 py-1.5 text-xs text-zinc-300 focus:outline-none focus:border-amber-500 max-w-56 ${
+                    !commander && (format === 'commander' || format === 'brawl' || format === 'oathbreaker') ? 'border-red-700' : 'border-zinc-700'
+                  }`}>
                   <option value="">No commander selected</option>
                   {cardNames.map(n => <option key={n} value={n}>{n}</option>)}
                 </select>
