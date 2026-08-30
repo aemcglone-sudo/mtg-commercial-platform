@@ -32,12 +32,15 @@ interface YourSeatState {
 
 interface AISeatState {
   name: string;
+  commander: string;
   life: number;
   hand: string[];
   battlefield: BattlefieldCard[];
   graveyard: string[];
   library: string[];
   landPlayedThisTurn: boolean;
+  commanderInZone: boolean;
+  commanderCastCount: number;
 }
 
 interface PendingBlocks {
@@ -73,12 +76,15 @@ function makeAISeat(deckIndex: number): AISeatState {
   const pool = shuffle(expandDeckToCards(parsed?.cards ?? {}));
   return {
     name: deck.name,
+    commander: deck.commander,
     life: 40,
     hand: pool.slice(0, 7),
     battlefield: [],
     graveyard: [],
     library: pool.slice(7),
     landPlayedThisTurn: false,
+    commanderInZone: true,
+    commanderCastCount: 0,
   };
 }
 
@@ -109,7 +115,8 @@ function makeInitialState(handoff: TableHandoff): TableState {
 // manual life/threat tracking) — those old saves can't be resumed, so just
 // treat them as absent and start fresh.
 function migrateState(raw: any, handoff: TableHandoff): TableState {
-  if (!raw?.opponents?.[0] || typeof raw.opponents[0].chips !== 'undefined' || typeof raw.opponents[0].hand === 'undefined') {
+  if (!raw?.opponents?.[0] || typeof raw.opponents[0].chips !== 'undefined' || typeof raw.opponents[0].hand === 'undefined'
+    || typeof raw.opponents[0].commander === 'undefined') {
     return makeInitialState(handoff);
   }
   return { pendingBlocks: null, blockAssignments: {}, log: [], ...raw } as TableState;
@@ -144,7 +151,7 @@ export default function GameTable({ handoff, onExit }: { handoff: TableHandoff; 
   useEffect(() => {
     const names = new Set<string>();
     for (const seat of gameRef.current.opponents) {
-      for (const n of [...seat.hand, ...seat.library]) names.add(n);
+      for (const n of [...seat.hand, ...seat.library, seat.commander]) names.add(n);
     }
     const needed = [...names].filter(n => !handoff.cardData[n.toLowerCase()]);
     if (needed.length === 0) { setReady(true); return; }
@@ -250,8 +257,31 @@ export default function GameTable({ handoff, onExit }: { handoff: TableHandoff; 
     await delay(300);
 
     const preSeat = gameRef.current.opponents[oppIndex];
-    const untappedMana = preSeat.battlefield.filter(c => !c.tapped && isManaSource(cardInfo(c.name))).length;
+    let untappedMana = preSeat.battlefield.filter(c => !c.tapped && isManaSource(cardInfo(c.name))).length;
     const youHaveCreature = gameRef.current.you.battlefield.some(c => isCreature(cardInfo(c.name)));
+
+    // Cast their commander from the command zone as soon as they can afford it (tax included).
+    if (preSeat.commanderInZone) {
+      const cmdInfo = cardInfo(preSeat.commander);
+      const cost = (cmdInfo?.cmc ?? 0) + 2 * preSeat.commanderCastCount;
+      if (untappedMana >= cost) {
+        await delay(650);
+        updateState(s => {
+          const opponents = [...s.opponents];
+          const cur = opponents[oppIndex];
+          const newCard: BattlefieldCard = { id: uid(), name: cur.commander, tapped: false, enteredTurn: s.turnNumber };
+          opponents[oppIndex] = {
+            ...cur,
+            commanderInZone: false,
+            commanderCastCount: cur.commanderCastCount + 1,
+            battlefield: [...cur.battlefield, newCard],
+          };
+          return { ...s, opponents, log: pushLog(s.log, `${cur.name} casts their commander, ${cur.commander}.`) };
+        });
+        untappedMana -= cost;
+      }
+    }
+
     const actions = planMainPhaseActions(preSeat.hand, untappedMana, preSeat.landPlayedThisTurn, cardInfo, youHaveCreature);
 
     for (const action of actions) {
@@ -367,11 +397,13 @@ export default function GameTable({ handoff, onExit }: { handoff: TableHandoff; 
 
         if (attackerDies) {
           oppBattlefield = oppBattlefield.filter(c => c.id !== atk.id);
-          oppSeat.graveyard = [...oppSeat.graveyard, atk.name];
+          if (atk.name === oppSeat.commander) oppSeat.commanderInZone = true;
+          else oppSeat.graveyard = [...oppSeat.graveyard, atk.name];
         }
         if (blockerDies) {
           yourBattlefield = yourBattlefield.filter(c => c.id !== blockerCard.id);
-          you.graveyard = [...you.graveyard, blockerCard.name];
+          if (blockerCard.name === handoff.commander) you.commanderInZone = true;
+          else you.graveyard = [...you.graveyard, blockerCard.name];
         }
         const outcome = [attackerDies && `${atk.name} dies`, blockerDies && `${blockerCard.name} dies`].filter(Boolean).join(', ');
         log = pushLog(log, `${blockerCard.name} blocks ${atk.name}${outcome ? ` — ${outcome}` : ''}.`);
@@ -491,11 +523,13 @@ export default function GameTable({ handoff, onExit }: { handoff: TableHandoff; 
 
           if (attackerDies) {
             yourBattlefield = yourBattlefield.filter(c => c.id !== atk.id);
-            you.graveyard = [...you.graveyard, atk.name];
+            if (atk.name === handoff.commander) you.commanderInZone = true;
+            else you.graveyard = [...you.graveyard, atk.name];
           }
           if (blockerDies) {
             oppBattlefield = oppBattlefield.filter(c => c.id !== blockerCard.id);
-            oppSeat.graveyard = [...oppSeat.graveyard, blockerCard.name];
+            if (blockerCard.name === oppSeat.commander) oppSeat.commanderInZone = true;
+            else oppSeat.graveyard = [...oppSeat.graveyard, blockerCard.name];
           }
           const outcome = [attackerDies && `${atk.name} dies`, blockerDies && `${blockerCard.name} dies`].filter(Boolean).join(', ');
           log = pushLog(log, `${oppSeat.name} blocks ${atk.name} with ${blockerCard.name}${outcome ? ` — ${outcome}` : ''}.`);
@@ -629,6 +663,23 @@ export default function GameTable({ handoff, onExit }: { handoff: TableHandoff; 
           <span className="text-base font-semibold flex-1">{opp.name}</span>
           <span className="text-[10px] text-zinc-600">{opp.hand.length} in hand</span>
           <span className="text-2xl font-black text-amber-400 w-10 text-center">{opp.life}</span>
+        </div>
+
+        <div className="flex items-center gap-2 mb-2 shrink-0">
+          <div
+            className={`w-8 shrink-0 rounded border overflow-hidden ${opp.commanderInZone ? 'border-purple-700' : 'border-zinc-800 opacity-40'}`}
+            onMouseEnter={() => hover(opp.commander)} onMouseLeave={() => setHoveredCard(null)}
+          >
+            {cardInfo(opp.commander)?.imageUrl
+              ? <img src={cardInfo(opp.commander)!.imageUrl!} alt={opp.commander} className="w-full h-auto" />
+              : <div className="aspect-[5/7] w-full bg-zinc-950" />}
+          </div>
+          <div className="text-[9px] leading-tight">
+            <p className="uppercase tracking-wide text-purple-500">Command Zone</p>
+            <p className={opp.commanderInZone ? 'text-purple-300' : 'text-zinc-600'}>
+              {opp.commander}{opp.commanderInZone ? '' : ' — on battlefield'}
+            </p>
+          </div>
         </div>
 
         <div className="flex-1 min-h-0 overflow-y-auto space-y-2 pr-1">

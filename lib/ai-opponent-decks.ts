@@ -4,16 +4,16 @@
  * loop stays fast and easy to reason about — this is a practice tool, not
  * a format-legal deck simulator.
  */
-export const AI_DECKS: { name: string; list: string }[] = [
+export const AI_DECKS: { name: string; commander: string; list: string }[] = [
   {
     name: 'Goblin Aggro',
+    commander: 'Krenko, Mob Boss',
     list: `1 Goblin Guide
 1 Monastery Swiftspear
 1 Kird Ape
 1 Grim Lavamancer
 1 Goblin Piledriver
 1 Legion Loyalist
-1 Krenko, Mob Boss
 1 Reckless Bushwhacker
 1 Zurgo Bellstriker
 1 Vexing Devil
@@ -32,6 +32,7 @@ export const AI_DECKS: { name: string; list: string }[] = [
   },
   {
     name: 'Elemental Value',
+    commander: 'Prime Speaker Vannifar',
     list: `1 Llanowar Elves
 1 Elvish Mystic
 1 Farhaven Elf
@@ -45,7 +46,6 @@ export const AI_DECKS: { name: string; list: string }[] = [
 1 Baleful Strix
 1 Mulldrifter
 1 Shriekmaw
-1 Prime Speaker Vannifar
 1 Reclamation Sage
 1 Beast Within
 1 Cultivate
@@ -57,6 +57,7 @@ export const AI_DECKS: { name: string; list: string }[] = [
   },
   {
     name: 'Spirit Control',
+    commander: 'Kess, Dissident Mage',
     list: `1 Mystic Confluence
 1 Cryptic Command
 1 Counterspell
