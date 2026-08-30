@@ -7,6 +7,7 @@ import { computeManaCurve, computeCardTypeCounts, COLOR_ORDER, COLOR_BG, COLOR_L
 import { expandDeckToCards, shuffle } from '@/lib/deck-shuffle';
 import type { ResolvedCard } from '@/app/api/simulator/resolve-cards/route';
 import type { CommanderOption } from '@/app/api/simulator/commander-search/route';
+import { TABLE_HANDOFF_KEY, TABLE_STATE_KEY, type TableHandoff } from '@/lib/game-table-types';
 
 const EXAMPLE_DECK = `1 Atraxa, Grand Unifier
 1 Sol Ring
@@ -55,7 +56,6 @@ const EXAMPLE_DECK = `1 Atraxa, Grand Unifier
 1 Baleful Strix
 1 Reveillark
 1 Karmic Guide
-1 Sun Titan
 1 Sheoldred, the Apocalypse
 1 Grave Titan
 1 Massacre Wurm
@@ -467,6 +467,24 @@ export default function SimulatorPage() {
     setMulliganPhase('kept');
   }
 
+  function launchGameTable() {
+    const cardDataRecord: TableHandoff['cardData'] = {};
+    for (const [key, card] of cardData.entries()) {
+      cardDataRecord[key] = {
+        imageUrl: card.imageUrl,
+        typeLine: card.typeLine,
+        cmc: card.cmc,
+        oracleText: card.oracleText,
+      };
+    }
+    const payload: TableHandoff = { commander: commander || null, hand, library, cardData: cardDataRecord };
+    try {
+      localStorage.setItem(TABLE_HANDOFF_KEY, JSON.stringify(payload));
+      localStorage.removeItem(TABLE_STATE_KEY); // start fresh, don't resume a stale game
+    } catch { /* ignore */ }
+    window.open('/table', '_blank', 'noopener,noreferrer');
+  }
+
   return (
     <main className="min-h-screen bg-zinc-950 text-zinc-100">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
@@ -843,10 +861,10 @@ export default function SimulatorPage() {
                 </div>
 
                 <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 text-center space-y-2">
-                  <p className="text-sm text-zinc-400">Ready to see your opening hand? The full 4-player game table is coming in a future update.</p>
-                  <button type="button" onClick={startMulligan} disabled={cardNames.length === 0}
+                  <p className="text-sm text-zinc-400">Ready to see your opening hand and head to the game table?</p>
+                  <button type="button" onClick={startMulligan} disabled={cardNames.length === 0 || loadingAnalysis}
                     className="px-5 py-2.5 rounded-xl font-semibold text-black bg-amber-400 hover:bg-amber-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors text-sm">
-                    Draw Opening Hand →
+                    {loadingAnalysis ? 'Looking up cards…' : 'Draw Opening Hand →'}
                   </button>
                 </div>
               </div>
@@ -973,9 +991,9 @@ export default function SimulatorPage() {
 
             {mulliganPhase === 'kept' && (
               <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 text-center space-y-2">
-                <p className="text-sm text-zinc-400">The full 4-player game table is coming in a future update.</p>
-                <button type="button" disabled
-                  className="px-5 py-2.5 rounded-xl font-semibold text-zinc-500 bg-zinc-800 cursor-not-allowed text-sm">
+                <p className="text-sm text-zinc-400">Opens in a new full-screen window — the other 3 seats are tracked manually since only your deck is imported.</p>
+                <button type="button" onClick={launchGameTable}
+                  className="px-5 py-2.5 rounded-xl font-semibold text-black bg-amber-400 hover:bg-amber-300 transition-colors text-sm">
                   Continue to Game Table →
                 </button>
               </div>
