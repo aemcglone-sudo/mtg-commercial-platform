@@ -11,3 +11,5 @@ README.md
 .vscode
 coverage
 dist
+# Scryfall bulk-data dumps used only by one-off local import scripts — not needed at build time
+prisma/*.json

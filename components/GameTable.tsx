@@ -70,6 +70,23 @@ function pushLog(log: string[], line: string): string[] {
   return next.length > 40 ? next.slice(next.length - 40) : next;
 }
 
+/** Taps the first `amount` untapped mana sources it finds to pay a cost — colorless-only
+ * simplification, matches the generic mana counting used everywhere else on the table. */
+function tapManaSources(
+  battlefield: BattlefieldCard[],
+  amount: number,
+  info: (name: string) => TableCardInfo | undefined
+): BattlefieldCard[] {
+  let remaining = amount;
+  return battlefield.map(c => {
+    if (remaining > 0 && !c.tapped && isManaSource(info(c.name))) {
+      remaining--;
+      return { ...c, tapped: true };
+    }
+    return c;
+  });
+}
+
 function makeAISeat(deckIndex: number): AISeatState {
   const deck = AI_DECKS[deckIndex];
   const parsed = parseDeckFromText(deck.list);
@@ -270,11 +287,12 @@ export default function GameTable({ handoff, onExit }: { handoff: TableHandoff; 
           const opponents = [...s.opponents];
           const cur = opponents[oppIndex];
           const newCard: BattlefieldCard = { id: uid(), name: cur.commander, tapped: false, enteredTurn: s.turnNumber };
+          const tappedBattlefield = cost > 0 ? tapManaSources(cur.battlefield, cost, cardInfo) : cur.battlefield;
           opponents[oppIndex] = {
             ...cur,
             commanderInZone: false,
             commanderCastCount: cur.commanderCastCount + 1,
-            battlefield: [...cur.battlefield, newCard],
+            battlefield: [...tappedBattlefield, newCard],
           };
           return { ...s, opponents, log: pushLog(s.log, `${cur.name} casts their commander, ${cur.commander}.`) };
         });
@@ -294,10 +312,12 @@ export default function GameTable({ handoff, onExit }: { handoff: TableHandoff; 
         const hand = [...cur.hand];
         hand.splice(idx, 1);
         const newCard: BattlefieldCard = { id: uid(), name: action.name, tapped: false, enteredTurn: s.turnNumber };
+        const cost = action.type === 'cast' ? (cardInfo(action.name)?.cmc ?? 0) : 0;
+        const tappedBattlefield = cost > 0 ? tapManaSources(cur.battlefield, cost, cardInfo) : cur.battlefield;
         opponents[oppIndex] = {
           ...cur,
           hand,
-          battlefield: [...cur.battlefield, newCard],
+          battlefield: [...tappedBattlefield, newCard],
           landPlayedThisTurn: action.type === 'playLand' ? true : cur.landPlayedThisTurn,
         };
         const verb = action.type === 'playLand' ? 'plays' : 'casts';
@@ -552,18 +572,21 @@ export default function GameTable({ handoff, onExit }: { handoff: TableHandoff; 
 
   function playCard(name: string) {
     const id = uid();
-    const land = isLand(cardInfo(name));
+    const info = cardInfo(name);
+    const land = isLand(info);
+    const cost = land ? 0 : (info?.cmc ?? 0);
     updateState(s => {
       const hand = [...s.you.hand];
       const i = hand.indexOf(name);
       if (i === -1) return s;
       hand.splice(i, 1);
+      const tappedBattlefield = cost > 0 ? tapManaSources(s.you.battlefield, cost, cardInfo) : s.you.battlefield;
       return {
         ...s,
         you: {
           ...s.you,
           hand,
-          battlefield: [...s.you.battlefield, { id, name, tapped: false, enteredTurn: s.turnNumber }],
+          battlefield: [...tappedBattlefield, { id, name, tapped: false, enteredTurn: s.turnNumber }],
           landPlayedThisTurn: land ? true : s.you.landPlayedThisTurn,
         },
       };
@@ -575,15 +598,19 @@ export default function GameTable({ handoff, onExit }: { handoff: TableHandoff; 
   function castCommander() {
     if (!handoff.commander) return;
     const id = uid();
-    updateState(s => ({
-      ...s,
-      you: {
-        ...s.you,
-        commanderInZone: false,
-        commanderCastCount: s.you.commanderCastCount + 1,
-        battlefield: [...s.you.battlefield, { id, name: handoff.commander!, tapped: false, enteredTurn: s.turnNumber }],
-      },
-    }));
+    updateState(s => {
+      const cost = (commanderInfo?.cmc ?? 0) + 2 * s.you.commanderCastCount;
+      const tappedBattlefield = cost > 0 ? tapManaSources(s.you.battlefield, cost, cardInfo) : s.you.battlefield;
+      return {
+        ...s,
+        you: {
+          ...s.you,
+          commanderInZone: false,
+          commanderCastCount: s.you.commanderCastCount + 1,
+          battlefield: [...tappedBattlefield, { id, name: handoff.commander!, tapped: false, enteredTurn: s.turnNumber }],
+        },
+      };
+    });
     setJustPlayedId(id);
     setTimeout(() => setJustPlayedId(null), 500);
   }
@@ -963,7 +990,7 @@ export default function GameTable({ handoff, onExit }: { handoff: TableHandoff; 
           <img
             src={hoveredCard.imageUrl ?? fallbackImg(hoveredCard.name)}
             alt={hoveredCard.name}
-            className="w-56 rounded-xl border border-zinc-700 shadow-2xl"
+            className="w-[26rem] max-w-[40vw] rounded-xl border border-zinc-700 shadow-2xl"
           />
         </div>
       )}
