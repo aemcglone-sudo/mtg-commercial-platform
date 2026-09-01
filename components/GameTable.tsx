@@ -716,7 +716,7 @@ export default function GameTable({ handoff, onExit }: { handoff: TableHandoff; 
               <div className="flex flex-wrap gap-1.5">
                 {items.map(c => (
                   <div key={c.id}
-                    className={`relative w-12 rounded border ${c.tapped ? 'opacity-50 border-zinc-700' : 'border-zinc-700'}`}
+                    className={`relative w-12 rounded border transition-transform duration-200 ${c.tapped ? 'rotate-90 border-amber-700' : 'border-zinc-700'}`}
                     onMouseEnter={() => hover(c.name)} onMouseLeave={() => setHoveredCard(null)}
                   >
                     <div className="bg-zinc-950 rounded flex items-center justify-center text-[7px] text-zinc-600">
@@ -787,10 +787,11 @@ export default function GameTable({ handoff, onExit }: { handoff: TableHandoff; 
                     <div className="flex flex-wrap gap-1.5">
                       {items.map(c => (
                         <div key={c.id}
-                          className={`group relative w-12 rounded border transition-all ${c.tapped ? 'opacity-50 border-zinc-700' : 'border-zinc-700'} ${justPlayedId === c.id ? 'ring-2 ring-amber-400 scale-105' : ''}`}
+                          className={`group relative w-12 rounded border transition-all ${c.tapped ? 'border-amber-700' : 'border-zinc-700'} ${justPlayedId === c.id ? 'ring-2 ring-amber-400 scale-105' : ''}`}
                           onMouseEnter={() => hover(c.name)} onMouseLeave={() => setHoveredCard(null)}
                         >
-                          <button type="button" onClick={() => toggleTap(c.id)} className="w-full text-left">
+                          <button type="button" onClick={() => toggleTap(c.id)}
+                            className={`w-full text-left block transition-transform duration-200 ${c.tapped ? 'rotate-90' : ''}`}>
                             <div className="bg-zinc-950 rounded-t flex items-center justify-center text-[7px] text-zinc-600">
                               {cardInfo(c.name)?.imageUrl ? <img src={cardInfo(c.name)!.imageUrl!} alt={c.name} className="w-full h-auto rounded-t" /> : 'art'}
                             </div>
