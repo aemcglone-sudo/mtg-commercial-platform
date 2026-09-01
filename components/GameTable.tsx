@@ -139,7 +139,12 @@ function migrateState(raw: any, handoff: TableHandoff): TableState {
   return { pendingBlocks: null, blockAssignments: {}, log: [], ...raw } as TableState;
 }
 
-export default function GameTable({ handoff, onExit }: { handoff: TableHandoff; onExit: () => void }) {
+export default function GameTable({ handoff, onExit, isFullscreen, onToggleFullscreen }: {
+  handoff: TableHandoff;
+  onExit: () => void;
+  isFullscreen?: boolean;
+  onToggleFullscreen?: () => void;
+}) {
   const [state, setState] = useState<TableState>(() => {
     try {
       const saved = localStorage.getItem(TABLE_STATE_KEY);
@@ -759,6 +764,11 @@ export default function GameTable({ handoff, onExit }: { handoff: TableHandoff; 
           <button type="button" onClick={() => setCompact(c => !c)} className="text-xs text-zinc-400 hover:text-zinc-200 border border-zinc-700 rounded-lg px-2.5 py-1.5">
             {compact ? 'Expand' : 'Compact'} view
           </button>
+          {onToggleFullscreen && (
+            <button type="button" onClick={onToggleFullscreen} className="text-xs text-zinc-400 hover:text-zinc-200 border border-zinc-700 rounded-lg px-2.5 py-1.5">
+              {isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+            </button>
+          )}
           <button type="button" onClick={onExit} className="text-xs text-zinc-500 hover:text-zinc-300">
             ← Exit table
           </button>

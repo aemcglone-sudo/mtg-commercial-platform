@@ -60,14 +60,7 @@ export default function TablePage() {
 
   return (
     <div ref={containerRef} className="bg-zinc-950">
-      <button
-        type="button"
-        onClick={toggleFullscreen}
-        className="fixed top-2 right-2 z-[60] text-[10px] px-2 py-1 rounded bg-zinc-800/90 border border-zinc-700 text-zinc-400 hover:text-zinc-200"
-      >
-        {isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
-      </button>
-      <GameTable handoff={handoff} onExit={exitTable} />
+      <GameTable handoff={handoff} onExit={exitTable} isFullscreen={isFullscreen} onToggleFullscreen={toggleFullscreen} />
     </div>
   );
 }
