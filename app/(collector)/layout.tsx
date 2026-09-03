@@ -5,23 +5,27 @@ import NavSidebar from '@/components/NavSidebar';
 import ComboToast from '@/components/ComboToast';
 import ProductTour from '@/components/ProductTour';
 import { findCombos, type Combo } from '@/lib/combo-finder';
+import {
+  CollectionIcon, InsightsIcon, DecksIcon, TrophyIcon, NewsIcon, ChatIcon,
+  LocalPlayIcon, SimulatorIcon, MarketIcon, ShopIcon, SettingsIcon,
+} from '@/components/nav-icons';
 
 const NAV = [
-  { href: '/?tab=collection', label: 'My Collection', exact: true, tourId: 'nav-collection' },
-  { href: '/?tab=insights',   label: 'Insights', tourId: 'nav-insights' },
-  { href: '/?tab=mydecks',    label: 'My Decks & Lists', tourId: 'nav-mydecks' },
-  { href: '/?tab=decks',      label: 'Top Decks', tourId: 'nav-decks' },
-  { href: '/?tab=news',       label: 'News', tourId: 'nav-news' },
-  { href: '/?tab=chat',       label: 'Ask Khoa', tourId: 'nav-chat' },
-  { href: '/local-play',      label: 'Local Play', tourId: 'nav-local-play' },
-  { href: '/simulator',       label: 'Commander Simulator' },
-  { href: '/market',          label: 'Market' },
-  { label: 'Shop', dividerAfter: true, tourId: 'nav-shop-group', children: [
+  { href: '/?tab=collection', label: 'My Collection', exact: true, tourId: 'nav-collection', icon: <CollectionIcon /> },
+  { href: '/?tab=insights',   label: 'Insights', tourId: 'nav-insights', icon: <InsightsIcon /> },
+  { href: '/?tab=mydecks',    label: 'My Decks & Lists', tourId: 'nav-mydecks', icon: <DecksIcon /> },
+  { href: '/?tab=decks',      label: 'Top Decks', tourId: 'nav-decks', icon: <TrophyIcon /> },
+  { href: '/?tab=news',       label: 'News', tourId: 'nav-news', icon: <NewsIcon /> },
+  { href: '/?tab=chat',       label: 'Ask Khoa', tourId: 'nav-chat', icon: <ChatIcon /> },
+  { href: '/local-play',      label: 'Local Play', tourId: 'nav-local-play', icon: <LocalPlayIcon /> },
+  { href: '/simulator',       label: 'Commander Simulator', icon: <SimulatorIcon /> },
+  { href: '/market',          label: 'Market', icon: <MarketIcon /> },
+  { label: 'Shop', dividerAfter: true, tourId: 'nav-shop-group', icon: <ShopIcon />, children: [
     { href: '/stores',            label: 'Nearby Shops' },
     { href: '/marketplace/find',  label: 'Card Finder' },
     { href: '/products',          label: 'MTG Products' },
   ]},
-  { href: '/settings',        label: 'Settings', tourId: 'nav-settings' },
+  { href: '/settings',        label: 'Settings', tourId: 'nav-settings', icon: <SettingsIcon /> },
 ];
 
 const SEEN_KEY = 'grimoire_seen_combos';
