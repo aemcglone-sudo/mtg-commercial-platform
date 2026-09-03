@@ -738,3 +738,39 @@ model CampaignDelivery {
 // Also add back-relations to User (virtual — no new columns needed)
 // User.holds, User.notifications, User.collectorNotificationPrefs, User.collectorCardWatchlist
 // are accessed via raw SQL queries using userId — Prisma relations not added to avoid schema migration conflicts
+
+// ── Speculation Market ──────────────────────────────────────────────────────
+// One row per printing per day. Keyed by scryfallId (not card name) so
+// different printings of the same card are tracked separately — a card
+// name alone is ambiguous across sets/printings.
+model MarketPriceSnapshot {
+  id         String   @id @default(cuid())
+  scryfallId String   @map("scryfall_id")
+  cardName   String   @map("card_name")
+  setCode    String   @map("set_code")
+  priceDate  DateTime @map("price_date") @db.Date
+  usd        Float?
+  usdFoil    Float?   @map("usd_foil")
+  capturedAt DateTime @default(now()) @map("captured_at")
+
+  @@unique([scryfallId, priceDate])
+  @@index([scryfallId, priceDate])
+  @@index([setCode, priceDate])
+  @@map("market_price_snapshots")
+}
+
+model MarketWatchlistItem {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  // 'card' | 'set'
+  kind      String
+  scryfallId String? @map("scryfall_id")
+  cardName  String?  @map("card_name")
+  setCode   String?  @map("set_code")
+  setName   String?  @map("set_name")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([userId, kind, scryfallId, setCode])
+  @@index([userId])
+  @@map("market_watchlist_items")
+}

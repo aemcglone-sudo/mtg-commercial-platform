@@ -149,3 +149,25 @@ export function isBannedInFormat(card: ScryfallCard, format: string): boolean {
   const legality = getCardLegality(card, format);
   return legality === 'banned' || legality === 'restricted';
 }
+
+export interface ScryfallSet {
+  code: string;
+  name: string;
+  set_type: string;
+  released_at?: string;
+  card_count: number;
+  icon_svg_uri?: string;
+}
+
+let setsCache: ScryfallSet[] | null = null;
+
+/** All Scryfall sets (~1000, one paginated response). Cached in-memory for the
+ * life of the process — set metadata changes rarely enough that this is fine. */
+export async function getSets(): Promise<ScryfallSet[]> {
+  if (setsCache) return setsCache;
+  const res = await fetch(`${BASE}/sets`, { headers: { 'User-Agent': USER_AGENT } });
+  if (!res.ok) return [];
+  const data = await res.json();
+  setsCache = data.data ?? [];
+  return setsCache!;
+}
