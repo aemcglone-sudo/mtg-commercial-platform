@@ -1,5 +1,24 @@
-import { findMany, run } from '@/lib/db';
+import { findMany, run, withClient } from '@/lib/db';
 import { randomUUID } from 'crypto';
+
+/** Runs a query with a short statement_timeout so a degraded/overloaded DB
+ * fails fast instead of hanging the request indefinitely — reports
+ * `timedOut: true` (instead of throwing) specifically on a timeout, since a
+ * slow "movers" board is much better shown as empty/stale than as a stuck
+ * spinner. Real errors (bad SQL, connection failure) still throw. */
+async function queryWithTimeout<T = any>(sql: string, args: (string | number)[], timeoutMs = 8000): Promise<{ rows: T[]; timedOut: boolean }> {
+  try {
+    const rows = await withClient(async (q) => {
+      await q(`SET statement_timeout = ${timeoutMs}`);
+      const result = await q(sql, args);
+      return result.rows as T[];
+    });
+    return { rows, timedOut: false };
+  } catch (e: any) {
+    if (e?.code === '57014') return { rows: [], timedOut: true }; // query_canceled (statement_timeout)
+    throw e;
+  }
+}
 
 export interface WatchlistItem {
   id: string;
@@ -46,7 +65,7 @@ export async function removeFromWatchlist(userId: string, id: string): Promise<v
 export interface PricePoint { date: string; usd: number | null; usdFoil: number | null; }
 
 export async function getCardHistory(scryfallId: string, days: number): Promise<PricePoint[]> {
-  const rows = await findMany<any>(
+  const { rows } = await queryWithTimeout(
     `SELECT price_date as "date", usd, usd_foil as "usdFoil"
      FROM market_price_snapshots
      WHERE scryfall_id = ? AND price_date >= (CURRENT_DATE - ?::int)
@@ -59,7 +78,7 @@ export async function getCardHistory(scryfallId: string, days: number): Promise<
 export interface SetIndexPoint { date: string; avgUsd: number | null; cardCount: number; }
 
 export async function getSetHistory(setCode: string, days: number): Promise<SetIndexPoint[]> {
-  const rows = await findMany<any>(
+  const { rows } = await queryWithTimeout(
     `SELECT price_date as "date", AVG(usd) as "avgUsd", COUNT(usd) as "cardCount"
      FROM market_price_snapshots
      WHERE set_code = ? AND price_date >= (CURRENT_DATE - ?::int) AND usd IS NOT NULL
@@ -73,8 +92,8 @@ export async function getSetHistory(setCode: string, days: number): Promise<SetI
 export interface SetMover { setCode: string; avgUsdNow: number; avgUsdBefore: number; changePercent: number; cardCount: number; }
 
 /** Sets ranked by % change in average card price over the window — a "gainers/losers" board. */
-export async function getSetMovers(days: number, limit = 20): Promise<SetMover[]> {
-  const rows = await findMany<any>(
+export async function getSetMovers(days: number, limit = 20): Promise<{ movers: SetMover[]; degraded: boolean }> {
+  const { rows, timedOut } = await queryWithTimeout(
     `WITH bounds AS (
        SELECT set_code, MIN(price_date) as first_date, MAX(price_date) as last_date
        FROM market_price_snapshots
@@ -103,7 +122,7 @@ export async function getSetMovers(days: number, limit = 20): Promise<SetMover[]
      ORDER BY (l.avg_usd - f.avg_usd) / f.avg_usd DESC`,
     [days]
   );
-  return rows
+  const movers = rows
     .map((r: any) => ({
       setCode: r.setCode,
       avgUsdNow: Number(r.avgUsdNow),
@@ -112,12 +131,13 @@ export async function getSetMovers(days: number, limit = 20): Promise<SetMover[]
       changePercent: ((Number(r.avgUsdNow) - Number(r.avgUsdBefore)) / Number(r.avgUsdBefore)) * 100,
     }))
     .slice(0, limit);
+  return { movers, degraded: timedOut };
 }
 
 export interface CardMover { scryfallId: string; cardName: string; setCode: string; usdNow: number; usdBefore: number; changePercent: number; }
 
-export async function getCardMovers(days: number, limit = 20, direction: 'gainers' | 'losers' = 'gainers'): Promise<CardMover[]> {
-  const rows = await findMany<any>(
+export async function getCardMovers(days: number, limit = 20, direction: 'gainers' | 'losers' = 'gainers'): Promise<{ movers: CardMover[]; degraded: boolean }> {
+  const { rows, timedOut } = await queryWithTimeout(
     `WITH bounds AS (
        SELECT scryfall_id, MIN(price_date) as first_date, MAX(price_date) as last_date
        FROM market_price_snapshots
@@ -144,12 +164,13 @@ export async function getCardMovers(days: number, limit = 20, direction: 'gainer
      LIMIT ?`,
     [days, limit]
   );
-  return rows.map((r: any) => ({
+  const movers = rows.map((r: any) => ({
     ...r,
     usdNow: Number(r.usdNow),
     usdBefore: Number(r.usdBefore),
     changePercent: ((Number(r.usdNow) - Number(r.usdBefore)) / Number(r.usdBefore)) * 100,
   }));
+  return { movers, degraded: timedOut };
 }
 
 function toDateString(d: string | Date): string {

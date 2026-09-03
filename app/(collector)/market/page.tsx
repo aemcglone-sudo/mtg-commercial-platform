@@ -32,16 +32,31 @@ export default function MarketPage() {
   const [watchlist, setWatchlist] = useState<WatchlistItem[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [noData, setNoData] = useState(false);
+  const [degraded, setDegraded] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
   const loadMovers = useCallback(async () => {
     setLoading(true);
-    const [setRes, cardRes] = await Promise.all([
-      fetch(`/api/market/movers?type=set&days=${days}`).then(r => r.json()),
-      fetch(`/api/market/movers?type=card&days=${days}`).then(r => r.json()),
-    ]);
-    setSetMovers(setRes);
-    setCardMovers(cardRes);
-    setNoData((setRes.gainers?.length ?? 0) === 0 && (setRes.losers?.length ?? 0) === 0 && (cardRes.gainers?.length ?? 0) === 0 && (cardRes.losers?.length ?? 0) === 0);
+    setLoadError(false);
+    // Defense-in-depth on top of the server's own statement_timeout: never let this
+    // spinner hang forever, even if a request never completes at all.
+    const withTimeout = (url: string) => {
+      const controller = new AbortController();
+      const t = setTimeout(() => controller.abort(), 15000);
+      return fetch(url, { signal: controller.signal }).then(r => r.json()).finally(() => clearTimeout(t));
+    };
+    try {
+      const [setRes, cardRes] = await Promise.all([
+        withTimeout(`/api/market/movers?type=set&days=${days}`),
+        withTimeout(`/api/market/movers?type=card&days=${days}`),
+      ]);
+      setSetMovers(setRes);
+      setCardMovers(cardRes);
+      setNoData((setRes.gainers?.length ?? 0) === 0 && (setRes.losers?.length ?? 0) === 0 && (cardRes.gainers?.length ?? 0) === 0 && (cardRes.losers?.length ?? 0) === 0);
+      setDegraded(!!setRes.degraded || !!cardRes.degraded);
+    } catch {
+      setLoadError(true);
+    }
     setLoading(false);
   }, [days]);
 
@@ -114,14 +129,29 @@ export default function MarketPage() {
         <div className="space-y-8">
           {loading && <p className="text-sm text-zinc-500">Loading…</p>}
 
-          {!loading && noData && (
+          {!loading && loadError && (
+            <div className="bg-red-950/30 border border-red-900 rounded-xl p-6 text-center text-sm text-red-300 space-y-3">
+              <p>Couldn't load market data — the request timed out.</p>
+              <button type="button" onClick={loadMovers} className="px-4 py-1.5 rounded-lg bg-red-900/50 hover:bg-red-900 text-red-200 text-xs font-semibold">
+                Try again
+              </button>
+            </div>
+          )}
+
+          {!loading && !loadError && degraded && (
+            <div className="bg-amber-950/20 border border-amber-900 rounded-lg px-4 py-2.5 text-xs text-amber-300">
+              Market data is loading slowly right now — results below may be incomplete. Try refreshing in a bit.
+            </div>
+          )}
+
+          {!loading && !loadError && noData && (
             <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 text-center text-sm text-zinc-400">
               No price history yet. The market needs at least two daily snapshots before it can show movers —
               check back tomorrow, or ask your admin to run the price sync.
             </div>
           )}
 
-          {!loading && !noData && (
+          {!loading && !loadError && !noData && (
             <>
               <section>
                 <h2 className="text-sm font-semibold text-zinc-300 mb-3">Set Movers ({days}d)</h2>
