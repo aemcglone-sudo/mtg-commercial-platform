@@ -295,3 +295,44 @@ export async function getLatestSignal(scryfallId: string): Promise<CardSignal | 
   const r = rows[0];
   return { ...r, date: toDateString(r.date) };
 }
+
+// ── Predictions (read side — computed by lib/prediction-engine.ts) ────────
+
+export interface DominantSignal { signal: string; value: string | number | null; }
+
+export interface CardPrediction {
+  date: string;
+  currentPrice: number | null;
+  targetPrice6m: number | null;
+  targetPrice6mLow: number | null;
+  targetPrice6mHigh: number | null;
+  confidencePct: number | null;
+  predictionDirection: string | null;
+  matchedPattern: string | null;
+  dominantSignals: DominantSignal[];
+  upsideScenario: string | null;
+  upsideTarget: number | null;
+  downsideScenario: string | null;
+  downsideTarget: number | null;
+  riskFactors: string[];
+}
+
+export async function getLatestPrediction(scryfallId: string): Promise<CardPrediction | null> {
+  const { rows } = await queryWithTimeout<any>(
+    `SELECT date, current_price as "currentPrice",
+            target_price_6m as "targetPrice6m", target_price_6m_low as "targetPrice6mLow", target_price_6m_high as "targetPrice6mHigh",
+            confidence_pct as "confidencePct", prediction_direction as "predictionDirection", matched_pattern as "matchedPattern",
+            dominant_signals as "dominantSignals",
+            upside_scenario as "upsideScenario", upside_target as "upsideTarget",
+            downside_scenario as "downsideScenario", downside_target as "downsideTarget",
+            risk_factors as "riskFactors"
+     FROM market_predictions
+     WHERE scryfall_id = ?
+     ORDER BY date DESC
+     LIMIT 1`,
+    [scryfallId]
+  );
+  if (rows.length === 0) return null;
+  const r = rows[0];
+  return { ...r, date: toDateString(r.date), dominantSignals: r.dominantSignals ?? [], riskFactors: r.riskFactors ?? [] };
+}

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import PriceChart from '@/components/PriceChart';
+import PredictionCard from '@/components/PredictionCard';
 
 interface PricePoint { date: string; usd: number | null; usdFoil: number | null; }
 interface CardInfo { scryfallId: string; name: string; setCode: string; setName: string; imageUrl: string | null; priceUsd: number | null; priceFoilUsd: number | null; rarity: string | null; scryfallUri: string; }
@@ -13,6 +14,16 @@ interface CardSignal {
   momentum7d: number | null; momentum30d: number | null; momentum90d: number | null;
   volatility7d: number | null; volatility30d: number | null;
   priceVsSetMedian: number | null; currentPrice: number | null; price52wHigh: number | null; price52wLow: number | null;
+}
+interface DominantSignal { signal: string; value: string | number | null; }
+interface CardPrediction {
+  date: string; currentPrice: number | null;
+  targetPrice6m: number | null; targetPrice6mLow: number | null; targetPrice6mHigh: number | null;
+  confidencePct: number | null; predictionDirection: string | null; matchedPattern: string | null;
+  dominantSignals: DominantSignal[];
+  upsideScenario: string | null; upsideTarget: number | null;
+  downsideScenario: string | null; downsideTarget: number | null;
+  riskFactors: string[];
 }
 
 const PHASE_LABELS: Record<string, string> = {
@@ -39,19 +50,22 @@ export default function CardDetailPage() {
   const [points, setPoints] = useState<PricePoint[] | null>(null);
   const [card, setCard] = useState<CardInfo | null>(null);
   const [signal, setSignal] = useState<CardSignal | null | undefined>(undefined);
+  const [prediction, setPrediction] = useState<CardPrediction | null | undefined>(undefined);
   const [watched, setWatched] = useState(false);
   const [watchId, setWatchId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const [histRes, cardRes, watchRes, signalRes] = await Promise.all([
+    const [histRes, cardRes, watchRes, signalRes, predictionRes] = await Promise.all([
       fetch(`/api/market/card/${scryfallId}/history?days=${days}`).then(r => r.json()),
       fetch(`/api/market/card/${scryfallId}`).then(r => r.json()),
       fetch('/api/market/watchlist').then(r => r.json()),
       fetch(`/api/market/card/${scryfallId}/signals`).then(r => r.json()),
+      fetch(`/api/market/card/${scryfallId}/prediction`).then(r => r.json()),
     ]);
     setPoints(histRes.points ?? []);
     setCard(cardRes.card ?? null);
     setSignal(signalRes.signal ?? null);
+    setPrediction(predictionRes.prediction ?? null);
     const item = watchRes.items?.find((w: any) => w.kind === 'card' && w.scryfallId === scryfallId);
     setWatched(!!item);
     setWatchId(item?.id ?? null);
@@ -117,6 +131,15 @@ export default function CardDetailPage() {
           )}
         </div>
       </div>
+
+      {prediction && (
+        <div className="mb-6">
+          <PredictionCard prediction={prediction} />
+        </div>
+      )}
+      {prediction === null && (
+        <p className="text-xs text-zinc-600 mb-6">No prediction yet for this printing — it'll appear after the next daily run.</p>
+      )}
 
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
         <div className="flex items-center justify-between mb-4">
