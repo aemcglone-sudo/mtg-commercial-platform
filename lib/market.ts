@@ -40,12 +40,14 @@ export async function getWatchlist(userId: string): Promise<WatchlistItem[]> {
   return rows;
 }
 
-export async function addCardToWatchlist(userId: string, scryfallId: string, cardName: string): Promise<void> {
+/** setCode/setName identify the printing being watched — a card name alone is
+ * ambiguous once the same card has multiple printings with different prices. */
+export async function addCardToWatchlist(userId: string, scryfallId: string, cardName: string, setCode?: string | null, setName?: string | null): Promise<void> {
   await run(
-    `INSERT INTO market_watchlist_items (id, user_id, kind, scryfall_id, card_name, created_at)
-     VALUES (?, ?, 'card', ?, ?, now())
+    `INSERT INTO market_watchlist_items (id, user_id, kind, scryfall_id, card_name, set_code, set_name, created_at)
+     VALUES (?, ?, 'card', ?, ?, ?, ?, now())
      ON CONFLICT (user_id, kind, scryfall_id, set_code) DO NOTHING`,
-    [randomUUID(), userId, scryfallId, cardName]
+    [randomUUID(), userId, scryfallId, cardName, setCode ?? null, setName ?? null]
   );
 }
 
@@ -91,8 +93,10 @@ export async function getSetHistory(setCode: string, days: number): Promise<SetI
 
 export interface SetMover { setCode: string; avgUsdNow: number; avgUsdBefore: number; changePercent: number; cardCount: number; }
 
-/** Sets ranked by % change in average card price over the window — a "gainers/losers" board. */
-export async function getSetMovers(days: number, limit = 20): Promise<{ movers: SetMover[]; degraded: boolean }> {
+/** Sets ranked by % change in average card price over the window — a "gainers/losers" board.
+ * Expensive (whole-table self-join) — only called by refreshMoversCache(), never on a page
+ * request. See getCachedSetMovers() for what the API route actually reads. */
+async function computeSetMovers(days: number, limit = 20): Promise<{ movers: SetMover[]; degraded: boolean }> {
   const { rows, timedOut } = await queryWithTimeout(
     `WITH bounds AS (
        SELECT set_code, MIN(price_date) as first_date, MAX(price_date) as last_date
@@ -120,7 +124,8 @@ export async function getSetMovers(days: number, limit = 20): Promise<{ movers: 
      FROM firstvals f JOIN lastvals l ON l.set_code = f.set_code
      WHERE f.avg_usd > 0
      ORDER BY (l.avg_usd - f.avg_usd) / f.avg_usd DESC`,
-    [days]
+    [days],
+    60000 // this only ever runs from the cron job, never a page request — fine to let it work
   );
   const movers = rows
     .map((r: any) => ({
@@ -136,7 +141,8 @@ export async function getSetMovers(days: number, limit = 20): Promise<{ movers: 
 
 export interface CardMover { scryfallId: string; cardName: string; setCode: string; usdNow: number; usdBefore: number; changePercent: number; }
 
-export async function getCardMovers(days: number, limit = 20, direction: 'gainers' | 'losers' = 'gainers'): Promise<{ movers: CardMover[]; degraded: boolean }> {
+/** Expensive — only called by refreshMoversCache(). See getCachedCardMovers(). */
+async function computeCardMovers(days: number, limit = 20, direction: 'gainers' | 'losers' = 'gainers'): Promise<{ movers: CardMover[]; degraded: boolean }> {
   const { rows, timedOut } = await queryWithTimeout(
     `WITH bounds AS (
        SELECT scryfall_id, MIN(price_date) as first_date, MAX(price_date) as last_date
@@ -162,7 +168,8 @@ export async function getCardMovers(days: number, limit = 20, direction: 'gainer
      FROM firstvals f JOIN lastvals l ON l.scryfall_id = f.scryfall_id
      ORDER BY (l.usd - f.usd) / f.usd ${direction === 'gainers' ? 'DESC' : 'ASC'}
      LIMIT ?`,
-    [days, limit]
+    [days, limit],
+    60000 // cron-only, same reasoning as computeSetMovers above
   );
   const movers = rows.map((r: any) => ({
     ...r,
@@ -176,4 +183,76 @@ export async function getCardMovers(days: number, limit = 20, direction: 'gainer
 function toDateString(d: string | Date): string {
   if (typeof d === 'string') return d.slice(0, 10);
   return d.toISOString().slice(0, 10);
+}
+
+// ── Movers cache ─────────────────────────────────────────────────────────
+// The movers queries above are whole-table self-joins — fine to run once a
+// day from the cron job, much too heavy to run on every page load. The API
+// route reads only from this cache; refreshMoversCache() (called at the end
+// of the daily sync) is the only thing that ever runs the live queries.
+
+const WINDOWS = [7, 30, 90];
+
+export async function getCachedSetMovers(days: number): Promise<{ gainers: SetMover[]; losers: SetMover[]; computedAt: string | null }> {
+  return getCachedMovers<SetMover>(`set:${days}`);
+}
+
+export async function getCachedCardMovers(days: number): Promise<{ gainers: CardMover[]; losers: CardMover[]; computedAt: string | null }> {
+  return getCachedMovers<CardMover>(`card:${days}`);
+}
+
+async function getCachedMovers<T>(cacheKey: string): Promise<{ gainers: T[]; losers: T[]; computedAt: string | null }> {
+  const row = await findMany<{ payload: { gainers: T[]; losers: T[] }; computed_at: string }>(
+    `SELECT payload, computed_at FROM market_movers_cache WHERE cache_key = ?`,
+    [cacheKey]
+  );
+  if (row.length === 0) return { gainers: [], losers: [], computedAt: null };
+  return { gainers: row[0].payload.gainers ?? [], losers: row[0].payload.losers ?? [], computedAt: row[0].computed_at };
+}
+
+async function upsertMoversCache(cacheKey: string, payload: unknown): Promise<void> {
+  await run(
+    `INSERT INTO market_movers_cache (id, cache_key, payload, computed_at)
+     VALUES (?, ?, ?, now())
+     ON CONFLICT (cache_key) DO UPDATE SET payload = EXCLUDED.payload, computed_at = now()`,
+    [randomUUID(), cacheKey, JSON.stringify(payload)]
+  );
+}
+
+/** VACUUM ANALYZE on the snapshots table. The daily sync's ~97k upserts
+ * leave that many dead tuples behind (ON CONFLICT DO UPDATE), which bloats
+ * the table enough to make the movers aggregation slow (80s+ instead of
+ * <100ms) until autovacuum gets to it on its own schedule. Running this
+ * explicitly, right after the sync and before the movers refresh, keeps
+ * the cache refresh fast every day instead of only on days autovacuum
+ * happens to have already caught up. */
+export async function vacuumSnapshots(): Promise<void> {
+  await run('VACUUM ANALYZE market_price_snapshots');
+}
+
+export interface MoversRefreshResult { cacheKey: string; degraded: boolean }
+
+/** Recomputes every (type, window) combination and stores the result. Called
+ * once at the end of the daily price sync — never from a page request. */
+export async function refreshMoversCache(): Promise<MoversRefreshResult[]> {
+  const results: MoversRefreshResult[] = [];
+
+  for (const days of WINDOWS) {
+    const { movers: sets, degraded } = await computeSetMovers(days, 200);
+    const gainers = sets.filter(s => s.changePercent > 0).slice(0, 20);
+    const losers = [...sets].reverse().filter(s => s.changePercent < 0).slice(0, 20);
+    await upsertMoversCache(`set:${days}`, { gainers, losers });
+    results.push({ cacheKey: `set:${days}`, degraded });
+  }
+
+  for (const days of WINDOWS) {
+    const [gainersRes, losersRes] = await Promise.all([
+      computeCardMovers(days, 20, 'gainers'),
+      computeCardMovers(days, 20, 'losers'),
+    ]);
+    await upsertMoversCache(`card:${days}`, { gainers: gainersRes.movers, losers: losersRes.movers });
+    results.push({ cacheKey: `card:${days}`, degraded: gainersRes.degraded || losersRes.degraded });
+  }
+
+  return results;
 }

@@ -42,7 +42,7 @@ export default function CardDetailPage() {
     } else if (card) {
       await fetch('/api/market/watchlist', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ kind: 'card', scryfallId: card.scryfallId, cardName: card.name }),
+        body: JSON.stringify({ kind: 'card', scryfallId: card.scryfallId, cardName: card.name, setCode: card.setCode, setName: card.setName }),
       });
       load();
     }

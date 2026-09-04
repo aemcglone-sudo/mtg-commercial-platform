@@ -8,6 +8,8 @@ export interface CardSearchOption {
   scryfallId: string;
   imageUrl: string | null;
   typeLine: string | null;
+  setCode: string | null;
+  setName: string | null;
 }
 
 // General card-name search, used for adding an opponent's permanents to the
@@ -32,6 +34,8 @@ export async function GET(req: NextRequest) {
       scryfallId: card.id,
       imageUrl: card.image_uris?.normal ?? card.card_faces?.[0]?.image_uris?.normal ?? null,
       typeLine: card.type_line ?? null,
+      setCode: card.set ?? null,
+      setName: card.set_name ?? null,
     }));
 
     return NextResponse.json({ results });

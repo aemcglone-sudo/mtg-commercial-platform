@@ -14,8 +14,13 @@ export async function GET(req: NextRequest) {
 
   try {
     const sets = await getSets();
+    // ?all=1 returns every set Scryfall knows about (promos, memorabilia, art series
+    // included) — used to resolve a code to its full name for any printing that shows
+    // up in price data, since a card's promo/special printing is still a real printing.
+    // The default (curated) list is what the "browse sets" page shows to watch.
+    const includeAll = req.nextUrl.searchParams.get('all') === '1';
     const filtered = sets
-      .filter(s => TRACKED_SET_TYPES.has(s.set_type) && s.card_count > 0)
+      .filter(s => (includeAll || TRACKED_SET_TYPES.has(s.set_type)) && s.card_count > 0)
       .sort((a, b) => (b.released_at ?? '').localeCompare(a.released_at ?? ''))
       .map(s => ({ code: s.code, name: s.name, setType: s.set_type, releasedAt: s.released_at ?? null, cardCount: s.card_count, iconSvgUri: s.icon_svg_uri ?? null }));
     return NextResponse.json({ sets: filtered });

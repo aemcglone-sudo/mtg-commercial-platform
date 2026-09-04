@@ -759,6 +759,18 @@ model MarketPriceSnapshot {
   @@map("market_price_snapshots")
 }
 
+// Precomputed gainers/losers, refreshed once daily by the cron sync job
+// instead of running the (expensive, whole-table self-join) aggregate live
+// on every page load. cacheKey is e.g. "set:7" or "card:30".
+model MarketMoversCache {
+  id         String   @id @default(cuid())
+  cacheKey   String   @unique @map("cache_key")
+  payload    Json
+  computedAt DateTime @default(now()) @map("computed_at")
+
+  @@map("market_movers_cache")
+}
+
 model MarketWatchlistItem {
   id        String   @id @default(cuid())
   userId    String   @map("user_id")

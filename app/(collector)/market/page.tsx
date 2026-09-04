@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import Link from 'next/link';
 
-interface CardSearchOption { name: string; scryfallId: string; imageUrl: string | null; typeLine: string | null; }
+interface CardSearchOption { name: string; scryfallId: string; imageUrl: string | null; typeLine: string | null; setCode: string | null; setName: string | null; }
+interface SetMeta { code: string; name: string; }
 
 interface SetMover { setCode: string; avgUsdNow: number; avgUsdBefore: number; changePercent: number; cardCount: number; }
 interface CardMover { scryfallId: string; cardName: string; setCode: string; usdNow: number; usdBefore: number; changePercent: number; }
@@ -30,16 +31,34 @@ export default function MarketPage() {
   const [setMovers, setSetMovers] = useState<{ gainers: SetMover[]; losers: SetMover[] } | null>(null);
   const [cardMovers, setCardMovers] = useState<{ gainers: CardMover[]; losers: CardMover[] } | null>(null);
   const [watchlist, setWatchlist] = useState<WatchlistItem[] | null>(null);
+  const [sets, setSets] = useState<SetMeta[]>([]);
   const [loading, setLoading] = useState(true);
   const [noData, setNoData] = useState(false);
-  const [degraded, setDegraded] = useState(false);
   const [loadError, setLoadError] = useState(false);
+  const [computedAt, setComputedAt] = useState<string | null>(null);
+
+  // Full set names — the movers/card-search APIs only carry set codes, since that's
+  // what's stored per price snapshot. Resolved client-side against the full set list
+  // so "Set Movers" (and every printing shown alongside a card) reads as a real name,
+  // not a 3-4 letter code.
+  const setNameByCode = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const s of sets) map.set(s.code, s.name);
+    return map;
+  }, [sets]);
+  const setName = useCallback((code: string) => setNameByCode.get(code) ?? code.toUpperCase(), [setNameByCode]);
+
+  useEffect(() => {
+    // ?all=1: resolve names for every printing's set, not just the curated "browse sets" list —
+    // a card's promo/special printing is still a real printing with its own price.
+    fetch('/api/market/sets?all=1').then(r => r.json()).then(d => setSets((d.sets ?? []).map((s: any) => ({ code: s.code, name: s.name }))));
+  }, []);
 
   const loadMovers = useCallback(async () => {
     setLoading(true);
     setLoadError(false);
-    // Defense-in-depth on top of the server's own statement_timeout: never let this
-    // spinner hang forever, even if a request never completes at all.
+    // Defense-in-depth: the movers endpoint reads a precomputed cache (cheap), but
+    // never let this spinner hang forever even if a request never completes at all.
     const withTimeout = (url: string) => {
       const controller = new AbortController();
       const t = setTimeout(() => controller.abort(), 15000);
@@ -53,7 +72,7 @@ export default function MarketPage() {
       setSetMovers(setRes);
       setCardMovers(cardRes);
       setNoData((setRes.gainers?.length ?? 0) === 0 && (setRes.losers?.length ?? 0) === 0 && (cardRes.gainers?.length ?? 0) === 0 && (cardRes.losers?.length ?? 0) === 0);
-      setDegraded(!!setRes.degraded || !!cardRes.degraded);
+      setComputedAt(setRes.computedAt ?? cardRes.computedAt ?? null);
     } catch {
       setLoadError(true);
     }
@@ -73,18 +92,18 @@ export default function MarketPage() {
     await fetch(`/api/market/watchlist/${id}`, { method: 'DELETE' });
   }
 
-  async function addSetWatch(setCode: string, setName: string) {
+  async function addSetWatch(setCode: string) {
     await fetch('/api/market/watchlist', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ kind: 'set', setCode, setName }),
+      body: JSON.stringify({ kind: 'set', setCode, setName: setName(setCode) }),
     });
     loadWatchlist();
   }
 
-  async function addCardWatch(scryfallId: string, cardName: string) {
+  async function addCardWatch(scryfallId: string, cardName: string, setCode?: string | null) {
     await fetch('/api/market/watchlist', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ kind: 'card', scryfallId, cardName }),
+      body: JSON.stringify({ kind: 'card', scryfallId, cardName, setCode: setCode ?? null, setName: setCode ? setName(setCode) : null }),
     });
     loadWatchlist();
   }
@@ -138,33 +157,32 @@ export default function MarketPage() {
             </div>
           )}
 
-          {!loading && !loadError && degraded && (
-            <div className="bg-amber-950/20 border border-amber-900 rounded-lg px-4 py-2.5 text-xs text-amber-300">
-              Market data is loading slowly right now — results below may be incomplete. Try refreshing in a bit.
-            </div>
-          )}
-
           {!loading && !loadError && noData && (
             <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 text-center text-sm text-zinc-400">
-              No price history yet. The market needs at least two daily snapshots before it can show movers —
-              check back tomorrow, or ask your admin to run the price sync.
+              No movers data yet — it's computed once a day by the price sync job. Check back after the next run,
+              or ask your admin to trigger it.
             </div>
           )}
 
           {!loading && !loadError && !noData && (
             <>
+              {computedAt && (
+                <p className="text-xs text-zinc-600">
+                  Last updated {new Date(computedAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                </p>
+              )}
               <section>
                 <h2 className="text-sm font-semibold text-zinc-300 mb-3">Set Movers ({days}d)</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <MoversTable
-                    title="Gainers" rows={setMovers?.gainers ?? []} kind="set"
+                    title="Gainers" rows={setMovers?.gainers ?? []} kind="set" setName={setName}
                     isWatched={r => isSetWatched(r.setCode)}
-                    onWatch={r => addSetWatch(r.setCode, r.setCode)}
+                    onWatch={r => addSetWatch(r.setCode)}
                   />
                   <MoversTable
-                    title="Losers" rows={setMovers?.losers ?? []} kind="set"
+                    title="Losers" rows={setMovers?.losers ?? []} kind="set" setName={setName}
                     isWatched={r => isSetWatched(r.setCode)}
-                    onWatch={r => addSetWatch(r.setCode, r.setCode)}
+                    onWatch={r => addSetWatch(r.setCode)}
                   />
                 </div>
               </section>
@@ -173,14 +191,14 @@ export default function MarketPage() {
                 <h2 className="text-sm font-semibold text-zinc-300 mb-3">Card Movers ({days}d)</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <MoversTable
-                    title="Gainers" rows={cardMovers?.gainers ?? []} kind="card"
+                    title="Gainers" rows={cardMovers?.gainers ?? []} kind="card" setName={setName}
                     isWatched={r => isCardWatched(r.scryfallId)}
-                    onWatch={r => addCardWatch(r.scryfallId, r.cardName)}
+                    onWatch={r => addCardWatch(r.scryfallId, r.cardName, r.setCode)}
                   />
                   <MoversTable
-                    title="Losers" rows={cardMovers?.losers ?? []} kind="card"
+                    title="Losers" rows={cardMovers?.losers ?? []} kind="card" setName={setName}
                     isWatched={r => isCardWatched(r.scryfallId)}
-                    onWatch={r => addCardWatch(r.scryfallId, r.cardName)}
+                    onWatch={r => addCardWatch(r.scryfallId, r.cardName, r.setCode)}
                   />
                 </div>
               </section>
@@ -203,7 +221,10 @@ export default function MarketPage() {
                 href={item.kind === 'card' ? `/market/card/${item.scryfallId}` : `/market/sets/${item.setCode}`}
                 className="text-sm font-medium hover:text-amber-400 transition-colors"
               >
-                {item.kind === 'card' ? item.cardName : item.setName}
+                {item.kind === 'card' ? item.cardName : (item.setName ?? (item.setCode ? setName(item.setCode) : item.setCode))}
+                {item.kind === 'card' && (item.setName || item.setCode) && (
+                  <span className="text-zinc-500 font-normal"> — {item.setName ?? setName(item.setCode!)}</span>
+                )}
                 <span className="text-zinc-600 text-xs ml-2 uppercase">{item.kind}</span>
               </Link>
               <button type="button" onClick={() => removeWatch(item.id)} className="text-xs text-zinc-500 hover:text-red-400">
@@ -218,13 +239,14 @@ export default function MarketPage() {
 }
 
 function MoversTable<T extends { changePercent: number }>({
-  title, rows, kind, isWatched, onWatch,
+  title, rows, kind, isWatched, onWatch, setName,
 }: {
   title: string;
   rows: T[];
   kind: 'set' | 'card';
   isWatched: (r: T) => boolean;
   onWatch: (r: T) => void;
+  setName: (code: string) => string;
 }) {
   return (
     <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
@@ -237,7 +259,14 @@ function MoversTable<T extends { changePercent: number }>({
               href={kind === 'set' ? `/market/sets/${r.setCode}` : `/market/card/${r.scryfallId}`}
               className="truncate hover:text-amber-400 transition-colors flex-1"
             >
-              {kind === 'set' ? r.setCode.toUpperCase() : r.cardName}
+              {kind === 'set' ? (
+                setName(r.setCode)
+              ) : (
+                <>
+                  {r.cardName}
+                  <span className="text-zinc-500"> — {setName(r.setCode)}</span>
+                </>
+              )}
             </Link>
             <span className="text-zinc-500 text-xs shrink-0">{fmtUsd(kind === 'set' ? r.avgUsdNow : r.usdNow)}</span>
             <span className="shrink-0"><ChangeBadge pct={r.changePercent} /></span>
@@ -253,7 +282,7 @@ function MoversTable<T extends { changePercent: number }>({
   );
 }
 
-function CardSearchBox({ onWatch, isWatched }: { onWatch: (scryfallId: string, name: string) => void; isWatched: (id: string) => boolean }) {
+function CardSearchBox({ onWatch, isWatched }: { onWatch: (scryfallId: string, name: string, setCode?: string | null) => void; isWatched: (id: string) => boolean }) {
   const [q, setQ] = useState('');
   const [results, setResults] = useState<CardSearchOption[]>([]);
   const [open, setOpen] = useState(false);
@@ -283,8 +312,11 @@ function CardSearchBox({ onWatch, isWatched }: { onWatch: (scryfallId: string, n
         <div className="absolute z-10 mt-1 w-full bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden shadow-xl">
           {results.map(r => (
             <div key={r.scryfallId} className="flex items-center justify-between px-3 py-2 hover:bg-zinc-800 text-sm">
-              <Link href={`/market/card/${r.scryfallId}`} className="truncate flex-1">{r.name}</Link>
-              <button type="button" onClick={() => onWatch(r.scryfallId, r.name)} disabled={isWatched(r.scryfallId)}
+              <Link href={`/market/card/${r.scryfallId}`} className="truncate flex-1">
+                {r.name}
+                {r.setName && <span className="text-zinc-500 text-xs"> — {r.setName}</span>}
+              </Link>
+              <button type="button" onClick={() => onWatch(r.scryfallId, r.name, r.setCode)} disabled={isWatched(r.scryfallId)}
                 className={`shrink-0 text-xs ml-2 ${isWatched(r.scryfallId) ? 'text-amber-400' : 'text-zinc-600 hover:text-amber-400'}`}>
                 {isWatched(r.scryfallId) ? '★' : '☆'}
               </button>

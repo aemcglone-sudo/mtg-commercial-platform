@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
       if (!body.scryfallId || !body.cardName) {
         return NextResponse.json({ error: 'scryfallId and cardName required' }, { status: 400 });
       }
-      await addCardToWatchlist(userId, body.scryfallId, body.cardName);
+      await addCardToWatchlist(userId, body.scryfallId, body.cardName, body.setCode ?? null, body.setName ?? null);
     } else if (body.kind === 'set') {
       if (!body.setCode || !body.setName) {
         return NextResponse.json({ error: 'setCode and setName required' }, { status: 400 });
