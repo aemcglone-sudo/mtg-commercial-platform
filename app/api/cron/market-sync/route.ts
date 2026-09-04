@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { runDailyPriceSync } from '@/lib/market-sync';
 import { refreshMoversCache, vacuumSnapshots } from '@/lib/market';
 import { refreshSetReleaseDates, calculateSignals } from '@/lib/signal-calculator';
+import { seedPatternLibrary, calculatePredictions } from '@/lib/prediction-engine';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -40,7 +41,11 @@ export async function GET(req: NextRequest) {
     const signalsResult = await calculateSignals();
     console.log('Signals calculated:', signalsResult);
 
-    return NextResponse.json({ success: true, sync: syncResult, movers: moversResult, signals: signalsResult });
+    await seedPatternLibrary();
+    const predictionsResult = await calculatePredictions();
+    console.log('Predictions calculated:', predictionsResult);
+
+    return NextResponse.json({ success: true, sync: syncResult, movers: moversResult, signals: signalsResult, predictions: predictionsResult });
   } catch (e) {
     console.error('Market sync failed:', e);
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Sync failed' }, { status: 500 });

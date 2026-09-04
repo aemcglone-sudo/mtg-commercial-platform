@@ -809,6 +809,54 @@ model MarketSignal {
   @@map("market_signals")
 }
 
+// The pattern library — mostly a documentation/transparency table. The
+// actual pattern-matching logic is a hardcoded SQL CASE in
+// lib/prediction-engine.ts (dynamic JSON-condition interpretation was
+// deliberately skipped as unneeded complexity for a handful of patterns).
+model MarketPattern {
+  id                 String   @id @default(cuid())
+  patternName        String   @unique @map("pattern_name")
+  description        String
+  predictedPctChange Float    @map("predicted_pct_change")
+  confidencePct      Float    @map("confidence_pct")
+  priority           Int
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  @@map("market_patterns")
+}
+
+// One row per printing per day — a heuristic 6-month price call, matched
+// against market_signals by lib/prediction-engine.ts. Confidence reflects
+// pattern-match strength, NOT backtested accuracy — no prediction has had
+// 6 months to resolve yet, so there is no real accuracy data to report.
+model MarketPrediction {
+  id               String   @id @default(cuid())
+  scryfallId       String   @map("scryfall_id")
+  date             DateTime @map("date") @db.Date
+
+  currentPrice     Float?   @map("current_price")
+  targetPrice6m    Float?   @map("target_price_6m")
+  targetPrice6mLow Float?   @map("target_price_6m_low")
+  targetPrice6mHigh Float?  @map("target_price_6m_high")
+  confidencePct    Float?   @map("confidence_pct")
+  // 'bullish' | 'neutral' | 'bearish'
+  predictionDirection String? @map("prediction_direction")
+  matchedPattern   String?  @map("matched_pattern")
+  dominantSignals  Json?    @map("dominant_signals")
+
+  upsideScenario   String?  @map("upside_scenario")
+  upsideTarget     Float?   @map("upside_target")
+  downsideScenario String?  @map("downside_scenario")
+  downsideTarget   Float?   @map("downside_target")
+  riskFactors      Json?    @map("risk_factors")
+
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@unique([scryfallId, date])
+  @@index([scryfallId, date])
+  @@map("market_predictions")
+}
+
 // Precomputed gainers/losers, refreshed once daily by the cron sync job
 // instead of running the (expensive, whole-table self-join) aggregate live
 // on every page load. cacheKey is e.g. "set:7" or "card:30".
