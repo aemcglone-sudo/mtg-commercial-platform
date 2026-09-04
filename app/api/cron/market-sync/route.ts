@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { runDailyPriceSync } from '@/lib/market-sync';
 import { refreshMoversCache, vacuumSnapshots } from '@/lib/market';
+import { refreshSetReleaseDates, calculateSignals } from '@/lib/signal-calculator';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -13,8 +14,11 @@ function checkCronSecret(req: NextRequest): boolean {
 
 /** Speculation Market daily snapshot — triggered by a Fly scheduled machine
  * (see scripts/setup-market-sync-schedule.sh) once a day. Also refreshes
- * the movers cache afterward, so the (expensive) gainers/losers aggregation
- * runs here, once a day, instead of on every Market page load. */
+ * the movers cache and market_signals afterward, so the expensive
+ * aggregations run here, once a day, instead of on every page load.
+ *
+ * Deliberately NOT calling calculateVolatilitySignals() yet — see the long
+ * comment on it in lib/signal-calculator.ts for why it's held back. */
 export async function GET(req: NextRequest) {
   if (!checkCronSecret(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -30,7 +34,13 @@ export async function GET(req: NextRequest) {
     const moversResult = await refreshMoversCache();
     console.log('Movers cache refreshed:', moversResult);
 
-    return NextResponse.json({ success: true, sync: syncResult, movers: moversResult });
+    const releaseDatesCount = await refreshSetReleaseDates();
+    console.log('Set release dates refreshed:', releaseDatesCount);
+
+    const signalsResult = await calculateSignals();
+    console.log('Signals calculated:', signalsResult);
+
+    return NextResponse.json({ success: true, sync: syncResult, movers: moversResult, signals: signalsResult });
   } catch (e) {
     console.error('Market sync failed:', e);
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Sync failed' }, { status: 500 });

@@ -256,3 +256,42 @@ export async function refreshMoversCache(): Promise<MoversRefreshResult[]> {
 
   return results;
 }
+
+// ── Signals (read side — computed by lib/signal-calculator.ts) ────────────
+
+export interface CardSignal {
+  date: string;
+  setCode: string;
+  rarity: string | null;
+  cmc: number | null;
+  daysSinceRelease: number | null;
+  releasePhase: string | null;
+  momentum7d: number | null;
+  momentum30d: number | null;
+  momentum90d: number | null;
+  volatility7d: number | null;
+  volatility30d: number | null;
+  priceVsSetMedian: number | null;
+  currentPrice: number | null;
+  price52wHigh: number | null;
+  price52wLow: number | null;
+}
+
+export async function getLatestSignal(scryfallId: string): Promise<CardSignal | null> {
+  const { rows } = await queryWithTimeout<any>(
+    `SELECT date, set_code as "setCode", rarity, cmc,
+            days_since_release as "daysSinceRelease", release_phase as "releasePhase",
+            momentum_7d as "momentum7d", momentum_30d as "momentum30d", momentum_90d as "momentum90d",
+            volatility_7d as "volatility7d", volatility_30d as "volatility30d",
+            price_vs_set_median as "priceVsSetMedian",
+            current_price as "currentPrice", price_52w_high as "price52wHigh", price_52w_low as "price52wLow"
+     FROM market_signals
+     WHERE scryfall_id = ?
+     ORDER BY date DESC
+     LIMIT 1`,
+    [scryfallId]
+  );
+  if (rows.length === 0) return null;
+  const r = rows[0];
+  return { ...r, date: toDateString(r.date) };
+}

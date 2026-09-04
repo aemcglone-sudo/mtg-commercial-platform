@@ -7,6 +7,28 @@ import PriceChart from '@/components/PriceChart';
 
 interface PricePoint { date: string; usd: number | null; usdFoil: number | null; }
 interface CardInfo { scryfallId: string; name: string; setCode: string; setName: string; imageUrl: string | null; priceUsd: number | null; priceFoilUsd: number | null; rarity: string | null; scryfallUri: string; }
+interface CardSignal {
+  date: string; setCode: string; rarity: string | null; cmc: number | null;
+  daysSinceRelease: number | null; releasePhase: string | null;
+  momentum7d: number | null; momentum30d: number | null; momentum90d: number | null;
+  volatility7d: number | null; volatility30d: number | null;
+  priceVsSetMedian: number | null; currentPrice: number | null; price52wHigh: number | null; price52wLow: number | null;
+}
+
+const PHASE_LABELS: Record<string, string> = {
+  presale: 'Presale', hype_spike: 'Hype Spike', supply_flood: 'Supply Flood',
+  stabilization: 'Stabilizing', mature: 'Mature',
+};
+
+function pct(n: number | null): string {
+  if (n === null) return '—';
+  const v = n * 100;
+  return `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`;
+}
+function pctColor(n: number | null): string {
+  if (n === null) return 'text-zinc-500';
+  return n >= 0 ? 'text-emerald-400' : 'text-red-400';
+}
 
 const WINDOWS = [7, 30, 90];
 
@@ -16,17 +38,20 @@ export default function CardDetailPage() {
   const [days, setDays] = useState(90);
   const [points, setPoints] = useState<PricePoint[] | null>(null);
   const [card, setCard] = useState<CardInfo | null>(null);
+  const [signal, setSignal] = useState<CardSignal | null | undefined>(undefined);
   const [watched, setWatched] = useState(false);
   const [watchId, setWatchId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const [histRes, cardRes, watchRes] = await Promise.all([
+    const [histRes, cardRes, watchRes, signalRes] = await Promise.all([
       fetch(`/api/market/card/${scryfallId}/history?days=${days}`).then(r => r.json()),
       fetch(`/api/market/card/${scryfallId}`).then(r => r.json()),
       fetch('/api/market/watchlist').then(r => r.json()),
+      fetch(`/api/market/card/${scryfallId}/signals`).then(r => r.json()),
     ]);
     setPoints(histRes.points ?? []);
     setCard(cardRes.card ?? null);
+    setSignal(signalRes.signal ?? null);
     const item = watchRes.items?.find((w: any) => w.kind === 'card' && w.scryfallId === scryfallId);
     setWatched(!!item);
     setWatchId(item?.id ?? null);
@@ -111,6 +136,49 @@ export default function CardDetailPage() {
         </div>
         {points === null ? <p className="text-sm text-zinc-500">Loading…</p> : <PriceChart points={chartPoints} height={220} />}
       </div>
+
+      {signal && (
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 mt-6">
+          <p className="text-xs uppercase tracking-wide text-zinc-500 mb-3">Signals — {new Date(signal.date + 'T00:00:00Z').toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' })}</p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+            <div>
+              <p className="text-zinc-500 text-xs">7d momentum</p>
+              <p className={`font-semibold ${pctColor(signal.momentum7d)}`}>{pct(signal.momentum7d)}</p>
+            </div>
+            <div>
+              <p className="text-zinc-500 text-xs">30d momentum</p>
+              <p className={`font-semibold ${pctColor(signal.momentum30d)}`}>{pct(signal.momentum30d)}</p>
+            </div>
+            <div>
+              <p className="text-zinc-500 text-xs">90d momentum</p>
+              <p className={`font-semibold ${pctColor(signal.momentum90d)}`}>{pct(signal.momentum90d)}</p>
+            </div>
+            <div>
+              <p className="text-zinc-500 text-xs">Release phase</p>
+              <p className="font-semibold text-zinc-200">{signal.releasePhase ? PHASE_LABELS[signal.releasePhase] ?? signal.releasePhase : '—'}</p>
+            </div>
+            <div>
+              <p className="text-zinc-500 text-xs">52w high</p>
+              <p className="font-semibold text-zinc-200">{signal.price52wHigh !== null ? `$${signal.price52wHigh.toFixed(2)}` : '—'}</p>
+            </div>
+            <div>
+              <p className="text-zinc-500 text-xs">52w low</p>
+              <p className="font-semibold text-zinc-200">{signal.price52wLow !== null ? `$${signal.price52wLow.toFixed(2)}` : '—'}</p>
+            </div>
+            <div>
+              <p className="text-zinc-500 text-xs">vs. set median</p>
+              <p className="font-semibold text-zinc-200">{signal.priceVsSetMedian !== null ? `${signal.priceVsSetMedian.toFixed(1)}×` : '—'}</p>
+            </div>
+            <div>
+              <p className="text-zinc-500 text-xs">Days since release</p>
+              <p className="font-semibold text-zinc-200">{signal.daysSinceRelease ?? '—'}</p>
+            </div>
+          </div>
+        </div>
+      )}
+      {signal === null && (
+        <p className="text-xs text-zinc-600 mt-4">No signal data yet for this printing.</p>
+      )}
     </main>
   );
 }

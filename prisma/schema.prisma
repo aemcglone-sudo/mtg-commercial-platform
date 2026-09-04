@@ -751,12 +751,62 @@ model MarketPriceSnapshot {
   priceDate  DateTime @map("price_date") @db.Date
   usd        Float?
   usdFoil    Float?   @map("usd_foil")
+  // Captured for free from the same daily-sync bulk file — enables signal
+  // computation (comparable-card grouping) without an extra data source.
+  rarity     String?
+  cmc        Float?
   capturedAt DateTime @default(now()) @map("captured_at")
 
   @@unique([scryfallId, priceDate])
   @@index([scryfallId, priceDate])
   @@index([setCode, priceDate])
   @@map("market_price_snapshots")
+}
+
+// Set-level release dates, refreshed daily from Scryfall's /sets endpoint.
+// Used to derive a card's "release phase" signal — simpler than tracking a
+// true per-printing first-release date, and close enough in practice since
+// a card's price behavior around release is really about its set's release.
+model MarketSetReleaseDate {
+  setCode    String   @id @map("set_code")
+  releasedAt DateTime? @map("released_at") @db.Date
+  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("market_set_release_dates")
+}
+
+// One row per printing per day — momentum, volatility, release-cycle phase,
+// and relative-value signals, computed daily by the cron sync job (never
+// live on a page request — see lib/signal-calculator.ts).
+model MarketSignal {
+  id                 String   @id @default(cuid())
+  scryfallId         String   @map("scryfall_id")
+  date               DateTime @map("date") @db.Date
+  setCode            String   @map("set_code")
+  rarity             String?
+  cmc                Float?
+
+  daysSinceRelease   Int?     @map("days_since_release")
+  releasePhase       String?  @map("release_phase")
+
+  momentum7d         Float?   @map("momentum_7d")
+  momentum30d        Float?   @map("momentum_30d")
+  momentum90d        Float?   @map("momentum_90d")
+  volatility7d       Float?   @map("volatility_7d")
+  volatility30d      Float?   @map("volatility_30d")
+
+  priceVsSetMedian   Float?   @map("price_vs_set_median")
+
+  currentPrice       Float?   @map("current_price")
+  price52wHigh       Float?   @map("price_52w_high")
+  price52wLow        Float?   @map("price_52w_low")
+
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  @@unique([scryfallId, date])
+  @@index([scryfallId, date])
+  @@index([date, momentum7d])
+  @@map("market_signals")
 }
 
 // Precomputed gainers/losers, refreshed once daily by the cron sync job

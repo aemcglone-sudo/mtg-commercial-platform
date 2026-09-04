@@ -31,19 +31,19 @@ export async function runDailyPriceSync(): Promise<SyncResult> {
   const rl = createInterface({ input: nodeStream, crlfDelay: Infinity });
 
   const BATCH_SIZE = 500;
-  let batch: { id: string; name: string; set: string; usd: number | null; usdFoil: number | null }[] = [];
+  let batch: { id: string; name: string; set: string; usd: number | null; usdFoil: number | null; rarity: string | null; cmc: number | null }[] = [];
   let scanned = 0, written = 0, skipped = 0;
 
   async function flush() {
     if (batch.length === 0) return;
     const rows = batch;
     batch = [];
-    const placeholders = rows.map(() => '(?, ?, ?, ?, ?, ?, ?)').join(', ');
-    const params = rows.flatMap((r) => [randomUUID(), r.id, r.name, r.set, today, r.usd, r.usdFoil]);
+    const placeholders = rows.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
+    const params = rows.flatMap((r) => [randomUUID(), r.id, r.name, r.set, today, r.usd, r.usdFoil, r.rarity, r.cmc]);
     await run(
-      `INSERT INTO market_price_snapshots (id, scryfall_id, card_name, set_code, price_date, usd, usd_foil)
+      `INSERT INTO market_price_snapshots (id, scryfall_id, card_name, set_code, price_date, usd, usd_foil, rarity, cmc)
        VALUES ${placeholders}
-       ON CONFLICT (scryfall_id, price_date) DO UPDATE SET usd = EXCLUDED.usd, usd_foil = EXCLUDED.usd_foil, captured_at = now()`,
+       ON CONFLICT (scryfall_id, price_date) DO UPDATE SET usd = EXCLUDED.usd, usd_foil = EXCLUDED.usd_foil, rarity = EXCLUDED.rarity, cmc = EXCLUDED.cmc, captured_at = now()`,
       params
     );
     written += rows.length;
@@ -67,7 +67,8 @@ export async function runDailyPriceSync(): Promise<SyncResult> {
     const usdFoil = card.prices?.usd_foil ? parseFloat(card.prices.usd_foil) : null;
     if (usd === null && usdFoil === null) { skipped++; continue; }
 
-    batch.push({ id: card.id, name: card.name, set: card.set, usd, usdFoil });
+    const cmc = typeof card.cmc === 'number' ? card.cmc : null;
+    batch.push({ id: card.id, name: card.name, set: card.set, usd, usdFoil, rarity: card.rarity ?? null, cmc });
     if (batch.length >= BATCH_SIZE) await flush();
   }
   await flush();
