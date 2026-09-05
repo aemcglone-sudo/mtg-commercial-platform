@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import PriceChart from '@/components/PriceChart';
 import PredictionCard from '@/components/PredictionCard';
@@ -50,6 +50,7 @@ const WINDOWS = [7, 30, 90];
 
 export default function CardDetailPage() {
   const params = useParams<{ scryfallId: string }>();
+  const router = useRouter();
   const scryfallId = params.scryfallId;
   const [days, setDays] = useState(90);
   const [points, setPoints] = useState<PricePoint[] | null>(null);
@@ -147,27 +148,22 @@ export default function CardDetailPage() {
       </div>
 
       {printings && printings.length > 1 && (
-        <div className="mb-6">
-          <p className="text-xs uppercase tracking-wide text-zinc-500 mb-2">
-            {printings.length} tracked printings — prices vary a lot by set
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {printings.map(p => {
-              const active = p.scryfallId === scryfallId;
-              return (
-                <Link
-                  key={p.scryfallId}
-                  href={`/market/card/${p.scryfallId}`}
-                  className={`px-3 py-1.5 rounded-lg text-xs border ${active
-                    ? 'bg-amber-400 text-black border-amber-400 font-semibold'
-                    : 'bg-zinc-900 text-zinc-300 border-zinc-800 hover:border-zinc-600'}`}
-                >
-                  {setNameByCode.get(p.setCode) ?? p.setCode.toUpperCase()}
-                  <span className={active ? 'text-black/70' : 'text-zinc-500'}> · {p.usd !== null ? `$${p.usd.toFixed(2)}` : '—'}</span>
-                </Link>
-              );
-            })}
-          </div>
+        <div className="mb-6 flex items-center gap-2">
+          <label htmlFor="printing-select" className="text-xs uppercase tracking-wide text-zinc-500 shrink-0">
+            {printings.length} tracked printings
+          </label>
+          <select
+            id="printing-select"
+            value={scryfallId}
+            onChange={e => router.push(`/market/card/${e.target.value}`)}
+            className="bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1.5 text-xs text-zinc-100 focus:outline-none focus:border-amber-500 max-w-xs"
+          >
+            {printings.map(p => (
+              <option key={p.scryfallId} value={p.scryfallId}>
+                {setNameByCode.get(p.setCode) ?? p.setCode.toUpperCase()} · {p.usd !== null ? `$${p.usd.toFixed(2)}` : '—'}
+              </option>
+            ))}
+          </select>
         </div>
       )}
 
