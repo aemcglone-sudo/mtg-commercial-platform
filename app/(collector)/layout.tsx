@@ -21,6 +21,7 @@ const NAV = [
   { href: '/simulator',       label: 'Commander Simulator', icon: <SimulatorIcon /> },
   { href: '/market',          label: 'Market', tourId: 'nav-market-group', icon: <MarketIcon />, children: [
     { href: '/market/scoreboard',  label: 'Speculation Scoreboard' },
+    { href: '/market/index',       label: 'Market Index' },
   ]},
   { label: 'Shop', dividerAfter: true, tourId: 'nav-shop-group', icon: <ShopIcon />, children: [
     { href: '/stores',            label: 'Nearby Shops' },

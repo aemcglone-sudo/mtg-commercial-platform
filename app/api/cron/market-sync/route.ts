@@ -4,6 +4,7 @@ import { refreshMoversCache, vacuumSnapshots, vacuumPredictions } from '@/lib/ma
 import { refreshSetReleaseDates, calculateSignals } from '@/lib/signal-calculator';
 import { seedPatternLibrary, calculatePredictions } from '@/lib/prediction-engine';
 import { refreshCardNews } from '@/lib/card-news';
+import { refreshMarketIndex } from '@/lib/market-index';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -60,7 +61,19 @@ export async function GET(req: NextRequest) {
       newsResult = { error: e instanceof Error ? e.message : 'unknown' };
     }
 
-    return NextResponse.json({ success: true, sync: syncResult, movers: moversResult, signals: signalsResult, predictions: predictionsResult, news: newsResult });
+    // Also isolated: each index/backfill query is scoped to one date (see
+    // lib/market-index.ts), but this is new enough not to risk the rest of
+    // an otherwise-successful run over it.
+    let indexResult: unknown = { skipped: true };
+    try {
+      indexResult = await refreshMarketIndex();
+      console.log('Market index refreshed:', indexResult);
+    } catch (e) {
+      console.error('Market index refresh failed (non-fatal):', e);
+      indexResult = { error: e instanceof Error ? e.message : 'unknown' };
+    }
+
+    return NextResponse.json({ success: true, sync: syncResult, movers: moversResult, signals: signalsResult, predictions: predictionsResult, news: newsResult, index: indexResult });
   } catch (e) {
     console.error('Market sync failed:', e);
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Sync failed' }, { status: 500 });

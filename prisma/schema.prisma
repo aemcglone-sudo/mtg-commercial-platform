@@ -945,3 +945,26 @@ model MarketWatchlistItem {
   @@index([userId])
   @@map("market_watchlist_items")
 }
+
+// One row per date. indexValue is equal-weighted (every card contributes
+// equally regardless of price) and normalized to a fixed baseline date =
+// 100 — a true cap-weighted index isn't available since we only have
+// price, not print-run/supply data. advancers/decliners/unchanged and
+// medianReturnPct are day-over-day breadth stats computed against the
+// *same* baseline-cohort of cards, so "index went up" (broad growth) and
+// "breadth was mixed" (value rotating between cards) can be read as two
+// distinct signals off the same table. Backfilled gradually — one
+// historical date per cron run alongside the always-current latest date
+// — rather than in one pass; see lib/market-index.ts for why.
+model MarketIndexSnapshot {
+  date            DateTime @id @db.Date
+  indexValue      Float    @map("index_value")
+  cardCount       Int      @map("card_count")
+  advancers       Int?
+  decliners       Int?
+  unchanged       Int?
+  medianReturnPct Float?   @map("median_return_pct")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@map("market_index_snapshots")
+}
