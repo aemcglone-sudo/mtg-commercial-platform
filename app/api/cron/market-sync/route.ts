@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { runDailyPriceSync } from '@/lib/market-sync';
-import { refreshMoversCache, vacuumSnapshots, vacuumPredictions, refreshHighValueCache } from '@/lib/market';
+import { refreshMoversCache, vacuumSnapshots, vacuumPredictions, refreshHighValueCache, refreshCategoryHighValueCache } from '@/lib/market';
 import { refreshSetReleaseDates, calculateSignals } from '@/lib/signal-calculator';
 import { seedPatternLibrary, calculatePredictions } from '@/lib/prediction-engine';
 import { refreshCardNews } from '@/lib/card-news';
@@ -46,6 +46,15 @@ export async function GET(req: NextRequest) {
       highValueResult = { error: e instanceof Error ? e.message : 'unknown' };
     }
 
+    let categoryResult: unknown = { skipped: true };
+    try {
+      categoryResult = await refreshCategoryHighValueCache();
+      console.log('Category high value cache refreshed:', categoryResult);
+    } catch (e) {
+      console.error('Category high value cache refresh failed (non-fatal):', e);
+      categoryResult = { error: e instanceof Error ? e.message : 'unknown' };
+    }
+
     const releaseDatesCount = await refreshSetReleaseDates();
     console.log('Set release dates refreshed:', releaseDatesCount);
 
@@ -82,7 +91,7 @@ export async function GET(req: NextRequest) {
       indexResult = { error: e instanceof Error ? e.message : 'unknown' };
     }
 
-    return NextResponse.json({ success: true, sync: syncResult, movers: moversResult, highValue: highValueResult, signals: signalsResult, predictions: predictionsResult, news: newsResult, index: indexResult });
+    return NextResponse.json({ success: true, sync: syncResult, movers: moversResult, highValue: highValueResult, categoryHighValue: categoryResult, signals: signalsResult, predictions: predictionsResult, news: newsResult, index: indexResult });
   } catch (e) {
     console.error('Market sync failed:', e);
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Sync failed' }, { status: 500 });

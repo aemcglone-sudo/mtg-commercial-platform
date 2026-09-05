@@ -31,19 +31,19 @@ export async function runDailyPriceSync(): Promise<SyncResult> {
   const rl = createInterface({ input: nodeStream, crlfDelay: Infinity });
 
   const BATCH_SIZE = 500;
-  let batch: { id: string; name: string; set: string; usd: number | null; usdFoil: number | null; rarity: string | null; cmc: number | null }[] = [];
+  let batch: { id: string; name: string; set: string; usd: number | null; usdFoil: number | null; rarity: string | null; cmc: number | null; typeLine: string | null }[] = [];
   let scanned = 0, written = 0, skipped = 0;
 
   async function flush() {
     if (batch.length === 0) return;
     const rows = batch;
     batch = [];
-    const placeholders = rows.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
-    const params = rows.flatMap((r) => [randomUUID(), r.id, r.name, r.set, today, r.usd, r.usdFoil, r.rarity, r.cmc]);
+    const placeholders = rows.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
+    const params = rows.flatMap((r) => [randomUUID(), r.id, r.name, r.set, today, r.usd, r.usdFoil, r.rarity, r.cmc, r.typeLine]);
     await run(
-      `INSERT INTO market_price_snapshots (id, scryfall_id, card_name, set_code, price_date, usd, usd_foil, rarity, cmc)
+      `INSERT INTO market_price_snapshots (id, scryfall_id, card_name, set_code, price_date, usd, usd_foil, rarity, cmc, type_line)
        VALUES ${placeholders}
-       ON CONFLICT (scryfall_id, price_date) DO UPDATE SET usd = EXCLUDED.usd, usd_foil = EXCLUDED.usd_foil, rarity = EXCLUDED.rarity, cmc = EXCLUDED.cmc, captured_at = now()`,
+       ON CONFLICT (scryfall_id, price_date) DO UPDATE SET usd = EXCLUDED.usd, usd_foil = EXCLUDED.usd_foil, rarity = EXCLUDED.rarity, cmc = EXCLUDED.cmc, type_line = EXCLUDED.type_line, captured_at = now()`,
       params
     );
     written += rows.length;
@@ -68,7 +68,8 @@ export async function runDailyPriceSync(): Promise<SyncResult> {
     if (usd === null && usdFoil === null) { skipped++; continue; }
 
     const cmc = typeof card.cmc === 'number' ? card.cmc : null;
-    batch.push({ id: card.id, name: card.name, set: card.set, usd, usdFoil, rarity: card.rarity ?? null, cmc });
+    const typeLine = typeof card.type_line === 'string' ? card.type_line : null;
+    batch.push({ id: card.id, name: card.name, set: card.set, usd, usdFoil, rarity: card.rarity ?? null, cmc, typeLine });
     if (batch.length >= BATCH_SIZE) await flush();
   }
   await flush();

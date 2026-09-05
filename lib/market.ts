@@ -378,6 +378,67 @@ export async function getCachedHighValueCards(): Promise<{ cards: HighValueCard[
   return { cards: row[0].payload.cards ?? [], computedAt: row[0].computed_at };
 }
 
+const CATEGORY_ORDER = ['Creature', 'Planeswalker', 'Battle', 'Land', 'Artifact', 'Enchantment', 'Instant', 'Sorcery', 'Other'];
+
+/** Scryfall type_line is e.g. "Legendary Creature — Human Wizard", or
+ * "Artifact Creature — Construct" for cards with more than one type. Order
+ * matters here: a card is bucketed by the first matching type in
+ * CATEGORY_ORDER, so "Artifact Creature" lands under Creature (matches how
+ * players actually talk about these cards), not Artifact. Only the front
+ * face's type line is used for double-faced cards. */
+function classifyTypeLine(typeLine: string): string {
+  const front = typeLine.split('//')[0].toLowerCase();
+  return CATEGORY_ORDER.find(cat => front.includes(cat.toLowerCase())) ?? 'Other';
+}
+
+export interface CategoryCard { scryfallId: string; cardName: string; setCode: string; usd: number }
+export interface CategoryHighValue { category: string; cards: CategoryCard[] }
+
+/** Highest-priced cards grouped by card type (Creature, Land, Artifact,
+ * etc.), plus a separate "Legendary" bucket — powers the category
+ * breakdown on /market/high-value. type_line is only populated going
+ * forward (see market-sync.ts), so this naturally covers more of the
+ * catalog as older snapshot dates roll off and get resynced. Single
+ * descending price scan, same cost as refreshHighValueCache (~1.7s for
+ * ~85k rows) — walks it once, keeping the first N seen per bucket since
+ * the whole result set is already sorted by price. */
+export async function refreshCategoryHighValueCache(perCategory = 10): Promise<{ degraded: boolean }> {
+  const { rows, timedOut } = await queryWithTimeout<any>(
+    `SELECT scryfall_id as "scryfallId", card_name as "cardName", set_code as "setCode", usd, type_line as "typeLine"
+     FROM market_price_snapshots
+     WHERE price_date = (SELECT MAX(price_date) FROM market_price_snapshots) AND usd IS NOT NULL AND type_line IS NOT NULL
+     ORDER BY usd DESC`,
+    [],
+    15000
+  );
+
+  const byCategory = new Map<string, CategoryCard[]>();
+  const legendary: CategoryCard[] = [];
+  for (const r of rows) {
+    const card: CategoryCard = { scryfallId: r.scryfallId, cardName: r.cardName, setCode: r.setCode, usd: Number(r.usd) };
+    const category = classifyTypeLine(r.typeLine);
+    const arr = byCategory.get(category) ?? [];
+    if (arr.length < perCategory) { arr.push(card); byCategory.set(category, arr); }
+    if (legendary.length < perCategory && r.typeLine.toLowerCase().includes('legendary')) legendary.push(card);
+  }
+
+  const result: CategoryHighValue[] = CATEGORY_ORDER
+    .filter(cat => byCategory.has(cat))
+    .map(cat => ({ category: cat, cards: byCategory.get(cat)! }));
+  if (legendary.length > 0) result.unshift({ category: 'Legendary', cards: legendary });
+
+  await upsertMoversCache('category_high_value', { categories: result });
+  return { degraded: timedOut };
+}
+
+export async function getCachedCategoryHighValue(): Promise<{ categories: CategoryHighValue[]; computedAt: string | null }> {
+  const row = await findMany<{ payload: { categories: CategoryHighValue[] }; computed_at: string }>(
+    `SELECT payload, computed_at FROM market_movers_cache WHERE cache_key = 'category_high_value'`
+  );
+  if (row.length === 0) return { categories: [], computedAt: null };
+  return { categories: row[0].payload.categories ?? [], computedAt: row[0].computed_at };
+}
+
 // ── Signals (read side — computed by lib/signal-calculator.ts) ────────────
 
 export interface CardSignal {

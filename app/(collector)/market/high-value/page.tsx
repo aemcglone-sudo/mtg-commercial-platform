@@ -12,6 +12,8 @@ interface HighValueCard {
   scryfallId: string; cardName: string; setCode: string; usd: number; sparkline: number[];
   latestEvent: Event | null;
 }
+interface CategoryCard { scryfallId: string; cardName: string; setCode: string; usd: number }
+interface CategoryHighValue { category: string; cards: CategoryCard[] }
 
 const EVENT_CATEGORY_LABELS: Record<string, string> = {
   reprint: 'Reprint', banned: 'Ban/Unban', tournament: 'Tournament result', set_synergy: 'New set synergy', other: 'News',
@@ -32,15 +34,18 @@ function pctChange(sparkline: number[]): number | null {
 export default function HighValueCardsPage() {
   const [cards, setCards] = useState<HighValueCard[] | null>(null);
   const [computedAt, setComputedAt] = useState<string | null>(null);
+  const [categories, setCategories] = useState<CategoryHighValue[] | null>(null);
   const [setNameByCode, setSetNameByCode] = useState<Map<string, string>>(new Map());
 
   const load = useCallback(async () => {
-    const [hvRes, setsRes] = await Promise.all([
+    const [hvRes, catRes, setsRes] = await Promise.all([
       fetch('/api/market/high-value').then(r => r.json()),
+      fetch('/api/market/high-value/categories').then(r => r.json()),
       fetch('/api/market/sets?all=1').then(r => r.json()),
     ]);
     setCards(hvRes.cards ?? []);
     setComputedAt(hvRes.computedAt ?? null);
+    setCategories(catRes.categories ?? []);
     setSetNameByCode(new Map((setsRes.sets ?? []).map((s: any) => [s.code, s.name])));
   }, []);
 
@@ -145,6 +150,36 @@ export default function HighValueCardsPage() {
             </table>
           </div>
         </div>
+      )}
+
+      {categories !== null && categories.length > 0 && (
+        <div className="mt-8">
+          <h2 className="text-lg font-bold mb-1">Highest Value by Category</h2>
+          <p className="text-xs text-zinc-600 mb-4">
+            Same "priciest cards we have real market data for" caveat as above — broken down by card type.
+            "Legendary" cross-cuts the type categories (a card can be both, e.g. a Legendary Creature).
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {categories.map(cat => (
+              <div key={cat.category} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+                <p className="text-xs uppercase tracking-wide text-amber-500 font-semibold mb-2">{cat.category}</p>
+                <div className="space-y-1.5">
+                  {cat.cards.map((c, i) => (
+                    <Link key={c.scryfallId} href={`/market/card/${c.scryfallId}`} className="flex items-center justify-between gap-2 text-sm hover:text-amber-400 transition-colors">
+                      <span className="truncate"><span className="text-zinc-600 mr-1">{i + 1}.</span>{c.cardName}</span>
+                      <span className="text-zinc-500 text-xs shrink-0">{fmtUsd(c.usd)}</span>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {categories !== null && categories.length === 0 && (
+        <p className="text-xs text-zinc-600 mt-8">
+          No category breakdown yet — this needs a card-type field (type_line) that just started being captured; it'll populate as today's sync completes.
+        </p>
       )}
     </main>
   );

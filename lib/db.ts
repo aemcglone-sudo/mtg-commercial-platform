@@ -62,6 +62,17 @@ export async function withClient<T>(fn: (q: (sql: string, args?: Arg[]) => Promi
     const q = (sql: string, args: Arg[] = []) => client.query(toPostgres(sql), args);
     return await fn(q);
   } finally {
+    // Callers commonly do `SET statement_timeout = N` as the first thing
+    // inside this client (see queryWithTimeout in lib/market.ts and
+    // lib/market-index.ts) — that's a SESSION-level setting, and without
+    // this reset it stays on the connection after release, poisoning it
+    // for whatever unrelated query the pool hands it to next. That's a
+    // real incident we hit live: vacuumSnapshots() (a plain run(), no
+    // timeout override) got killed by a leftover 8000ms timeout set by
+    // an earlier, unrelated request on the same pooled connection —
+    // "canceling statement due to statement timeout" mid-VACUUM, which
+    // needs far more than 8s. Reset happens even if fn() threw.
+    try { await client.query('RESET statement_timeout'); } catch { /* connection may already be broken; nothing to reset */ }
     client.release();
   }
 }

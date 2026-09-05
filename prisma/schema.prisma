@@ -755,6 +755,11 @@ model MarketPriceSnapshot {
   // computation (comparable-card grouping) without an extra data source.
   rarity     String?
   cmc        Float?
+  // Raw Scryfall type_line (e.g. "Legendary Creature — Human Wizard"),
+  // same free-from-bulk-sync capture as rarity/cmc — powers the highest
+  // value cards by category breakdown. Null on rows synced before this
+  // was added; backfills naturally as each date resyncs going forward.
+  typeLine   String?  @map("type_line")
   capturedAt DateTime @default(now()) @map("captured_at")
 
   @@unique([scryfallId, priceDate])
