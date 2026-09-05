@@ -173,15 +173,6 @@ export default function MarketPage() {
                 </p>
               )}
               <section>
-                <h2 className="text-sm font-semibold text-zinc-300 mb-3">Set Movers ({days}d)</h2>
-                <SetMoversPanel
-                  gainers={setMovers?.gainers ?? []} losers={setMovers?.losers ?? []} setName={setName}
-                  isWatched={r => isSetWatched(r.setCode)}
-                  onWatch={r => addSetWatch(r.setCode)}
-                />
-              </section>
-
-              <section>
                 <h2 className="text-sm font-semibold text-zinc-300 mb-3">Card Movers ({days}d)</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <MoversTable
@@ -195,6 +186,15 @@ export default function MarketPage() {
                     onWatch={r => addCardWatch(r.scryfallId, r.cardName, r.setCode)}
                   />
                 </div>
+              </section>
+
+              <section>
+                <h2 className="text-sm font-semibold text-zinc-300 mb-3">Set Movers ({days}d)</h2>
+                <SetMoversPanel
+                  gainers={setMovers?.gainers ?? []} losers={setMovers?.losers ?? []} setName={setName}
+                  isWatched={r => isSetWatched(r.setCode)}
+                  onWatch={r => addSetWatch(r.setCode)}
+                />
               </section>
             </>
           )}

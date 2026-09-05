@@ -136,6 +136,25 @@ export async function getCardEvents(scryfallId: string): Promise<CardEvent[]> {
   );
 }
 
+export interface SetEvent extends CardEvent { scryfallId: string; cardName: string }
+
+/** Any logged event for a card that's a printing in this set — powers the
+ * set detail panel's "news" section. market_card_events only ever gets
+ * populated for watchlist + top-mover cards (see refreshCardNews), so most
+ * sets will legitimately show none yet — that's an honest empty state,
+ * not a bug. */
+export async function getSetEvents(setCode: string, limit = 5): Promise<SetEvent[]> {
+  return findMany<SetEvent>(
+    `SELECT e.id, e.scryfall_id as "scryfallId", e.card_name as "cardName", e.category, e.summary,
+            e.source_urls as "sourceUrls", e.confidence, e.price_at_detection as "priceAtDetection", e.detected_at as "detectedAt"
+     FROM market_card_events e
+     WHERE e.scryfall_id IN (SELECT DISTINCT scryfall_id FROM market_price_snapshots WHERE set_code = ?)
+     ORDER BY e.detected_at DESC
+     LIMIT ?`,
+    [setCode, limit]
+  );
+}
+
 /**
  * market_card_news (above) is a single-row "what to show right now" cache —
  * every weekly refresh overwrites it, so it can't answer "what happened to

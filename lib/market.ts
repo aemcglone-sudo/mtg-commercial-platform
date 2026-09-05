@@ -120,7 +120,13 @@ async function getSparklineSeriesForSets(setCodes: string[], days: number): Prom
 /** Sets ranked by % change in average card price over the window — a "gainers/losers" board.
  * Expensive (whole-table self-join) — only called by refreshMoversCache(), never on a page
  * request. See getCachedSetMovers() for what the API route actually reads. */
-async function computeSetMovers(days: number, limit = 20): Promise<{ movers: SetMover[]; degraded: boolean }> {
+/** Returns every set with a valid before/after price, sorted by % change
+ * descending — deliberately unlimited (not sliced to top-N here), because
+ * slicing before splitting into gainers/losers silently drops all losers
+ * whenever there are more than N gainers (which is most of the time) —
+ * that's exactly what was happening when this took a `limit` param. The
+ * caller slices each side after splitting instead. */
+async function computeSetMovers(days: number): Promise<{ movers: SetMover[]; degraded: boolean }> {
   const { rows, timedOut } = await queryWithTimeout(
     `WITH bounds AS (
        SELECT set_code, MIN(price_date) as first_date, MAX(price_date) as last_date
@@ -158,8 +164,7 @@ async function computeSetMovers(days: number, limit = 20): Promise<{ movers: Set
       avgUsdBefore: Number(r.avgUsdBefore),
       cardCount: Number(r.cardCount),
       changePercent: ((Number(r.avgUsdNow) - Number(r.avgUsdBefore)) / Number(r.avgUsdBefore)) * 100,
-    }))
-    .slice(0, limit);
+    }));
   return { movers, degraded: timedOut };
 }
 
@@ -271,9 +276,9 @@ export async function refreshMoversCache(): Promise<MoversRefreshResult[]> {
   const results: MoversRefreshResult[] = [];
 
   for (const days of WINDOWS) {
-    const { movers: sets, degraded } = await computeSetMovers(days, 200);
-    const gainers = sets.filter(s => s.changePercent > 0).slice(0, 20);
-    const losers = [...sets].reverse().filter(s => s.changePercent < 0).slice(0, 20);
+    const { movers: sets, degraded } = await computeSetMovers(days);
+    const gainers = sets.filter(s => s.changePercent > 0).slice(0, 10);
+    const losers = [...sets].reverse().filter(s => s.changePercent < 0).slice(0, 10);
 
     const shownCodes = [...gainers, ...losers].map(s => s.setCode);
     const sparklines = await getSparklineSeriesForSets(shownCodes, days);
@@ -449,4 +454,22 @@ export async function getScoreboard(
     [direction, Math.min(limit, 100)]
   );
   return { rows, timedOut };
+}
+
+export interface SetTopCard { scryfallId: string; cardName: string; usd: number }
+
+/** Highest-priced cards in a set, as of the most recent snapshot date for
+ * that set specifically (not necessarily today, if a set's cards happen
+ * to be missing from the very latest sync) — powers the set detail
+ * panel's "high value cards" list. */
+export async function getSetTopCards(setCode: string, limit = 10): Promise<SetTopCard[]> {
+  const { rows } = await queryWithTimeout<SetTopCard>(
+    `SELECT scryfall_id as "scryfallId", card_name as "cardName", usd
+     FROM market_price_snapshots
+     WHERE set_code = ? AND price_date = (SELECT MAX(price_date) FROM market_price_snapshots WHERE set_code = ?) AND usd IS NOT NULL
+     ORDER BY usd DESC
+     LIMIT ?`,
+    [setCode, setCode, limit]
+  );
+  return rows.map(r => ({ ...r, usd: Number(r.usd) }));
 }
