@@ -1,5 +1,6 @@
 import { findMany, run, withClient } from '@/lib/db';
 import { randomUUID } from 'crypto';
+import { getSets } from '@/lib/scryfall';
 
 /** Runs a query with a short statement_timeout so a degraded/overloaded DB
  * fails fast instead of hanging the request indefinitely — reports
@@ -117,15 +118,26 @@ async function getSparklineSeriesForSets(setCodes: string[], days: number): Prom
   return map;
 }
 
-/** Sets ranked by % change in average card price over the window — a "gainers/losers" board.
- * Expensive (whole-table self-join) — only called by refreshMoversCache(), never on a page
- * request. See getCachedSetMovers() for what the API route actually reads. */
-/** Returns every set with a valid before/after price, sorted by % change
- * descending — deliberately unlimited (not sliced to top-N here), because
+/** Sets ranked by % change in average card price over the window — a
+ * "gainers/losers" board. Expensive (whole-table self-join) — only called
+ * by refreshMoversCache(), never on a page request. See
+ * getCachedSetMovers() for what the API route actually reads.
+ *
+ * Requires at least MIN_SET_CARD_COUNT tracked cards on both ends of the
+ * window — without a floor, over half of all tracked "sets" (mostly
+ * single-card promo drops) move on the strength of 1-3 cards' price
+ * swings, producing noise like a lone promo card showing as a +5000% "set"
+ * move. 10 was picked from the actual distribution: below it is
+ * overwhelmingly 1-3-card promo pools, at/above it starts looking like
+ * real (if small) supplemental sets.
+ *
+ * Deliberately unlimited otherwise (not sliced to top-N here), because
  * slicing before splitting into gainers/losers silently drops all losers
- * whenever there are more than N gainers (which is most of the time) —
- * that's exactly what was happening when this took a `limit` param. The
- * caller slices each side after splitting instead. */
+ * whenever there are more gainers than the limit (which is most of the
+ * time) — that's exactly what was happening when this took a `limit`
+ * param. The caller slices each side after splitting instead. */
+const MIN_SET_CARD_COUNT = 10;
+
 async function computeSetMovers(days: number): Promise<{ movers: SetMover[]; degraded: boolean }> {
   const { rows, timedOut } = await queryWithTimeout(
     `WITH bounds AS (
@@ -152,9 +164,9 @@ async function computeSetMovers(days: number): Promise<{ movers: SetMover[]; deg
      SELECT f.set_code as "setCode", l.avg_usd as "avgUsdNow", f.avg_usd as "avgUsdBefore",
             f.card_count as "cardCount"
      FROM firstvals f JOIN lastvals l ON l.set_code = f.set_code
-     WHERE f.avg_usd > 0
+     WHERE f.avg_usd > 0 AND f.card_count >= ?
      ORDER BY (l.avg_usd - f.avg_usd) / f.avg_usd DESC`,
-    [days],
+    [days, MIN_SET_CARD_COUNT],
     60000 // this only ever runs from the cron job, never a page request — fine to let it work
   );
   const movers = rows
@@ -275,8 +287,15 @@ export interface MoversRefreshResult { cacheKey: string; degraded: boolean }
 export async function refreshMoversCache(): Promise<MoversRefreshResult[]> {
   const results: MoversRefreshResult[] = [];
 
+  // market_price_snapshots only has set_code, not set_type — token sets
+  // (and similar non-card "sets") aren't distinguishable in SQL, so filter
+  // them out here using Scryfall's own classification.
+  const allSets = await getSets();
+  const tokenSetCodes = new Set(allSets.filter(s => s.set_type === 'token').map(s => s.code));
+
   for (const days of WINDOWS) {
-    const { movers: sets, degraded } = await computeSetMovers(days);
+    const { movers: allMovers, degraded } = await computeSetMovers(days);
+    const sets = allMovers.filter(s => !tokenSetCodes.has(s.setCode));
     const gainers = sets.filter(s => s.changePercent > 0).slice(0, 10);
     const losers = [...sets].reverse().filter(s => s.changePercent < 0).slice(0, 10);
 
