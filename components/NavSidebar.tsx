@@ -38,7 +38,7 @@ function NavContent({ items, brandLabel, onNavigate, collapsed }: NavSidebarProp
   }
 
   function groupActive(item: NavItem) {
-    if (item.href) return isActive(item.href, item.exact);
+    if (item.href && isActive(item.href, item.exact)) return true;
     return item.children?.some(c => isActive(c.href, c.exact)) ?? false;
   }
 
@@ -87,32 +87,64 @@ function NavContent({ items, brandLabel, onNavigate, collapsed }: NavSidebarProp
             <div key={item.label} className="relative">
               {isGroup ? (
                 <>
-                  <button
-                    type="button"
-                    data-tour={item.tourId}
-                    title={collapsed ? item.label : undefined}
-                    onClick={() => collapsed ? setFlyout(f => f === item.label ? null : item.label) : toggleGroup(item.label)}
-                    className={`w-full flex items-center rounded-lg text-sm font-medium transition-colors ${
-                      collapsed ? 'justify-center p-2.5' : 'justify-between px-3 py-2.5'
-                    } ${active ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900'}`}
-                  >
-                    {collapsed ? (
-                      <span className="w-5 h-5 shrink-0">{icon}</span>
-                    ) : (
-                      <>
-                        <span className="flex items-center gap-2.5">
-                          <span className="w-4 h-4 shrink-0">{icon}</span>
-                          <span>{item.label}</span>
-                        </span>
+                  {item.href && !collapsed ? (
+                    // Hybrid link+group: the label itself navigates, a separate
+                    // chevron expands/collapses children — matches Market being
+                    // both a real page and a parent of sub-screens.
+                    <div
+                      className={`w-full flex items-center rounded-lg text-sm font-medium transition-colors ${active ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900'}`}
+                    >
+                      <Link
+                        href={item.href}
+                        data-tour={item.tourId}
+                        onClick={onNavigate}
+                        className="flex-1 flex items-center gap-2.5 px-3 py-2.5 min-w-0"
+                      >
+                        <span className="w-4 h-4 shrink-0">{icon}</span>
+                        <span className="truncate">{item.label}</span>
+                      </Link>
+                      <button
+                        type="button"
+                        title={expanded ? 'Collapse' : 'Expand'}
+                        onClick={() => toggleGroup(item.label)}
+                        className="px-2.5 py-2.5 shrink-0"
+                      >
                         <svg
                           className={`w-3.5 h-3.5 transition-transform duration-150 ${expanded ? 'rotate-180' : ''}`}
                           fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"
                         >
                           <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
                         </svg>
-                      </>
-                    )}
-                  </button>
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      data-tour={item.tourId}
+                      title={collapsed ? item.label : undefined}
+                      onClick={() => collapsed ? setFlyout(f => f === item.label ? null : item.label) : toggleGroup(item.label)}
+                      className={`w-full flex items-center rounded-lg text-sm font-medium transition-colors ${
+                        collapsed ? 'justify-center p-2.5' : 'justify-between px-3 py-2.5'
+                      } ${active ? 'bg-zinc-800 text-zinc-100' : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900'}`}
+                    >
+                      {collapsed ? (
+                        <span className="w-5 h-5 shrink-0">{icon}</span>
+                      ) : (
+                        <>
+                          <span className="flex items-center gap-2.5">
+                            <span className="w-4 h-4 shrink-0">{icon}</span>
+                            <span>{item.label}</span>
+                          </span>
+                          <svg
+                            className={`w-3.5 h-3.5 transition-transform duration-150 ${expanded ? 'rotate-180' : ''}`}
+                            fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </>
+                      )}
+                    </button>
+                  )}
 
                   {!collapsed && expanded && (
                     <div className="mt-0.5 ml-3 pl-3 border-l border-zinc-800 space-y-0.5">
@@ -137,6 +169,19 @@ function NavContent({ items, brandLabel, onNavigate, collapsed }: NavSidebarProp
                   {collapsed && flyout === item.label && (
                     <div className="absolute left-full top-0 ml-2 z-50 w-48 bg-zinc-900 border border-zinc-800 rounded-lg shadow-xl py-1.5">
                       <p className="px-3 py-1 text-xs font-semibold text-zinc-500">{item.label}</p>
+                      {item.href && (
+                        <Link
+                          href={item.href}
+                          onClick={() => { setFlyout(null); onNavigate?.(); }}
+                          className={`block px-3 py-2 text-sm font-medium transition-colors border-b border-zinc-800 mb-0.5 ${
+                            isActive(item.href, item.exact)
+                              ? 'text-zinc-100 bg-zinc-800'
+                              : 'text-zinc-300 hover:text-zinc-200 hover:bg-zinc-800'
+                          }`}
+                        >
+                          Overview
+                        </Link>
+                      )}
                       {item.children!.map(child => (
                         <Link
                           key={child.href}

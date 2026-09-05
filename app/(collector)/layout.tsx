@@ -19,7 +19,9 @@ const NAV = [
   { href: '/?tab=chat',       label: 'Ask Khoa', tourId: 'nav-chat', icon: <ChatIcon /> },
   { href: '/local-play',      label: 'Local Play', tourId: 'nav-local-play', icon: <LocalPlayIcon /> },
   { href: '/simulator',       label: 'Commander Simulator', icon: <SimulatorIcon /> },
-  { href: '/market',          label: 'Market', icon: <MarketIcon /> },
+  { href: '/market',          label: 'Market', tourId: 'nav-market-group', icon: <MarketIcon />, children: [
+    { href: '/market/scoreboard',  label: 'Speculation Scoreboard' },
+  ]},
   { label: 'Shop', dividerAfter: true, tourId: 'nav-shop-group', icon: <ShopIcon />, children: [
     { href: '/stores',            label: 'Nearby Shops' },
     { href: '/marketplace/find',  label: 'Card Finder' },

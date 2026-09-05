@@ -230,6 +230,15 @@ export async function vacuumSnapshots(): Promise<void> {
   await run('VACUUM ANALYZE market_price_snapshots');
 }
 
+/** market_predictions gets a full-table ON CONFLICT DO UPDATE every day
+ * (calculatePredictions()) — same dead-tuple bloat pattern that caused the
+ * original DB incident on market_price_snapshots. Confirmed live: after
+ * two same-day upserts, the Scoreboard's date+direction+confidence index
+ * scan went from ~40ms to 5.3s until this ran. */
+export async function vacuumPredictions(): Promise<void> {
+  await run('VACUUM ANALYZE market_predictions');
+}
+
 export interface MoversRefreshResult { cacheKey: string; degraded: boolean }
 
 /** Recomputes every (type, window) combination and stores the result. Called
@@ -370,4 +379,45 @@ export async function getPrintings(scryfallId: string): Promise<CardPrinting[]> 
   );
   return rows.map((r: any) => ({ ...r, priceDate: toDateString(r.priceDate) }))
     .sort((a: CardPrinting, b: CardPrinting) => (b.usd ?? 0) - (a.usd ?? 0));
+}
+
+export interface ScoreboardRow {
+  scryfallId: string;
+  cardName: string;
+  setCode: string;
+  predictionDirection: string;
+  confidencePct: number;
+  currentPrice: number;
+  targetPrice6m: number;
+  matchedPattern: string;
+}
+export type ScoreboardDirection = 'bullish' | 'bearish' | 'neutral';
+export type ScoreboardSort = 'confidence' | 'price';
+
+/** All predictions for the latest date, filtered/sorted. Every column read
+ * here is denormalized directly onto market_predictions (see
+ * calculatePredictions()) specifically so this never has to join against
+ * market_signals or market_price_snapshots on a live page load — that join
+ * measured at ~6s across 85k+ rows, well over budget. */
+export async function getScoreboard(
+  direction: ScoreboardDirection,
+  sortBy: ScoreboardSort,
+  limit = 50
+): Promise<{ rows: ScoreboardRow[]; timedOut: boolean }> {
+  const orderBy = sortBy === 'price'
+    ? 'current_price DESC'
+    : 'confidence_pct DESC, current_price DESC';
+  const { rows, timedOut } = await queryWithTimeout<any>(
+    `SELECT scryfall_id as "scryfallId", card_name as "cardName", set_code as "setCode",
+            prediction_direction as "predictionDirection", confidence_pct as "confidencePct",
+            current_price as "currentPrice", target_price_6m as "targetPrice6m", matched_pattern as "matchedPattern"
+     FROM market_predictions
+     WHERE date = (SELECT max(date) FROM market_predictions)
+       AND prediction_direction = ?
+       AND card_name IS NOT NULL
+     ORDER BY ${orderBy}
+     LIMIT ?`,
+    [direction, Math.min(limit, 100)]
+  );
+  return { rows, timedOut };
 }

@@ -839,6 +839,14 @@ model MarketPrediction {
   scryfallId       String   @map("scryfall_id")
   date             DateTime @map("date") @db.Date
 
+  // Denormalized from market_signals/market_price_snapshots at write-time —
+  // the Speculation Scoreboard lists/sorts/filters across all 85k+ rows and
+  // a live join to look these up on every page load was ~6s (too slow for
+  // a page render); writing them once here, during the daily cron's
+  // predictions pass, makes the scoreboard query a single-table scan.
+  cardName         String?  @map("card_name")
+  setCode          String?  @map("set_code")
+
   currentPrice     Float?   @map("current_price")
   targetPrice6m    Float?   @map("target_price_6m")
   targetPrice6mLow Float?   @map("target_price_6m_low")
@@ -859,6 +867,9 @@ model MarketPrediction {
 
   @@unique([scryfallId, date])
   @@index([scryfallId, date])
+  // Powers the Speculation Scoreboard: "latest date, filter by direction,
+  // sort by confidence" without touching any other table.
+  @@index([date, predictionDirection, confidencePct])
   @@map("market_predictions")
 }
 

@@ -56,7 +56,7 @@ const PATTERNS = [
   },
   {
     name: 'overextended_in_set',
-    description: 'Mature card priced well above its set\'s median and still climbing — some risk of mean reversion.',
+    description: 'Mature card priced well above its set\'s median — some risk of mean reversion toward the set-typical price.',
     predictedPctChange: -0.15,
     confidencePct: 45,
     priority: 5,
@@ -95,14 +95,14 @@ export interface PredictionStepResult { step: string; ok: boolean; error?: strin
 export async function calculatePredictions(): Promise<PredictionStepResult> {
   const sql = `
     INSERT INTO market_predictions (
-      id, scryfall_id, date, current_price,
+      id, scryfall_id, date, card_name, set_code, current_price,
       target_price_6m, target_price_6m_low, target_price_6m_high,
       confidence_pct, prediction_direction, matched_pattern, dominant_signals,
       upside_scenario, upside_target, downside_scenario, downside_target, risk_factors
     )
     SELECT
       md5(sig.scryfall_id || sig.date::text),
-      sig.scryfall_id, sig.date, sig.current_price,
+      sig.scryfall_id, sig.date, snap.card_name, sig.set_code, sig.current_price,
 
       -- target price: current * (1 + predicted_pct_change)
       GREATEST(sig.current_price * (1 + mp.predicted_pct_change), 0.05),
@@ -135,13 +135,17 @@ export async function calculatePredictions(): Promise<PredictionStepResult> {
           WHEN s.release_phase = 'supply_flood' AND s.momentum_7d < 0 THEN 'supply_flood_continuation'
           WHEN s.release_phase = 'stabilization' THEN 'stabilization_hold'
           WHEN s.release_phase = 'mature' AND s.price_vs_set_median > 0 AND s.price_vs_set_median < 0.5 THEN 'undervalued_in_set'
-          WHEN s.release_phase = 'mature' AND s.price_vs_set_median > 2.5 AND s.momentum_30d > 0.2 THEN 'overextended_in_set'
+          WHEN s.release_phase = 'mature' AND s.price_vs_set_median > 2.5 THEN 'overextended_in_set'
           ELSE 'fallback_neutral'
         END as pattern
       FROM market_signals s
       WHERE s.date = CURRENT_DATE AND s.current_price IS NOT NULL
     ) sig
     JOIN market_patterns mp ON mp.pattern_name = sig.pattern
+    -- card_name is only on market_price_snapshots, not market_signals; a
+    -- same-day lookup by (scryfall_id, price_date) is index-backed via
+    -- the existing @@index([scryfallId, priceDate]).
+    JOIN market_price_snapshots snap ON snap.scryfall_id = sig.scryfall_id AND snap.price_date = sig.date
     CROSS JOIN LATERAL (
       SELECT
         CASE sig.pattern
@@ -162,6 +166,8 @@ export async function calculatePredictions(): Promise<PredictionStepResult> {
         END as downside_text
     ) txt
     ON CONFLICT (scryfall_id, date) DO UPDATE SET
+      card_name = EXCLUDED.card_name,
+      set_code = EXCLUDED.set_code,
       current_price = EXCLUDED.current_price,
       target_price_6m = EXCLUDED.target_price_6m,
       target_price_6m_low = EXCLUDED.target_price_6m_low,
