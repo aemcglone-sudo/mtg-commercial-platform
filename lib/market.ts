@@ -475,6 +475,92 @@ export async function getScoreboard(
   return { rows, timedOut };
 }
 
+export interface SetPredictionRow {
+  scryfallId: string; cardName: string; currentPrice: number; targetPrice6m: number | null;
+  confidencePct: number; predictionDirection: string; matchedPattern: string;
+}
+export interface SetPrediction {
+  totalCards: number;
+  bullishCount: number;
+  bearishCount: number;
+  neutralCount: number;
+  avgTargetPct: number | null;
+  avgConfidencePct: number | null;
+  direction: 'bullish' | 'bearish' | 'neutral';
+  chaseConcentrationPct: number | null;
+  bullCase: string;
+  bearCase: string;
+  topBullish: SetPredictionRow[];
+  topBearish: SetPredictionRow[];
+  topValue: SetPredictionRow[];
+}
+
+/** Aggregates the existing per-card prediction engine up to the set level
+ * — "should I buy from this set?" instead of one card at a time. Fetches
+ * every card's latest prediction for the set in one query (a set is only
+ * ever ~150-500 cards, so aggregating in JS is simpler and just as fast as
+ * doing it in SQL) and computes everything else here. Live per page load,
+ * same as getSetTopCards — a single (date, set_code) lookup is cheap
+ * (~40ms measured), unlike the whole-table aggregates that need caching. */
+export async function getSetPrediction(setCode: string): Promise<SetPrediction | null> {
+  const { rows } = await queryWithTimeout<any>(
+    `SELECT scryfall_id as "scryfallId", card_name as "cardName", current_price as "currentPrice",
+            target_price_6m as "targetPrice6m", confidence_pct as "confidencePct",
+            prediction_direction as "predictionDirection", matched_pattern as "matchedPattern"
+     FROM market_predictions
+     WHERE date = (SELECT MAX(date) FROM market_predictions) AND set_code = ?
+       AND current_price IS NOT NULL AND current_price > 0`,
+    [setCode]
+  );
+  if (rows.length === 0) return null;
+
+  const cards: SetPredictionRow[] = rows.map((r: any) => ({
+    ...r, currentPrice: Number(r.currentPrice), confidencePct: Number(r.confidencePct),
+    targetPrice6m: r.targetPrice6m !== null ? Number(r.targetPrice6m) : null,
+  }));
+
+  const bullish = cards.filter(c => c.predictionDirection === 'bullish');
+  const bearish = cards.filter(c => c.predictionDirection === 'bearish');
+  const neutral = cards.filter(c => c.predictionDirection === 'neutral');
+
+  const targetPcts = cards
+    .filter(c => c.targetPrice6m !== null)
+    .map(c => (c.targetPrice6m! - c.currentPrice) / c.currentPrice);
+  const avgTargetPct = targetPcts.length > 0 ? targetPcts.reduce((a, b) => a + b, 0) / targetPcts.length : null;
+  const avgConfidencePct = cards.reduce((a, c) => a + c.confidencePct, 0) / cards.length;
+  const direction = avgTargetPct === null ? 'neutral' : avgTargetPct > 0.05 ? 'bullish' : avgTargetPct < -0.05 ? 'bearish' : 'neutral';
+
+  const byValueDesc = [...cards].sort((a, b) => b.currentPrice - a.currentPrice);
+  const totalValue = cards.reduce((a, c) => a + c.currentPrice, 0);
+  const top5Value = byValueDesc.slice(0, 5).reduce((a, c) => a + c.currentPrice, 0);
+  const chaseConcentrationPct = totalValue > 0 ? (top5Value / totalValue) * 100 : null;
+
+  const bullCaseReasons: string[] = [];
+  if (chaseConcentrationPct !== null && chaseConcentrationPct < 50) bullCaseReasons.push('value is spread across many cards, not dependent on a few chase pieces');
+  if (cards.length > 0 && bullish.length / cards.length > 0.4) bullCaseReasons.push('a large share of tracked cards are trending bullish');
+  const bullCase = bullCaseReasons.length > 0
+    ? `This set offers: ${bullCaseReasons.join('; ')}.`
+    : 'No strong bullish signal across this set right now.';
+
+  const bearCaseReasons: string[] = [];
+  if (chaseConcentrationPct !== null && chaseConcentrationPct > 70) bearCaseReasons.push('heavily concentrated in a handful of chase cards — a single reprint or price move could sway the whole set');
+  if (cards.length > 0 && bearish.length / cards.length > 0.3) bearCaseReasons.push('a meaningful share of tracked cards are trending bearish');
+  const bearCase = bearCaseReasons.length > 0
+    ? `Watch out for: ${bearCaseReasons.join('; ')}.`
+    : 'No strong bearish signal across this set right now.';
+
+  return {
+    totalCards: cards.length,
+    bullishCount: bullish.length,
+    bearishCount: bearish.length,
+    neutralCount: neutral.length,
+    avgTargetPct, avgConfidencePct, direction, chaseConcentrationPct, bullCase, bearCase,
+    topBullish: [...bullish].sort((a, b) => b.confidencePct - a.confidencePct).slice(0, 5),
+    topBearish: [...bearish].sort((a, b) => b.confidencePct - a.confidencePct).slice(0, 5),
+    topValue: byValueDesc.slice(0, 5),
+  };
+}
+
 export interface SetTopCard { scryfallId: string; cardName: string; usd: number }
 
 /** Highest-priced cards in a set, as of the most recent snapshot date for

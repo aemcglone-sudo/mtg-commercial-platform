@@ -870,6 +870,8 @@ model MarketPrediction {
   // Powers the Speculation Scoreboard: "latest date, filter by direction,
   // sort by confidence" without touching any other table.
   @@index([date, predictionDirection, confidencePct])
+  // Powers the Set Prediction Card: "latest date, all cards in this set".
+  @@index([date, setCode])
   @@map("market_predictions")
 }
 

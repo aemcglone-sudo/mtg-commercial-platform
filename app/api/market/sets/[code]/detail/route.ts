@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthenticatedUserId } from '@/lib/auth';
-import { getSetTopCards } from '@/lib/market';
+import { getSetTopCards, getSetPrediction } from '@/lib/market';
 import { getSetEvents } from '@/lib/card-news';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ code: string }> }) {
@@ -9,11 +9,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ code
 
   try {
     const { code } = await params;
-    const [topCards, events] = await Promise.all([
+    const [topCards, events, prediction] = await Promise.all([
       getSetTopCards(code, 10),
       getSetEvents(code, 5),
+      getSetPrediction(code),
     ]);
-    return NextResponse.json({ topCards, events });
+    return NextResponse.json({ topCards, events, prediction });
   } catch (e) {
     console.error('GET /api/market/sets/[code]/detail failed:', e);
     return NextResponse.json({ error: 'Failed to load set detail' }, { status: 500 });

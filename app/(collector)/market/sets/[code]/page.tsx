@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import PriceChart from '@/components/PriceChart';
+import SetPredictionCard from '@/components/SetPredictionCard';
 
 interface SetIndexPoint { date: string; avgUsd: number | null; cardCount: number; }
 interface SetMeta { code: string; name: string; setType: string; releasedAt: string | null; cardCount: number; iconSvgUri: string | null; }
@@ -11,6 +12,16 @@ interface TopCard { scryfallId: string; cardName: string; usd: number }
 interface SetEvent {
   id: string; scryfallId: string; cardName: string; category: string; summary: string;
   sourceUrls: string[]; detectedAt: string;
+}
+interface SetPredictionRow {
+  scryfallId: string; cardName: string; currentPrice: number; targetPrice6m: number | null;
+  confidencePct: number; predictionDirection: string; matchedPattern: string;
+}
+interface SetPrediction {
+  totalCards: number; bullishCount: number; bearishCount: number; neutralCount: number;
+  avgTargetPct: number | null; avgConfidencePct: number | null; direction: string;
+  chaseConcentrationPct: number | null; bullCase: string; bearCase: string;
+  topBullish: SetPredictionRow[]; topBearish: SetPredictionRow[]; topValue: SetPredictionRow[];
 }
 
 const WINDOWS = [7, 30, 90];
@@ -33,6 +44,7 @@ export default function SetDetailPage() {
   const [meta, setMeta] = useState<SetMeta | null>(null);
   const [topCards, setTopCards] = useState<TopCard[] | null>(null);
   const [events, setEvents] = useState<SetEvent[] | null>(null);
+  const [prediction, setPrediction] = useState<SetPrediction | null | undefined>(undefined);
 
   const load = useCallback(async () => {
     const [histRes, setsRes, watchRes, detailRes] = await Promise.all([
@@ -49,6 +61,7 @@ export default function SetDetailPage() {
     setWatchId(item?.id ?? null);
     setTopCards(detailRes.topCards ?? []);
     setEvents(detailRes.events ?? []);
+    setPrediction(detailRes.prediction ?? null);
   }, [code, days]);
 
   useEffect(() => { load(); }, [load]);
@@ -89,6 +102,15 @@ export default function SetDetailPage() {
           {watched ? '★ Watching' : '☆ Watch'}
         </button>
       </div>
+
+      {prediction && (
+        <div className="mb-6">
+          <SetPredictionCard prediction={prediction} />
+        </div>
+      )}
+      {prediction === null && (
+        <p className="text-xs text-zinc-600 mb-6">No predictions yet for cards in this set — check back after the next daily run.</p>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
         {/* Left panel — set details */}
