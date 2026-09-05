@@ -76,3 +76,26 @@ export async function withClient<T>(fn: (q: (sql: string, args?: Arg[]) => Promi
     client.release();
   }
 }
+
+/** Runs fn() on a fresh client with a statement_timeout set for the
+ * duration — shared low-level primitive behind lib/market.ts's
+ * queryWithTimeout (which swallows a 57014 timeout into `timedOut: true`,
+ * for boards that should degrade gracefully) and lib/market-index.ts's
+ * queryOne (which lets a timeout throw, since a failed date should fail
+ * loudly, not silently upsert an empty row). Was previously duplicated —
+ * consolidated here so the two call sites can't drift out of sync on
+ * exactly this kind of connection/timeout handling. */
+export async function withTimeout<T>(timeoutMs: number, fn: (q: (sql: string, args?: Arg[]) => Promise<import('pg').QueryResult>) => Promise<T>): Promise<T> {
+  return withClient(async (q) => {
+    await q(`SET statement_timeout = ${timeoutMs}`);
+    return fn(q);
+  });
+}
+
+/** Postgres DATE columns come back from `pg` as JS Date objects (not
+ * strings) — naive `String(date).slice(0,10)` produces "Fri Jun 05"
+ * instead of "2026-06-05". Was duplicated verbatim in two files. */
+export function toDateString(d: string | Date): string {
+  if (typeof d === 'string') return d.slice(0, 10);
+  return d.toISOString().slice(0, 10);
+}

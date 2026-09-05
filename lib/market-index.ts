@@ -1,9 +1,4 @@
-import { findOne, findMany, run, withClient } from '@/lib/db';
-
-function toDateString(d: string | Date): string {
-  if (typeof d === 'string') return d.slice(0, 10);
-  return d.toISOString().slice(0, 10);
-}
+import { findOne, findMany, run, withTimeout, toDateString } from '@/lib/db';
 
 /** Same reasoning as elsewhere: cron-only, so a generous timeout is safe —
  * but each of these queries is scoped to exactly ONE date (or one date
@@ -13,13 +8,14 @@ function toDateString(d: string | Date): string {
  * gory details). A single date's ~9k rows are scattered across ~9-11k
  * disk pages on this table (it isn't clustered by date), so even one date
  * costs real seconds — but that's a bounded, survivable cost, unlike
- * touching most of the ~1M-row table in one pass. */
+ * touching most of the ~1M-row table in one pass.
+ *
+ * Deliberately lets a timeout throw (unlike lib/market.ts's
+ * queryWithTimeout, which swallows one) — a failed date here should fail
+ * the whole refresh loudly, not silently upsert an empty/partial row. */
 async function queryOne<T = any>(sql: string, args: (string | number)[], timeoutMs = 30000): Promise<T | null> {
-  return withClient(async (q) => {
-    await q(`SET statement_timeout = ${timeoutMs}`);
-    const result = await q(sql, args);
-    return (result.rows[0] as T) ?? null;
-  });
+  const rows = await withTimeout(timeoutMs, async (q) => (await q(sql, args)).rows);
+  return (rows[0] as T) ?? null;
 }
 
 async function getBaseDate(): Promise<string | null> {
@@ -99,14 +95,9 @@ interface Concentration { top10Pct: number; top100Pct: number }
  * Measured live at ~1s for ~85k rows — fine once/day, only for the latest
  * date (not backfilled historically, to keep the daily cost bounded). */
 async function computeConcentration(date: string): Promise<Concentration | null> {
-  const rows = await withClient(async (q) => {
-    await q(`SET statement_timeout = 15000`);
-    const result = await q(
-      `SELECT usd FROM market_price_snapshots WHERE price_date = ? AND usd IS NOT NULL ORDER BY usd DESC`,
-      [date]
-    );
-    return result.rows as { usd: number }[];
-  });
+  const rows = await withTimeout(15000, async (q) =>
+    (await q(`SELECT usd FROM market_price_snapshots WHERE price_date = ? AND usd IS NOT NULL ORDER BY usd DESC`, [date])).rows as { usd: number }[]
+  );
   if (rows.length === 0) return null;
   const total = rows.reduce((a, r) => a + Number(r.usd), 0);
   if (total <= 0) return null;

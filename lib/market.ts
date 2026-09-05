@@ -1,4 +1,4 @@
-import { findMany, run, withClient } from '@/lib/db';
+import { findMany, run, withTimeout, toDateString } from '@/lib/db';
 import { randomUUID } from 'crypto';
 import { getSets } from '@/lib/scryfall';
 
@@ -9,11 +9,7 @@ import { getSets } from '@/lib/scryfall';
  * spinner. Real errors (bad SQL, connection failure) still throw. */
 async function queryWithTimeout<T = any>(sql: string, args: (string | number)[], timeoutMs = 8000): Promise<{ rows: T[]; timedOut: boolean }> {
   try {
-    const rows = await withClient(async (q) => {
-      await q(`SET statement_timeout = ${timeoutMs}`);
-      const result = await q(sql, args);
-      return result.rows as T[];
-    });
+    const rows = await withTimeout(timeoutMs, async (q) => (await q(sql, args)).rows as T[]);
     return { rows, timedOut: false };
   } catch (e: any) {
     if (e?.code === '57014') return { rows: [], timedOut: true }; // query_canceled (statement_timeout)
@@ -219,11 +215,6 @@ async function computeCardMovers(days: number, limit = 20, direction: 'gainers' 
     changePercent: ((Number(r.usdNow) - Number(r.usdBefore)) / Number(r.usdBefore)) * 100,
   }));
   return { movers, degraded: timedOut };
-}
-
-function toDateString(d: string | Date): string {
-  if (typeof d === 'string') return d.slice(0, 10);
-  return d.toISOString().slice(0, 10);
 }
 
 // ── Movers cache ─────────────────────────────────────────────────────────
