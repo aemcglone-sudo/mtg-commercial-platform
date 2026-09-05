@@ -90,7 +90,48 @@ async function computeBreadthForDate(baseDate: string, date: string): Promise<Br
   };
 }
 
-async function upsertIndexSnapshot(date: string, index: IndexForDate, breadth: BreadthForDate | null): Promise<void> {
+interface Concentration { top10Pct: number; top100Pct: number }
+
+/** What share of the FULL current tracked catalog's total value sits in
+ * the priciest cards — a snapshot-in-time health metric (not normalized
+ * to the baseline cohort, unlike the index/breadth above, since the
+ * question here is "how top-heavy is the market right now", not a trend).
+ * Measured live at ~1s for ~85k rows — fine once/day, only for the latest
+ * date (not backfilled historically, to keep the daily cost bounded). */
+async function computeConcentration(date: string): Promise<Concentration | null> {
+  const rows = await withClient(async (q) => {
+    await q(`SET statement_timeout = 15000`);
+    const result = await q(
+      `SELECT usd FROM market_price_snapshots WHERE price_date = ? AND usd IS NOT NULL ORDER BY usd DESC`,
+      [date]
+    );
+    return result.rows as { usd: number }[];
+  });
+  if (rows.length === 0) return null;
+  const total = rows.reduce((a, r) => a + Number(r.usd), 0);
+  if (total <= 0) return null;
+  const top10 = rows.slice(0, 10).reduce((a, r) => a + Number(r.usd), 0);
+  const top100 = rows.slice(0, 100).reduce((a, r) => a + Number(r.usd), 0);
+  return { top10Pct: (top10 / total) * 100, top100Pct: (top100 / total) * 100 };
+}
+
+async function upsertIndexSnapshot(
+  date: string, index: IndexForDate, breadth: BreadthForDate | null, concentration?: Concentration | null
+): Promise<void> {
+  if (concentration !== undefined) {
+    await run(
+      `INSERT INTO market_index_snapshots (date, index_value, card_count, advancers, decliners, unchanged, median_return_pct, concentration_top10_pct, concentration_top100_pct)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT (date) DO UPDATE SET
+         index_value = EXCLUDED.index_value, card_count = EXCLUDED.card_count,
+         advancers = EXCLUDED.advancers, decliners = EXCLUDED.decliners, unchanged = EXCLUDED.unchanged,
+         median_return_pct = EXCLUDED.median_return_pct,
+         concentration_top10_pct = EXCLUDED.concentration_top10_pct, concentration_top100_pct = EXCLUDED.concentration_top100_pct`,
+      [date, index.indexValue, index.cardCount, breadth?.advancers ?? null, breadth?.decliners ?? null, breadth?.unchanged ?? null, breadth?.medianReturnPct ?? null,
+       concentration?.top10Pct ?? null, concentration?.top100Pct ?? null]
+    );
+    return;
+  }
   await run(
     `INSERT INTO market_index_snapshots (date, index_value, card_count, advancers, decliners, unchanged, median_return_pct)
      VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -126,7 +167,8 @@ export async function refreshMarketIndex(): Promise<IndexRefreshResult> {
   // Always refresh the latest date, so the index stays current even before backfill finishes.
   const latestIndex = await computeIndexForDate(baseDate, latestDate);
   const latestBreadth = latestDate === baseDate ? null : await computeBreadthForDate(baseDate, latestDate);
-  await upsertIndexSnapshot(latestDate, latestIndex, latestBreadth);
+  const latestConcentration = await computeConcentration(latestDate);
+  await upsertIndexSnapshot(latestDate, latestIndex, latestBreadth, latestConcentration);
 
   // Find every historical date with real snapshot data that doesn't have an index row yet.
   const missing = await findMany<{ priceDate: string }>(
@@ -164,13 +206,53 @@ export interface IndexPoint {
   decliners: number | null;
   unchanged: number | null;
   medianReturnPct: number | null;
+  concentrationTop10Pct: number | null;
+  concentrationTop100Pct: number | null;
 }
 
 export async function getIndexHistory(): Promise<IndexPoint[]> {
   const rows = await findMany<any>(
     `SELECT date, index_value as "indexValue", card_count as "cardCount",
-            advancers, decliners, unchanged, median_return_pct as "medianReturnPct"
+            advancers, decliners, unchanged, median_return_pct as "medianReturnPct",
+            concentration_top10_pct as "concentrationTop10Pct", concentration_top100_pct as "concentrationTop100Pct"
      FROM market_index_snapshots ORDER BY date ASC`
   );
-  return rows.map(r => ({ ...r, date: toDateString(r.date), indexValue: Number(r.indexValue) }));
+  return rows.map(r => ({
+    ...r, date: toDateString(r.date), indexValue: Number(r.indexValue),
+    concentrationTop10Pct: r.concentrationTop10Pct !== null ? Number(r.concentrationTop10Pct) : null,
+    concentrationTop100Pct: r.concentrationTop100Pct !== null ? Number(r.concentrationTop100Pct) : null,
+  }));
+}
+
+export interface VolatilityInfo { daily7d: number | null; daily30d: number | null; trend: 'settling' | 'increasing' | 'stable' | null }
+
+/** Index-level volatility (not per-card — see lib/signal-calculator.ts's
+ * calculateVolatilitySignals() for why that's held back entirely). This is
+ * cheap: stddev of the index's own day-over-day % change, over the small
+ * (~90-row) market_index_snapshots table, not the raw price history. */
+export async function getIndexVolatility(): Promise<VolatilityInfo> {
+  const rows = await findMany<{ date: string; indexValue: string }>(
+    `SELECT date, index_value as "indexValue" FROM market_index_snapshots ORDER BY date ASC`
+  );
+  if (rows.length < 3) return { daily7d: null, daily30d: null, trend: null };
+
+  const returns: number[] = [];
+  for (let i = 1; i < rows.length; i++) {
+    const prev = Number(rows[i - 1].indexValue);
+    const cur = Number(rows[i].indexValue);
+    if (prev > 0) returns.push((cur - prev) / prev);
+  }
+  const stddev = (arr: number[]) => {
+    if (arr.length < 2) return null;
+    const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
+    const variance = arr.reduce((a, b) => a + (b - mean) ** 2, 0) / arr.length;
+    return Math.sqrt(variance) * 100;
+  };
+
+  const daily7d = stddev(returns.slice(-7));
+  const daily30d = stddev(returns.slice(-30));
+  const trend = daily7d === null || daily30d === null ? null
+    : daily7d < daily30d * 0.9 ? 'settling' : daily7d > daily30d * 1.1 ? 'increasing' : 'stable';
+
+  return { daily7d, daily30d, trend };
 }

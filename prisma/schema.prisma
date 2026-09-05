@@ -966,6 +966,13 @@ model MarketIndexSnapshot {
   decliners       Int?
   unchanged       Int?
   medianReturnPct Float?   @map("median_return_pct")
+  // Concentration: what share of the FULL current tracked catalog's total
+  // value sits in the priciest cards — a snapshot-in-time health metric,
+  // computed against all tracked cards (not the baseline cohort, unlike
+  // indexValue/breadth above), so only ever populated for the latest date,
+  // not backfilled historically. Measured at ~1s for ~85k rows.
+  concentrationTop10Pct  Float? @map("concentration_top10_pct")
+  concentrationTop100Pct Float? @map("concentration_top100_pct")
   createdAt       DateTime @default(now()) @map("created_at")
 
   @@map("market_index_snapshots")
