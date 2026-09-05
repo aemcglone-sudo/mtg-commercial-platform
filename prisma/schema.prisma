@@ -760,6 +760,11 @@ model MarketPriceSnapshot {
   @@unique([scryfallId, priceDate])
   @@index([scryfallId, priceDate])
   @@index([setCode, priceDate])
+  // Powers getPrintings() — grouping every tracked printing of a card
+  // (e.g. Sol Ring has 100+) by name. Without this, that lookup is a
+  // sequential scan over the whole table (1M+ rows, ~9s — routinely
+  // hitting queryWithTimeout's 8s budget and silently returning empty).
+  @@index([cardName])
   @@map("market_price_snapshots")
 }
 
@@ -855,6 +860,25 @@ model MarketPrediction {
   @@unique([scryfallId, date])
   @@index([scryfallId, date])
   @@map("market_predictions")
+}
+
+// Real, cited "why" context for a card — Tavily search restricted to
+// trusted MTG sources, extracted into a short summary by Gemini. Same
+// pattern as format_legality_cache (ban-list lookup), scoped to a small
+// daily candidate set (watchlist + top movers), not all tracked printings —
+// see lib/card-news.ts.
+model MarketCardNews {
+  scryfallId String   @id @map("scryfall_id")
+  cardName   String   @map("card_name")
+  hasNews    Boolean  @default(false) @map("has_news")
+  summary    String?
+  // 'reprint' | 'banned' | 'tournament' | 'set_synergy' | 'other' | null
+  category   String?
+  sourceUrls String[] @map("source_urls")
+  confidence Float?
+  fetchedAt  DateTime @default(now()) @map("fetched_at")
+
+  @@map("market_card_news")
 }
 
 // Precomputed gainers/losers, refreshed once daily by the cron sync job

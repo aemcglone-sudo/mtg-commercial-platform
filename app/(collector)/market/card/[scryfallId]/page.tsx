@@ -25,6 +25,11 @@ interface CardPrediction {
   downsideScenario: string | null; downsideTarget: number | null;
   riskFactors: string[];
 }
+interface CardNews {
+  hasNews: boolean; summary: string | null; category: string | null;
+  sourceUrls: string[]; confidence: number | null; fetchedAt: string;
+}
+interface Printing { scryfallId: string; setCode: string; usd: number | null; usdFoil: number | null; priceDate: string; }
 
 const PHASE_LABELS: Record<string, string> = {
   presale: 'Presale', hype_spike: 'Hype Spike', supply_flood: 'Supply Flood',
@@ -51,21 +56,30 @@ export default function CardDetailPage() {
   const [card, setCard] = useState<CardInfo | null>(null);
   const [signal, setSignal] = useState<CardSignal | null | undefined>(undefined);
   const [prediction, setPrediction] = useState<CardPrediction | null | undefined>(undefined);
+  const [news, setNews] = useState<CardNews | null>(null);
   const [watched, setWatched] = useState(false);
   const [watchId, setWatchId] = useState<string | null>(null);
+  const [printings, setPrintings] = useState<Printing[] | null>(null);
+  const [setNameByCode, setSetNameByCode] = useState<Map<string, string>>(new Map());
 
   const load = useCallback(async () => {
-    const [histRes, cardRes, watchRes, signalRes, predictionRes] = await Promise.all([
+    const [histRes, cardRes, watchRes, signalRes, predictionRes, newsRes, printingsRes, setsRes] = await Promise.all([
       fetch(`/api/market/card/${scryfallId}/history?days=${days}`).then(r => r.json()),
       fetch(`/api/market/card/${scryfallId}`).then(r => r.json()),
       fetch('/api/market/watchlist').then(r => r.json()),
       fetch(`/api/market/card/${scryfallId}/signals`).then(r => r.json()),
       fetch(`/api/market/card/${scryfallId}/prediction`).then(r => r.json()),
+      fetch(`/api/market/card/${scryfallId}/news`).then(r => r.json()),
+      fetch(`/api/market/card/${scryfallId}/printings`).then(r => r.json()),
+      fetch('/api/market/sets?all=1').then(r => r.json()),
     ]);
     setPoints(histRes.points ?? []);
     setCard(cardRes.card ?? null);
     setSignal(signalRes.signal ?? null);
     setPrediction(predictionRes.prediction ?? null);
+    setNews(newsRes.news ?? null);
+    setPrintings(printingsRes.printings ?? []);
+    setSetNameByCode(new Map((setsRes.sets ?? []).map((s: any) => [s.code, s.name])));
     const item = watchRes.items?.find((w: any) => w.kind === 'card' && w.scryfallId === scryfallId);
     setWatched(!!item);
     setWatchId(item?.id ?? null);
@@ -132,9 +146,34 @@ export default function CardDetailPage() {
         </div>
       </div>
 
+      {printings && printings.length > 1 && (
+        <div className="mb-6">
+          <p className="text-xs uppercase tracking-wide text-zinc-500 mb-2">
+            {printings.length} tracked printings — prices vary a lot by set
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {printings.map(p => {
+              const active = p.scryfallId === scryfallId;
+              return (
+                <Link
+                  key={p.scryfallId}
+                  href={`/market/card/${p.scryfallId}`}
+                  className={`px-3 py-1.5 rounded-lg text-xs border ${active
+                    ? 'bg-amber-400 text-black border-amber-400 font-semibold'
+                    : 'bg-zinc-900 text-zinc-300 border-zinc-800 hover:border-zinc-600'}`}
+                >
+                  {setNameByCode.get(p.setCode) ?? p.setCode.toUpperCase()}
+                  <span className={active ? 'text-black/70' : 'text-zinc-500'}> · {p.usd !== null ? `$${p.usd.toFixed(2)}` : '—'}</span>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {prediction && (
         <div className="mb-6">
-          <PredictionCard prediction={prediction} />
+          <PredictionCard prediction={prediction} news={news} />
         </div>
       )}
       {prediction === null && (

@@ -336,3 +336,38 @@ export async function getLatestPrediction(scryfallId: string): Promise<CardPredi
   const r = rows[0];
   return { ...r, date: toDateString(r.date), dominantSignals: r.dominantSignals ?? [], riskFactors: r.riskFactors ?? [] };
 }
+
+export interface CardPrinting {
+  scryfallId: string;
+  setCode: string;
+  usd: number | null;
+  usdFoil: number | null;
+  priceDate: string;
+}
+
+/** All printings of a card we actually track price history for — a card
+ * like Sol Ring or Arcane Signet has dozens of reprints spanning wildly
+ * different prices, and this powers the "switch printing" selector on the
+ * card detail page so a collector can see the specific printing's own
+ * price line, not whichever one a name search happened to land on.
+ * Looked up by card_name against our own snapshots (cheap, indexed),
+ * rather than a live Scryfall call. */
+export async function getPrintings(scryfallId: string): Promise<CardPrinting[]> {
+  const nameRow = await queryWithTimeout<{ cardName: string }>(
+    `SELECT card_name as "cardName" FROM market_price_snapshots WHERE scryfall_id = ? LIMIT 1`,
+    [scryfallId]
+  );
+  const cardName = nameRow.rows[0]?.cardName;
+  if (!cardName) return [];
+
+  const { rows } = await queryWithTimeout<any>(
+    `SELECT DISTINCT ON (scryfall_id)
+       scryfall_id as "scryfallId", set_code as "setCode", usd, usd_foil as "usdFoil", price_date as "priceDate"
+     FROM market_price_snapshots
+     WHERE card_name = ?
+     ORDER BY scryfall_id, price_date DESC`,
+    [cardName]
+  );
+  return rows.map((r: any) => ({ ...r, priceDate: toDateString(r.priceDate) }))
+    .sort((a: CardPrinting, b: CardPrinting) => (b.usd ?? 0) - (a.usd ?? 0));
+}
