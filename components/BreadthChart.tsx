@@ -18,17 +18,46 @@ export default function BreadthChart({ points, height = 100 }: { points: Breadth
   }
 
   const width = 600;
-  const padding = 4;
+  const marginLeft = 40;
+  const marginRight = 8;
+  const marginTop = 14;
+  const marginBottom = 22;
+  const plotW = width - marginLeft - marginRight;
+  const plotH = height - marginTop - marginBottom;
+  const halfPlotH = plotH / 2;
+  const mid = marginTop + halfPlotH;
+
   const maxVal = Math.max(...clean.map(p => Math.max(p.advancers, p.decliners)), 1);
-  const mid = height / 2;
-  const barW = (width - padding * 2) / clean.length;
-  const scale = (mid - padding) / maxVal;
+  const barW = plotW / clean.length;
+  const scale = halfPlotH / maxVal;
+
+  const yTicks = [maxVal, Math.round(maxVal / 2), 0, -Math.round(maxVal / 2), -maxVal];
+
+  const xTickCount = Math.min(4, clean.length);
+  const xTickIdxs = Array.from({ length: xTickCount }, (_, i) =>
+    xTickCount === 1 ? 0 : Math.round((i * (clean.length - 1)) / (xTickCount - 1))
+  );
+  const fmtDate = (d: string) => new Date(d + 'T00:00:00Z').toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' });
 
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} width="100%" height={height} preserveAspectRatio="none" className="overflow-visible">
-      <line x1={padding} y1={mid} x2={width - padding} y2={mid} stroke="#3f3f46" strokeWidth={1} />
+    <svg viewBox={`0 0 ${width} ${height}`} width="100%" height={height} className="overflow-visible">
+      <text x={marginLeft} y={marginTop - 4} textAnchor="start" fontSize={9} fill="#52525b">Cards</text>
+      {/* Y-axis labels — cards, mirrored above/below the zero line */}
+      {yTicks.map((v, i) => {
+        const y = mid - (v / maxVal) * halfPlotH;
+        return (
+          <g key={i}>
+            <text x={marginLeft - 6} y={y} textAnchor="end" dominantBaseline="middle" fontSize={10} fill="#71717a">
+              {Math.abs(v)}
+            </text>
+          </g>
+        );
+      })}
+
+      <line x1={marginLeft} y1={mid} x2={width - marginRight} y2={mid} stroke="#3f3f46" strokeWidth={1} />
+
       {clean.map((p, i) => {
-        const x = padding + i * barW;
+        const x = marginLeft + i * barW;
         const advH = p.advancers * scale;
         const decH = p.decliners * scale;
         return (
@@ -38,6 +67,13 @@ export default function BreadthChart({ points, height = 100 }: { points: Breadth
           </g>
         );
       })}
+
+      {/* X-axis date labels */}
+      {xTickIdxs.map(i => (
+        <text key={i} x={marginLeft + i * barW + barW / 2} y={height - 4} textAnchor="middle" fontSize={10} fill="#71717a">
+          {fmtDate(clean[i].date)}
+        </text>
+      ))}
     </svg>
   );
 }

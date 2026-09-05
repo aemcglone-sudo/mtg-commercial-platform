@@ -53,7 +53,12 @@ export default function MarketIndexPage() {
         {points === null ? (
           <p className="text-sm text-zinc-500">Loading…</p>
         ) : (
-          <PriceChart points={points.map(p => ({ date: p.date, value: p.indexValue }))} height={220} />
+          <PriceChart
+            points={points.map(p => ({ date: p.date, value: p.indexValue }))}
+            height={220}
+            formatValue={v => v.toFixed(1)}
+            unitLabel="Index value (base 100)"
+          />
         )}
       </div>
 
