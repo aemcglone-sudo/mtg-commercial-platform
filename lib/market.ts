@@ -91,7 +91,31 @@ export async function getSetHistory(setCode: string, days: number): Promise<SetI
   return rows.map((r: any) => ({ date: toDateString(r.date), avgUsd: r.avgUsd !== null ? Number(r.avgUsd) : null, cardCount: Number(r.cardCount) }));
 }
 
-export interface SetMover { setCode: string; avgUsdNow: number; avgUsdBefore: number; changePercent: number; cardCount: number; }
+export interface SetMover { setCode: string; avgUsdNow: number; avgUsdBefore: number; changePercent: number; cardCount: number; sparkline?: number[]; }
+
+/** Daily avg-price series for a handful of sets over a window — one query
+ * for all of them (not one per set), used to attach a sparkline to each
+ * Set Movers row. Only ever called for the ~40 sets already selected as
+ * gainers/losers, from the cron, right before caching — never live. */
+async function getSparklineSeriesForSets(setCodes: string[], days: number): Promise<Map<string, number[]>> {
+  if (setCodes.length === 0) return new Map();
+  const { rows } = await queryWithTimeout<{ setCode: string; date: string; avgUsd: number | null }>(
+    `SELECT set_code as "setCode", price_date as "date", AVG(usd) as "avgUsd"
+     FROM market_price_snapshots
+     WHERE set_code = ANY(?) AND price_date >= (CURRENT_DATE - ?::int) AND usd IS NOT NULL
+     GROUP BY set_code, price_date
+     ORDER BY set_code, price_date ASC`,
+    [setCodes as any, days],
+    30000
+  );
+  const map = new Map<string, number[]>();
+  for (const r of rows) {
+    const arr = map.get(r.setCode) ?? [];
+    if (r.avgUsd !== null) arr.push(Number(r.avgUsd));
+    map.set(r.setCode, arr);
+  }
+  return map;
+}
 
 /** Sets ranked by % change in average card price over the window — a "gainers/losers" board.
  * Expensive (whole-table self-join) — only called by refreshMoversCache(), never on a page
@@ -250,6 +274,11 @@ export async function refreshMoversCache(): Promise<MoversRefreshResult[]> {
     const { movers: sets, degraded } = await computeSetMovers(days, 200);
     const gainers = sets.filter(s => s.changePercent > 0).slice(0, 20);
     const losers = [...sets].reverse().filter(s => s.changePercent < 0).slice(0, 20);
+
+    const shownCodes = [...gainers, ...losers].map(s => s.setCode);
+    const sparklines = await getSparklineSeriesForSets(shownCodes, days);
+    for (const s of [...gainers, ...losers]) s.sparkline = sparklines.get(s.setCode) ?? [];
+
     await upsertMoversCache(`set:${days}`, { gainers, losers });
     results.push({ cacheKey: `set:${days}`, degraded });
   }

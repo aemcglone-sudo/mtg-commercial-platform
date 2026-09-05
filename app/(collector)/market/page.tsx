@@ -2,11 +2,12 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import Link from 'next/link';
+import Sparkline from '@/components/Sparkline';
 
 interface CardSearchOption { name: string; scryfallId: string; imageUrl: string | null; typeLine: string | null; setCode: string | null; setName: string | null; }
 interface SetMeta { code: string; name: string; }
 
-interface SetMover { setCode: string; avgUsdNow: number; avgUsdBefore: number; changePercent: number; cardCount: number; }
+interface SetMover { setCode: string; avgUsdNow: number; avgUsdBefore: number; changePercent: number; cardCount: number; sparkline?: number[]; }
 interface CardMover { scryfallId: string; cardName: string; setCode: string; usdNow: number; usdBefore: number; changePercent: number; }
 interface WatchlistItem { id: string; kind: 'card' | 'set'; scryfallId: string | null; cardName: string | null; setCode: string | null; setName: string | null; createdAt: string; }
 
@@ -268,6 +269,9 @@ function MoversTable<T extends { changePercent: number }>({
                 </>
               )}
             </Link>
+            {kind === 'set' && r.sparkline && r.sparkline.length >= 2 && (
+              <Sparkline values={r.sparkline} positive={r.changePercent >= 0} />
+            )}
             <span className="text-zinc-500 text-xs shrink-0">{fmtUsd(kind === 'set' ? r.avgUsdNow : r.usdNow)}</span>
             <span className="shrink-0"><ChangeBadge pct={r.changePercent} /></span>
             <button type="button" onClick={() => onWatch(r)} disabled={isWatched(r)}
