@@ -892,6 +892,32 @@ model MarketCardNews {
   @@map("market_card_news")
 }
 
+// Append-only event history — market_card_news above is a single-row cache
+// of "what to show right now"; this is the durable log that lets us later
+// ask "what happened right before this card's price moved" and eventually
+// backtest event-driven predictions instead of relying on general MTG
+// market knowledge. One row per *newly detected* event (see
+// upsertCardNews() in lib/card-news.ts for the dedup logic that keeps a
+// week of identical cache refreshes from creating duplicate rows) —
+// priceAtDetection is captured so a future job can compute "price N days
+// after this event" without re-deriving it from raw snapshots.
+model MarketCardEvent {
+  id              String   @id @default(cuid())
+  scryfallId      String   @map("scryfall_id")
+  cardName        String   @map("card_name")
+  // 'reprint' | 'banned' | 'tournament' | 'set_synergy' | 'other'
+  category        String
+  summary         String
+  sourceUrls      String[] @map("source_urls")
+  confidence      Float?
+  priceAtDetection Float?  @map("price_at_detection")
+  detectedAt      DateTime @default(now()) @map("detected_at")
+
+  @@index([scryfallId, detectedAt])
+  @@index([detectedAt])
+  @@map("market_card_events")
+}
+
 // Precomputed gainers/losers, refreshed once daily by the cron sync job
 // instead of running the (expensive, whole-table self-join) aggregate live
 // on every page load. cacheKey is e.g. "set:7" or "card:30".

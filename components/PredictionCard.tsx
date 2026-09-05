@@ -62,7 +62,20 @@ function confidenceColor(pct: number): string {
   return 'bg-red-500';
 }
 
-export default function PredictionCard({ prediction }: { prediction: CardPrediction }) {
+interface CardNews {
+  hasNews: boolean;
+  summary: string | null;
+  category: string | null;
+  sourceUrls: string[];
+  confidence: number | null;
+  fetchedAt: string;
+}
+
+const CATEGORY_LABELS: Record<string, string> = {
+  reprint: 'Reprint', banned: 'Ban/Unban', tournament: 'Tournament result', set_synergy: 'New set synergy', other: 'News',
+};
+
+export default function PredictionCard({ prediction, news }: { prediction: CardPrediction; news?: CardNews | null }) {
   const {
     currentPrice, targetPrice6m, targetPrice6mLow, targetPrice6mHigh, confidencePct,
     predictionDirection, matchedPattern, dominantSignals, upsideScenario, upsideTarget,
@@ -142,6 +155,24 @@ export default function PredictionCard({ prediction }: { prediction: CardPredict
           {downsideScenario && <p className="text-xs text-zinc-400">{downsideScenario}</p>}
         </div>
       </div>
+
+      {news?.hasNews && news.summary && (
+        <div className="mb-4 bg-sky-950/20 border border-sky-900/50 rounded-lg p-3">
+          <p className="text-[10px] uppercase tracking-wide text-sky-400 font-semibold mb-1">
+            Why{news.category ? ` — ${CATEGORY_LABELS[news.category] ?? news.category}` : ''}
+          </p>
+          <p className="text-sm text-zinc-200 mb-1.5">{news.summary}</p>
+          {news.sourceUrls.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {news.sourceUrls.slice(0, 3).map((url, i) => (
+                <a key={i} href={url} target="_blank" rel="noreferrer" className="text-[10px] text-sky-500 hover:text-sky-400 truncate max-w-[200px]">
+                  {new URL(url).hostname.replace('www.', '')} ↗
+                </a>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {dominantSignals.length > 0 && (
         <div className="mb-4">
