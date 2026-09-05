@@ -319,6 +319,65 @@ export async function refreshMoversCache(): Promise<MoversRefreshResult[]> {
   return results;
 }
 
+export interface HighValueCard {
+  scryfallId: string; cardName: string; setCode: string; usd: number; sparkline: number[];
+}
+
+/** Daily price series for a handful of specific cards (by scryfall_id) —
+ * same shape/purpose as getSparklineSeriesForSets above, but keyed by
+ * card instead of set. Kept separate since the two group by different
+ * columns. */
+async function getSparklineSeriesForCards(scryfallIds: string[], days: number): Promise<Map<string, number[]>> {
+  if (scryfallIds.length === 0) return new Map();
+  const { rows } = await queryWithTimeout<{ scryfallId: string; date: string; usd: number | null }>(
+    `SELECT scryfall_id as "scryfallId", price_date as "date", usd
+     FROM market_price_snapshots
+     WHERE scryfall_id = ANY(?) AND price_date >= (CURRENT_DATE - ?::int) AND usd IS NOT NULL
+     ORDER BY scryfall_id, price_date ASC`,
+    [scryfallIds as any, days],
+    30000
+  );
+  const map = new Map<string, number[]>();
+  for (const r of rows) {
+    const arr = map.get(r.scryfallId) ?? [];
+    if (r.usd !== null) arr.push(Number(r.usd));
+    map.set(r.scryfallId, arr);
+  }
+  return map;
+}
+
+/** The single most expensive tracked cards, across the whole catalog (not
+ * scoped to any set) — powers /market/high-value. Computed once/day: a
+ * full ORDER BY usd DESC over ~85k rows measured at ~1.7s (cron-only,
+ * fine), plus one batched 30-day sparkline query for just the resulting
+ * 50 cards (~60ms measured). Cached the same way as Set/Card Movers. */
+export async function refreshHighValueCache(limit = 50): Promise<{ degraded: boolean }> {
+  const { rows, timedOut } = await queryWithTimeout<any>(
+    `SELECT scryfall_id as "scryfallId", card_name as "cardName", set_code as "setCode", usd
+     FROM market_price_snapshots
+     WHERE price_date = (SELECT MAX(price_date) FROM market_price_snapshots) AND usd IS NOT NULL
+     ORDER BY usd DESC
+     LIMIT ?`,
+    [limit],
+    15000
+  );
+  const cards: HighValueCard[] = rows.map((r: any) => ({ ...r, usd: Number(r.usd), sparkline: [] as number[] }));
+
+  const sparklines = await getSparklineSeriesForCards(cards.map(c => c.scryfallId), 30);
+  for (const c of cards) c.sparkline = sparklines.get(c.scryfallId) ?? [];
+
+  await upsertMoversCache('high_value_top50', { cards });
+  return { degraded: timedOut };
+}
+
+export async function getCachedHighValueCards(): Promise<{ cards: HighValueCard[]; computedAt: string | null }> {
+  const row = await findMany<{ payload: { cards: HighValueCard[] }; computed_at: string }>(
+    `SELECT payload, computed_at FROM market_movers_cache WHERE cache_key = 'high_value_top50'`
+  );
+  if (row.length === 0) return { cards: [], computedAt: null };
+  return { cards: row[0].payload.cards ?? [], computedAt: row[0].computed_at };
+}
+
 // ── Signals (read side — computed by lib/signal-calculator.ts) ────────────
 
 export interface CardSignal {

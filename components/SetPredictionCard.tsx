@@ -55,7 +55,9 @@ export default function SetPredictionCard({ prediction }: { prediction: SetPredi
       <div className="flex items-end justify-between flex-wrap gap-4 mb-5">
         <div>
           <p className="text-3xl font-bold text-zinc-100">{fmtPct(avgTargetPct)}</p>
-          <p className="text-xs text-zinc-500 mt-0.5">average target across {totalCards} tracked cards</p>
+          <p className="text-xs text-zinc-500 mt-0.5">
+            Average of every tracked card's own 6-month prediction, across all {totalCards} cards in this set — not one card, the whole set's average.
+          </p>
         </div>
         <div className="text-right min-w-[140px]">
           <span className="text-xs text-zinc-500">Avg. confidence</span>
@@ -66,6 +68,7 @@ export default function SetPredictionCard({ prediction }: { prediction: SetPredi
       {/* Composition bar */}
       <div className="mb-5">
         <p className="text-[10px] uppercase tracking-wide text-zinc-500 mb-1.5">Card predictions</p>
+        <p className="text-xs text-zinc-500 mb-1.5">How the {totalCards} individual card predictions split — this is what the average above is built from.</p>
         <div className="flex h-2.5 rounded-full overflow-hidden bg-zinc-800">
           {bullishPct > 0 && <div className="bg-emerald-500" style={{ width: `${bullishPct}%` }} title={`${bullishCount} bullish`} />}
           {neutralPct > 0 && <div className="bg-zinc-600" style={{ width: `${neutralPct}%` }} title={`${neutralCount} neutral`} />}
@@ -82,6 +85,9 @@ export default function SetPredictionCard({ prediction }: { prediction: SetPredi
       {chaseConcentrationPct !== null && (
         <div className="mb-5">
           <p className="text-[10px] uppercase tracking-wide text-zinc-500 mb-1.5">Value distribution</p>
+          <p className="text-xs text-zinc-500 mb-1.5">
+            Add up the price of all {totalCards} cards in this set — what share of that total comes from just the 5 most expensive ones?
+          </p>
           <div className="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
             <div
               className={chaseConcentrationPct > 70 ? 'h-full bg-amber-500' : 'h-full bg-zinc-500'}
@@ -89,13 +95,13 @@ export default function SetPredictionCard({ prediction }: { prediction: SetPredi
             />
           </div>
           <p className="text-xs text-zinc-400 mt-1.5">
-            {chaseConcentrationPct.toFixed(0)}% of set value is in the top 5 cards
+            {chaseConcentrationPct.toFixed(0)}% of this set's total value is in just its 5 priciest cards (out of {totalCards} tracked).
           </p>
           {chaseConcentrationPct > 70 && (
-            <p className="text-xs text-amber-500 mt-0.5">⚠ High concentration — set value is heavily dependent on a few chase cards.</p>
+            <p className="text-xs text-amber-500 mt-0.5">⚠ High concentration — this set's value rides heavily on a few chase cards; if one of those reprints or falls out of favor, the whole set's value drops with it.</p>
           )}
           {chaseConcentrationPct < 50 && (
-            <p className="text-xs text-emerald-500 mt-0.5">✓ Well distributed — value spread across many cards, not just chase pieces.</p>
+            <p className="text-xs text-emerald-500 mt-0.5">✓ Well distributed — value spread across many playable cards, not riding on a couple of chase pieces.</p>
           )}
         </div>
       )}

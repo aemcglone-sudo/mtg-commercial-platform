@@ -22,6 +22,7 @@ const NAV = [
   { href: '/market',          label: 'Market', tourId: 'nav-market-group', icon: <MarketIcon />, children: [
     { href: '/market/scoreboard',  label: 'Speculation Scoreboard' },
     { href: '/market/index',       label: 'Market Index' },
+    { href: '/market/high-value',  label: 'Highest Value Cards' },
   ]},
   { label: 'Shop', dividerAfter: true, tourId: 'nav-shop-group', icon: <ShopIcon />, children: [
     { href: '/stores',            label: 'Nearby Shops' },

@@ -26,10 +26,6 @@ const HEALTH_STYLE: Record<string, string> = {
   increasing: 'text-red-400', stable: 'text-amber-400',
 };
 
-function fmtUsd(n: number): string {
-  return `$${n.toFixed(2)}`;
-}
-
 export default function MarketIndexPage() {
   const [points, setPoints] = useState<IndexPoint[] | null>(null);
   const [enriched, setEnriched] = useState<Enriched | null>(null);
@@ -78,10 +74,15 @@ export default function MarketIndexPage() {
           </div>
         )}
       </div>
-      <p className="text-xs text-zinc-600 mb-6">
+      <p className="text-xs text-zinc-600 mb-1">
         Not a true market cap — we only have price, not print-run/supply data, so every card counts equally regardless of value.
         History backfills gradually (one historical day added per daily run) rather than all at once, to stay easy on the database.
       </p>
+      {last && (
+        <p className="text-xs text-zinc-500 mb-6">
+          <span className="font-semibold text-zinc-300">Tracking {last.cardCount.toLocaleString()} cards</span> in this index — every card with a price on both {first?.date} and today counts once, equally. (The "top 10 / top 100" numbers below are a separate stat about the priciest individual cards, not the index's size.)
+        </p>
+      )}
 
       {/* Quick health metrics */}
       {enriched && (
@@ -91,9 +92,12 @@ export default function MarketIndexPage() {
             <p className={`text-sm font-semibold capitalize ${enriched.concentrationHealth ? HEALTH_STYLE[enriched.concentrationHealth] : 'text-zinc-500'}`}>
               {enriched.concentrationHealth ?? '—'}
             </p>
-            <p className="text-xs text-zinc-500 mt-1">
+            <p className="text-xs text-zinc-500 mt-1.5 leading-relaxed">
+              Out of the {last?.cardCount.toLocaleString() ?? 'thousands of'} cards we track, how much of the total dollar value sits in just the {' '}
+              <Link href="/market/high-value" className="underline hover:text-amber-400">10 priciest ones</Link>?
               {concentration?.concentrationTop10Pct !== null && concentration?.concentrationTop10Pct !== undefined
-                ? `Top 10 cards = ${concentration.concentrationTop10Pct.toFixed(1)}% of tracked value` : 'No data yet'}
+                ? ` Right now: ${concentration.concentrationTop10Pct.toFixed(1)}%. Lower is healthier — it means value is spread out, not riding on a handful of chase cards.`
+                : ' No data yet.'}
             </p>
           </div>
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
@@ -101,9 +105,11 @@ export default function MarketIndexPage() {
             <p className={`text-sm font-semibold capitalize ${enriched.volatility.trend ? HEALTH_STYLE[enriched.volatility.trend] : 'text-zinc-500'}`}>
               {enriched.volatility.trend ?? '—'}
             </p>
-            <p className="text-xs text-zinc-500 mt-1">
+            <p className="text-xs text-zinc-500 mt-1.5 leading-relaxed">
+              How much the index itself has bounced up and down day to day recently, compared to its longer-run average.
               {enriched.volatility.daily7d !== null
-                ? `7d: ${enriched.volatility.daily7d.toFixed(2)}% daily swing` : 'Not enough history yet'}
+                ? ` Last 7 days it moved about ${enriched.volatility.daily7d.toFixed(2)}% a day on average — "${enriched.volatility.trend}" means that's about the same as its usual swing.`
+                : ' Not enough history yet to compare.'}
             </p>
           </div>
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
@@ -111,9 +117,11 @@ export default function MarketIndexPage() {
             <p className={`text-sm font-semibold capitalize ${enriched.breadthHealth ? HEALTH_STYLE[enriched.breadthHealth] : 'text-zinc-500'}`}>
               {enriched.breadthHealth ?? '—'}
             </p>
-            <p className="text-xs text-zinc-500 mt-1">
+            <p className="text-xs text-zinc-500 mt-1.5 leading-relaxed">
+              Of all the cards we track, what fraction went up in price yesterday vs. down?
               {concentration?.advancers !== null && concentration?.advancers !== undefined && concentration?.decliners !== null && concentration?.decliners !== undefined
-                ? `${((concentration.advancers / (concentration.advancers + concentration.decliners)) * 100).toFixed(0)}% advancers` : 'No data yet'}
+                ? ` ${((concentration.advancers / (concentration.advancers + concentration.decliners)) * 100).toFixed(0)}% of cards that moved went up. More advancers than decliners = broad-based strength, not just a few cards carrying the average.`
+                : ' No data yet.'}
             </p>
           </div>
         </div>
@@ -153,7 +161,11 @@ export default function MarketIndexPage() {
       {concentration && (concentration.concentrationTop10Pct !== null || concentration.concentrationTop100Pct !== null) && (
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 mb-6">
           <p className="text-xs uppercase tracking-wide text-zinc-500 mb-1">Concentration — is value spread out or top-heavy?</p>
-          <p className="text-xs text-zinc-600 mb-3">Share of the full tracked catalog's total value held by the priciest cards, as of today.</p>
+          <p className="text-xs text-zinc-600 mb-3">
+            Add up the price of every card we track (~{last?.cardCount.toLocaleString() ?? 'thousands of'} of them) to get a total dollar figure.
+            These bars show what share of that total comes from just the 10 most expensive individual cards, and separately the 100 most expensive —
+            not 10 or 100 out of the whole index, just the priciest slice of it.
+          </p>
           <div className="space-y-3">
             {concentration.concentrationTop10Pct !== null && (
               <div>
@@ -185,7 +197,10 @@ export default function MarketIndexPage() {
       {enriched && (enriched.leadingSets.length > 0 || enriched.laggingSets.length > 0) && (
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
           <p className="text-xs uppercase tracking-wide text-zinc-500 mb-1">Which sets are driving the market (90d)</p>
-          <p className="text-xs text-zinc-600 mb-3">Sets with at least 10 tracked cards, token sets excluded.</p>
+          <p className="text-xs text-zinc-600 mb-3">
+            Each set's average card price, now vs. 90 days ago — the sets whose average moved the most, either direction.
+            Only sets with at least 10 tracked cards count (smaller sample sizes are too noisy — a single promo card's price swing shouldn't look like a "set" move), and pure token sets are excluded.
+          </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <p className="text-[10px] uppercase tracking-wide text-emerald-500 font-semibold mb-2">Leading</p>
