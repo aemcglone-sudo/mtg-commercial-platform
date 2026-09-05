@@ -50,12 +50,27 @@ export async function calculateSignals(): Promise<SignalStepResult[]> {
   const results: SignalStepResult[] = [];
 
   // ── Pass 1: seed today's rows + release phase + price anchors ──────────
+  // 52w high/low used to be a LATERAL subquery per row — ~85k independent
+  // correlated subqueries, each rescanning up to 365 days of history. That
+  // was almost certainly what was pushing the DB into "Connection
+  // terminated unexpectedly" territory (verified: the single grouped
+  // aggregate below costs ~14s for the same ~85k cards, measured live,
+  // vs. an unbounded/never-finished cost the old shape had at this scale).
+  // Same "one full scan beats N correlated lookups" fix as the Market
+  // Index work — a single GROUP BY computes every card's yearly high/low
+  // in one pass instead of one subquery execution per row.
   const seedSql = `
+    WITH yearly AS (
+      SELECT scryfall_id, MAX(usd) as max_usd, MIN(usd) as min_usd
+      FROM market_price_snapshots
+      WHERE price_date >= CURRENT_DATE - 365 AND price_date <= CURRENT_DATE AND usd IS NOT NULL
+      GROUP BY scryfall_id
+    )
     INSERT INTO market_signals (id, scryfall_id, date, set_code, rarity, cmc, current_price, price_52w_high, price_52w_low, days_since_release, release_phase)
     SELECT
       md5(s.scryfall_id || s.price_date::text), -- deterministic id: unique per (scryfall_id, date), same as the table's own constraint
       s.scryfall_id, s.price_date, s.set_code, s.rarity, s.cmc, s.usd,
-      hi.max_usd, lo.min_usd,
+      y.max_usd, y.min_usd,
       (s.price_date - r.released_at),
       CASE
         WHEN r.released_at IS NULL THEN NULL
@@ -67,21 +82,14 @@ export async function calculateSignals(): Promise<SignalStepResult[]> {
       END
     FROM market_price_snapshots s
     LEFT JOIN market_set_release_dates r ON r.set_code = s.set_code
-    LEFT JOIN LATERAL (
-      SELECT MAX(usd) as max_usd FROM market_price_snapshots h
-      WHERE h.scryfall_id = s.scryfall_id AND h.price_date >= s.price_date - 365 AND h.price_date <= s.price_date AND h.usd IS NOT NULL
-    ) hi ON true
-    LEFT JOIN LATERAL (
-      SELECT MIN(usd) as min_usd FROM market_price_snapshots lo
-      WHERE lo.scryfall_id = s.scryfall_id AND lo.price_date >= s.price_date - 365 AND lo.price_date <= s.price_date AND lo.usd IS NOT NULL
-    ) lo ON true
+    LEFT JOIN yearly y ON y.scryfall_id = s.scryfall_id
     WHERE s.price_date = CURRENT_DATE AND s.usd IS NOT NULL
     ON CONFLICT (scryfall_id, date) DO UPDATE SET
       set_code = EXCLUDED.set_code, rarity = EXCLUDED.rarity, cmc = EXCLUDED.cmc,
       current_price = EXCLUDED.current_price, price_52w_high = EXCLUDED.price_52w_high, price_52w_low = EXCLUDED.price_52w_low,
       days_since_release = EXCLUDED.days_since_release, release_phase = EXCLUDED.release_phase
   `;
-  results.push({ step: 'anchors_and_phase', ...(await runWithTimeout(seedSql, [])) });
+  results.push({ step: 'anchors_and_phase', ...(await runWithTimeout(seedSql, [], 120000)) });
 
   // ── Pass 2: momentum (7d / 30d / 90d) ───────────────────────────────────
   const momentumSql = `
