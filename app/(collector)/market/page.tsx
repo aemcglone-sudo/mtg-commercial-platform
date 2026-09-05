@@ -174,18 +174,11 @@ export default function MarketPage() {
               )}
               <section>
                 <h2 className="text-sm font-semibold text-zinc-300 mb-3">Set Movers ({days}d)</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <MoversTable
-                    title="Gainers" rows={setMovers?.gainers ?? []} kind="set" setName={setName}
-                    isWatched={r => isSetWatched(r.setCode)}
-                    onWatch={r => addSetWatch(r.setCode)}
-                  />
-                  <MoversTable
-                    title="Losers" rows={setMovers?.losers ?? []} kind="set" setName={setName}
-                    isWatched={r => isSetWatched(r.setCode)}
-                    onWatch={r => addSetWatch(r.setCode)}
-                  />
-                </div>
+                <SetMoversPanel
+                  gainers={setMovers?.gainers ?? []} losers={setMovers?.losers ?? []} setName={setName}
+                  isWatched={r => isSetWatched(r.setCode)}
+                  onWatch={r => addSetWatch(r.setCode)}
+                />
               </section>
 
               <section>
@@ -274,6 +267,42 @@ function MoversTable<T extends { changePercent: number }>({
             )}
             <span className="text-zinc-500 text-xs shrink-0">{fmtUsd(kind === 'set' ? r.avgUsdNow : r.usdNow)}</span>
             <span className="shrink-0"><ChangeBadge pct={r.changePercent} /></span>
+            <button type="button" onClick={() => onWatch(r)} disabled={isWatched(r)}
+              className={`shrink-0 text-xs ${isWatched(r) ? 'text-amber-400' : 'text-zinc-600 hover:text-amber-400'}`}
+              title={isWatched(r) ? 'Watching' : 'Add to watchlist'}>
+              {isWatched(r) ? '★' : '☆'}
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SetMoversPanel({
+  gainers, losers, isWatched, onWatch, setName,
+}: {
+  gainers: SetMover[];
+  losers: SetMover[];
+  isWatched: (r: SetMover) => boolean;
+  onWatch: (r: SetMover) => void;
+  setName: (code: string) => string;
+}) {
+  const rows = [...gainers, ...losers];
+  return (
+    <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
+      {rows.length === 0 && <p className="text-xs text-zinc-600">No data.</p>}
+      <div className="space-y-1.5">
+        {rows.map(r => (
+          <div key={r.setCode} className="flex items-center justify-between gap-3 text-sm">
+            <Link href={`/market/sets/${r.setCode}`} className="truncate hover:text-amber-400 transition-colors flex-1 min-w-0">
+              {setName(r.setCode)}
+            </Link>
+            {r.sparkline && r.sparkline.length >= 2 && (
+              <Sparkline values={r.sparkline} positive={r.changePercent >= 0} width={160} height={28} />
+            )}
+            <span className="text-zinc-500 text-xs shrink-0 w-16 text-right">{fmtUsd(r.avgUsdNow)}</span>
+            <span className="shrink-0 w-20 text-right"><ChangeBadge pct={r.changePercent} /></span>
             <button type="button" onClick={() => onWatch(r)} disabled={isWatched(r)}
               className={`shrink-0 text-xs ${isWatched(r) ? 'text-amber-400' : 'text-zinc-600 hover:text-amber-400'}`}
               title={isWatched(r) ? 'Watching' : 'Add to watchlist'}>
