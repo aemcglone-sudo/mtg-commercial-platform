@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import Sparkline from '@/components/Sparkline';
+import BackButton from '@/components/BackButton';
 
 interface Event {
   scryfallId: string; category: string; summary: string; sourceUrls: string[]; detectedAt: string;
@@ -56,11 +57,17 @@ export default function HighValueCardsPage() {
           <h1 className="text-2xl font-bold">Highest Value Cards</h1>
           <p className="text-sm text-zinc-500 mt-0.5">The most expensive tracked Magic cards, and what's moving them.</p>
         </div>
-        <Link href="/market" className="text-xs text-amber-400 hover:text-amber-300">← Back to Market</Link>
+        <BackButton fallbackHref="/market" />
       </div>
-      <p className="text-xs text-zinc-600 mb-6">
-        Ranked by current price across the whole tracked catalog (not one set) — the true "blue chips" of Magic, mostly Power Nine and other old Reserved List staples.
+      <p className="text-xs text-zinc-600 mb-1">
+        Ranked by current price across the whole tracked catalog (not one set).
         {computedAt && ` Last updated ${new Date(computedAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}.`}
+      </p>
+      <p className="text-xs text-amber-600/80 mb-6">
+        ⚠ Not the same as "the most valuable Magic cards ever" — this only ranks cards our data source (TCGPlayer, via Scryfall) actually has a market price for.
+        The rarest originals (Alpha/Beta Power Nine — original Black Lotus, Ancestral Recall, Time Walk, etc.) mostly aren't included here at all, because they don't
+        trade on typical retail marketplaces and genuinely have no tracked price anywhere we can pull from — they sell via auction houses and private sales instead,
+        often for far more than anything shown below. What you see here is real, current, and honest for what it is; it just isn't the complete "most valuable ever" picture.
       </p>
 
       {cardsWithNews.length > 0 && (

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
+import BackButton from '@/components/BackButton';
 
 interface ScoreboardRow {
   scryfallId: string;
@@ -72,7 +73,7 @@ export default function ScoreboardPage() {
           <h1 className="text-2xl font-bold">Speculation Scoreboard</h1>
           <p className="text-sm text-zinc-500 mt-0.5">Every card's 6-month prediction, side by side.</p>
         </div>
-        <Link href="/market" className="text-xs text-amber-400 hover:text-amber-300">← Back to Market</Link>
+        <BackButton fallbackHref="/market" />
       </div>
       <p className="text-xs text-zinc-600 mb-6">
         Heuristic pattern-match calls, not backtested accuracy — no prediction has had 6 months to resolve yet.

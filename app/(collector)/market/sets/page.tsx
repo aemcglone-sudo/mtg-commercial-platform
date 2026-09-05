@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import BackButton from '@/components/BackButton';
 
 interface SetMeta { code: string; name: string; setType: string; releasedAt: string | null; cardCount: number; iconSvgUri: string | null; }
 interface WatchlistItem { id: string; kind: 'card' | 'set'; setCode: string | null; }
@@ -40,7 +41,7 @@ export default function BrowseSetsPage() {
 
   return (
     <main className="max-w-4xl mx-auto px-4 py-8 text-zinc-100">
-      <Link href="/market" className="text-xs text-zinc-500 hover:text-zinc-300">← Back to Market</Link>
+      <BackButton fallbackHref="/market" />
       <h1 className="text-2xl font-bold mt-3 mb-1">All Sets</h1>
       <p className="text-sm text-zinc-500 mb-6">Watch a set to track its price index over time.</p>
 

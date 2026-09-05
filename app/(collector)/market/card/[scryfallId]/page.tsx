@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
 import PriceChart from '@/components/PriceChart';
+import BackButton from '@/components/BackButton';
 import PredictionCard from '@/components/PredictionCard';
 
 interface PricePoint { date: string; usd: number | null; usdFoil: number | null; }
@@ -120,7 +120,7 @@ export default function CardDetailPage() {
 
   return (
     <main className="max-w-4xl mx-auto px-4 py-8 text-zinc-100">
-      <Link href="/market" className="text-xs text-zinc-500 hover:text-zinc-300">← Back to Market</Link>
+      <BackButton fallbackHref="/market" />
 
       <div className="flex items-start gap-6 mt-3 mb-6">
         {card?.imageUrl && (

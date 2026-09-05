@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import PriceChart from '@/components/PriceChart';
 import SetPredictionCard from '@/components/SetPredictionCard';
+import BackButton from '@/components/BackButton';
 
 interface SetIndexPoint { date: string; avgUsd: number | null; cardCount: number; }
 interface SetMeta { code: string; name: string; setType: string; releasedAt: string | null; cardCount: number; iconSvgUri: string | null; }
@@ -87,7 +88,7 @@ export default function SetDetailPage() {
 
   return (
     <main className="max-w-6xl mx-auto px-4 py-8 text-zinc-100">
-      <Link href="/market" className="text-xs text-zinc-500 hover:text-zinc-300">← Back to Market</Link>
+      <BackButton fallbackHref="/market" />
 
       <div className="flex items-center justify-between flex-wrap gap-3 mt-3 mb-6">
         <div className="flex items-center gap-3">
