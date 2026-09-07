@@ -5,6 +5,7 @@ import { refreshSetReleaseDates, calculateSignals } from '@/lib/signal-calculato
 import { seedPatternLibrary, calculatePredictions } from '@/lib/prediction-engine';
 import { refreshCardNews } from '@/lib/card-news';
 import { refreshMarketIndex } from '@/lib/market-index';
+import { refreshPortfolioCache } from '@/lib/portfolio';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -68,6 +69,15 @@ export async function GET(req: NextRequest) {
     await vacuumPredictions();
     console.log('Vacuumed market_predictions.');
 
+    let portfolioResult: unknown = { skipped: true };
+    try {
+      portfolioResult = await refreshPortfolioCache();
+      console.log('Portfolio cache refreshed:', portfolioResult);
+    } catch (e) {
+      console.error('Portfolio cache refresh failed (non-fatal):', e);
+      portfolioResult = { error: e instanceof Error ? e.message : 'unknown' };
+    }
+
     // Isolated from the rest: a Tavily/Gemini hiccup shouldn't fail a run
     // that already successfully wrote prices, signals, and predictions.
     let newsResult: unknown = { skipped: true };
@@ -91,7 +101,7 @@ export async function GET(req: NextRequest) {
       indexResult = { error: e instanceof Error ? e.message : 'unknown' };
     }
 
-    return NextResponse.json({ success: true, sync: syncResult, movers: moversResult, highValue: highValueResult, categoryHighValue: categoryResult, signals: signalsResult, predictions: predictionsResult, news: newsResult, index: indexResult });
+    return NextResponse.json({ success: true, sync: syncResult, movers: moversResult, highValue: highValueResult, categoryHighValue: categoryResult, signals: signalsResult, predictions: predictionsResult, portfolio: portfolioResult, news: newsResult, index: indexResult });
   } catch (e) {
     console.error('Market sync failed:', e);
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Sync failed' }, { status: 500 });

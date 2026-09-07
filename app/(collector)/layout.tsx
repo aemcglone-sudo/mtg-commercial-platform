@@ -20,6 +20,7 @@ const NAV = [
   { href: '/local-play',      label: 'Local Play', tourId: 'nav-local-play', icon: <LocalPlayIcon /> },
   { href: '/simulator',       label: 'Commander Simulator', icon: <SimulatorIcon /> },
   { href: '/market',          label: 'Market', tourId: 'nav-market-group', icon: <MarketIcon />, children: [
+    { href: '/portfolio',          label: 'My Portfolio' },
     { href: '/market/scoreboard',  label: 'Speculation Scoreboard' },
     { href: '/market/index',       label: 'Market Index' },
     { href: '/market/high-value',  label: 'Highest Value Cards' },
