@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { runDailyPriceSync } from '@/lib/market-sync';
-import { refreshMoversCache, vacuumSnapshots, vacuumPredictions, refreshHighValueCache, refreshCategoryHighValueCache } from '@/lib/market';
+import { refreshMoversCache, vacuumSnapshots, vacuumPredictions, refreshHighValueCache, refreshCategoryHighValueCache, refreshFoilPremiumCache } from '@/lib/market';
 import { refreshSetReleaseDates, calculateSignals } from '@/lib/signal-calculator';
 import { seedPatternLibrary, calculatePredictions } from '@/lib/prediction-engine';
 import { refreshCardNews } from '@/lib/card-news';
@@ -56,6 +56,15 @@ export async function GET(req: NextRequest) {
       categoryResult = { error: e instanceof Error ? e.message : 'unknown' };
     }
 
+    let foilPremiumResult: unknown = { skipped: true };
+    try {
+      foilPremiumResult = await refreshFoilPremiumCache();
+      console.log('Foil premium cache refreshed:', foilPremiumResult);
+    } catch (e) {
+      console.error('Foil premium cache refresh failed (non-fatal):', e);
+      foilPremiumResult = { error: e instanceof Error ? e.message : 'unknown' };
+    }
+
     const releaseDatesCount = await refreshSetReleaseDates();
     console.log('Set release dates refreshed:', releaseDatesCount);
 
@@ -101,7 +110,7 @@ export async function GET(req: NextRequest) {
       indexResult = { error: e instanceof Error ? e.message : 'unknown' };
     }
 
-    return NextResponse.json({ success: true, sync: syncResult, movers: moversResult, highValue: highValueResult, categoryHighValue: categoryResult, signals: signalsResult, predictions: predictionsResult, portfolio: portfolioResult, news: newsResult, index: indexResult });
+    return NextResponse.json({ success: true, sync: syncResult, movers: moversResult, highValue: highValueResult, categoryHighValue: categoryResult, foilPremium: foilPremiumResult, signals: signalsResult, predictions: predictionsResult, portfolio: portfolioResult, news: newsResult, index: indexResult });
   } catch (e) {
     console.error('Market sync failed:', e);
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Sync failed' }, { status: 500 });

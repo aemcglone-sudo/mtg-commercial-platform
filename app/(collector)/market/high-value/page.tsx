@@ -36,6 +36,8 @@ export default function HighValueCardsPage() {
   const [computedAt, setComputedAt] = useState<string | null>(null);
   const [categories, setCategories] = useState<CategoryHighValue[] | null>(null);
   const [setNameByCode, setSetNameByCode] = useState<Map<string, string>>(new Map());
+  const [filter, setFilter] = useState<'all' | 'news'>('all');
+  const [sort, setSort] = useState<'price' | 'change'>('price');
 
   const load = useCallback(async () => {
     const [hvRes, catRes, setsRes] = await Promise.all([
@@ -54,6 +56,15 @@ export default function HighValueCardsPage() {
   const setName = useCallback((code: string) => setNameByCode.get(code) ?? code.toUpperCase(), [setNameByCode]);
 
   const cardsWithNews = useMemo(() => (cards ?? []).filter(c => c.latestEvent !== null), [cards]);
+
+  const visibleCards = useMemo(() => {
+    if (!cards) return [];
+    let rows = filter === 'news' ? cards.filter(c => c.latestEvent !== null) : cards;
+    rows = [...rows].sort((a, b) => sort === 'price'
+      ? b.usd - a.usd
+      : (pctChange(b.sparkline) ?? -Infinity) - (pctChange(a.sparkline) ?? -Infinity));
+    return rows;
+  }, [cards, filter, sort]);
 
   return (
     <main className="max-w-5xl mx-auto px-4 py-8 text-zinc-100">
@@ -99,9 +110,25 @@ export default function HighValueCardsPage() {
 
       {cards !== null && cards.length > 0 && (
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
-          <div className="overflow-x-auto">
+          <div className="flex items-center justify-between flex-wrap gap-2 p-4 border-b border-zinc-800">
+            <div className="flex items-center gap-1.5">
+              {([{ key: 'all', label: 'All' }, { key: 'news', label: 'With news' }] as { key: 'all' | 'news'; label: string }[]).map(f => (
+                <button key={f.key} type="button" onClick={() => setFilter(f.key)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium ${filter === f.key ? 'bg-amber-400 text-black' : 'bg-zinc-800 text-zinc-400'}`}>
+                  {f.label}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+              Sort by
+              <button type="button" onClick={() => setSort('price')} className={sort === 'price' ? 'text-amber-400 font-semibold' : 'hover:text-zinc-300'}>Price</button>
+              ·
+              <button type="button" onClick={() => setSort('change')} className={sort === 'change' ? 'text-amber-400 font-semibold' : 'hover:text-zinc-300'}>30d change</button>
+            </div>
+          </div>
+          <div className="max-h-[420px] overflow-y-auto overflow-x-auto">
             <table className="w-full text-sm">
-              <thead>
+              <thead className="sticky top-0 bg-zinc-900">
                 <tr className="text-left text-zinc-500 text-xs uppercase tracking-wide border-b border-zinc-800">
                   <th className="px-4 py-3 font-medium">#</th>
                   <th className="px-4 py-3 font-medium">Card</th>
@@ -112,7 +139,7 @@ export default function HighValueCardsPage() {
                 </tr>
               </thead>
               <tbody>
-                {cards.map((c, i) => {
+                {visibleCards.map((c, i) => {
                   const change = pctChange(c.sparkline);
                   return (
                     <tr key={c.scryfallId} className="border-b border-zinc-800/60 last:border-0 hover:bg-zinc-800/40">
@@ -149,6 +176,7 @@ export default function HighValueCardsPage() {
               </tbody>
             </table>
           </div>
+          <p className="text-[10px] text-zinc-600 p-3 border-t border-zinc-800">{visibleCards.length} of {cards.length} shown — scroll within the list above for more.</p>
         </div>
       )}
 

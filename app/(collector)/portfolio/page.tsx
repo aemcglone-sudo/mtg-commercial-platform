@@ -152,9 +152,9 @@ export default function PortfolioPage() {
                 <button type="button" onClick={() => setSort('confidence')} className={sort === 'confidence' ? 'text-amber-400 font-semibold' : 'hover:text-zinc-300'}>Confidence</button>
               </div>
             </div>
-            <div className="overflow-x-auto">
+            <div className="max-h-[420px] overflow-y-auto overflow-x-auto">
               <table className="w-full text-sm">
-                <thead>
+                <thead className="sticky top-0 bg-zinc-900">
                   <tr className="text-left text-zinc-500 text-xs uppercase tracking-wide border-b border-zinc-800">
                     <th className="px-4 py-3 font-medium">Card</th>
                     <th className="px-4 py-3 font-medium">Qty</th>

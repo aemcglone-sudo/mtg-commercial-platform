@@ -430,6 +430,44 @@ export async function getCachedCategoryHighValue(): Promise<{ categories: Catego
   return { categories: row[0].payload.categories ?? [], computedAt: row[0].computed_at };
 }
 
+export interface FoilPremiumRow { setCode: string; avgNonfoil: number; avgFoil: number; premiumPct: number; cardCount: number }
+
+/** Foil vs. nonfoil price ratio per set — avg(usd_foil)/avg(usd) across
+ * cards with both prices tracked (>=10 paired cards, same noise-floor
+ * reasoning as Set Movers' MIN_SET_CARD_COUNT). Usually foil trades well
+ * above nonfoil (old-frame foils from vintage-relevant sets can run
+ * 10-20x), but it inverts for a handful of sets — foil actually *cheaper*
+ * — which is the genuinely interesting case to flag. Computed once/day:
+ * ~1.2s across all ~226 sets with foil data, measured live. */
+export async function refreshFoilPremiumCache(): Promise<{ degraded: boolean }> {
+  const { rows, timedOut } = await queryWithTimeout<any>(
+    `SELECT set_code as "setCode", AVG(usd) as "avgNonfoil", AVG(usd_foil) as "avgFoil", COUNT(*) as "cardCount"
+     FROM market_price_snapshots
+     WHERE price_date = (SELECT MAX(price_date) FROM market_price_snapshots)
+       AND usd IS NOT NULL AND usd_foil IS NOT NULL AND usd > 0
+     GROUP BY set_code
+     HAVING COUNT(*) >= 10`,
+    [],
+    15000
+  );
+  const table: FoilPremiumRow[] = rows.map((r: any) => {
+    const avgNonfoil = Number(r.avgNonfoil);
+    const avgFoil = Number(r.avgFoil);
+    return { setCode: r.setCode, avgNonfoil, avgFoil, premiumPct: ((avgFoil - avgNonfoil) / avgNonfoil) * 100, cardCount: Number(r.cardCount) };
+  }).sort((a: FoilPremiumRow, b: FoilPremiumRow) => b.premiumPct - a.premiumPct);
+
+  await upsertMoversCache('foil_premium', { table });
+  return { degraded: timedOut };
+}
+
+export async function getCachedFoilPremium(): Promise<{ table: FoilPremiumRow[]; computedAt: string | null }> {
+  const row = await findMany<{ payload: { table: FoilPremiumRow[] }; computed_at: string }>(
+    `SELECT payload, computed_at FROM market_movers_cache WHERE cache_key = 'foil_premium'`
+  );
+  if (row.length === 0) return { table: [], computedAt: null };
+  return { table: row[0].payload.table ?? [], computedAt: row[0].computed_at };
+}
+
 // ── Signals (read side — computed by lib/signal-calculator.ts) ────────────
 
 export interface CardSignal {

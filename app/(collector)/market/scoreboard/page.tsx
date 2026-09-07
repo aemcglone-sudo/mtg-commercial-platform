@@ -121,9 +121,9 @@ export default function ScoreboardPage() {
 
       {!loading && !timedOut && rows && rows.length > 0 && (
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
-          <div className="overflow-x-auto">
+          <div className="max-h-[420px] overflow-y-auto overflow-x-auto">
             <table className="w-full text-sm">
-              <thead>
+              <thead className="sticky top-0 bg-zinc-900">
                 <tr className="text-left text-zinc-500 text-xs uppercase tracking-wide border-b border-zinc-800">
                   <th className="px-4 py-3 font-medium">Card</th>
                   <th className="px-4 py-3 font-medium">Current</th>
@@ -150,6 +150,7 @@ export default function ScoreboardPage() {
               </tbody>
             </table>
           </div>
+          <p className="text-[10px] text-zinc-600 p-3 border-t border-zinc-800">{rows.length} shown — scroll within the list above for more.</p>
         </div>
       )}
     </main>

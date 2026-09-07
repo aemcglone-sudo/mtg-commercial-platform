@@ -292,7 +292,7 @@ function SetMoversPanel({
   return (
     <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
       {rows.length === 0 && <p className="text-xs text-zinc-600">No data.</p>}
-      <div className="space-y-1.5">
+      <div className="space-y-1.5 max-h-[420px] overflow-y-auto">
         {rows.map(r => (
           <div key={r.setCode} className="flex items-center justify-between gap-3 text-sm">
             <Link href={`/market/sets/${r.setCode}`} className="truncate hover:text-amber-400 transition-colors flex-1 min-w-0">
