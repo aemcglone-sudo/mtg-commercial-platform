@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import PriceChart from '@/components/PriceChart';
 import BackButton from '@/components/BackButton';
 import PredictionCard from '@/components/PredictionCard';
+import AsOfDate from '@/components/AsOfDate';
 
 interface PricePoint { date: string; usd: number | null; usdFoil: number | null; }
 interface CardInfo { scryfallId: string; name: string; setCode: string; setName: string; imageUrl: string | null; priceUsd: number | null; priceFoilUsd: number | null; rarity: string | null; scryfallUri: string; }
@@ -121,6 +122,9 @@ export default function CardDetailPage() {
   return (
     <main className="max-w-4xl mx-auto px-4 py-8 text-zinc-100">
       <BackButton fallbackHref="/market" />
+      <div className="mt-1">
+        <AsOfDate date={prediction?.date ?? signal?.date ?? null} label="Predictions & signals as of" />
+      </div>
 
       <div className="flex items-start gap-6 mt-3 mb-6">
         {card?.imageUrl && (

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import BackButton from '@/components/BackButton';
+import AsOfDate from '@/components/AsOfDate';
 
 interface ScoreboardRow {
   scryfallId: string;
@@ -41,6 +42,7 @@ export default function ScoreboardPage() {
   const [direction, setDirection] = useState<Direction>('bullish');
   const [sort, setSort] = useState<Sort>('confidence');
   const [rows, setRows] = useState<ScoreboardRow[] | null>(null);
+  const [asOfDate, setAsOfDate] = useState<string | null>(null);
   const [timedOut, setTimedOut] = useState(false);
   const [loading, setLoading] = useState(true);
   const [sets, setSets] = useState<{ code: string; name: string }[]>([]);
@@ -60,6 +62,7 @@ export default function ScoreboardPage() {
     setLoading(true);
     const res = await fetch(`/api/market/scoreboard?direction=${direction}&sort=${sort}`).then(r => r.json());
     setRows(res.rows ?? []);
+    setAsOfDate(res.asOfDate ?? null);
     setTimedOut(!!res.timedOut);
     setLoading(false);
   }, [direction, sort]);
@@ -75,7 +78,8 @@ export default function ScoreboardPage() {
         </div>
         <BackButton fallbackHref="/market" />
       </div>
-      <p className="text-xs text-zinc-600 mb-6">
+      <AsOfDate date={asOfDate} label="Predictions as of" />
+      <p className="text-xs text-zinc-600 mb-6 mt-1">
         Heuristic pattern-match calls, not backtested accuracy — no prediction has had 6 months to resolve yet.
       </p>
 

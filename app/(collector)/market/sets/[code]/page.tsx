@@ -6,6 +6,7 @@ import Link from 'next/link';
 import PriceChart from '@/components/PriceChart';
 import SetPredictionCard from '@/components/SetPredictionCard';
 import BackButton from '@/components/BackButton';
+import AsOfDate from '@/components/AsOfDate';
 
 interface SetIndexPoint { date: string; avgUsd: number | null; cardCount: number; }
 interface SetMeta { code: string; name: string; setType: string; releasedAt: string | null; cardCount: number; iconSvgUri: string | null; }
@@ -19,6 +20,7 @@ interface SetPredictionRow {
   confidencePct: number; predictionDirection: string; matchedPattern: string;
 }
 interface SetPrediction {
+  date: string;
   totalCards: number; bullishCount: number; bearishCount: number; neutralCount: number;
   avgTargetPct: number | null; avgConfidencePct: number | null; direction: string;
   chaseConcentrationPct: number | null; bullCase: string; bearCase: string;
@@ -89,6 +91,9 @@ export default function SetDetailPage() {
   return (
     <main className="max-w-6xl mx-auto px-4 py-8 text-zinc-100">
       <BackButton fallbackHref="/market" />
+      <div className="mt-1">
+        <AsOfDate date={prediction?.date ?? null} label="Predictions as of" />
+      </div>
 
       <div className="flex items-center justify-between flex-wrap gap-3 mt-3 mb-6">
         <div className="flex items-center gap-3">

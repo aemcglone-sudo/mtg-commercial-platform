@@ -5,6 +5,7 @@ import Link from 'next/link';
 import PriceChart from '@/components/PriceChart';
 import BreadthChart from '@/components/BreadthChart';
 import BackButton from '@/components/BackButton';
+import AsOfDate from '@/components/AsOfDate';
 
 interface IndexPoint {
   date: string; indexValue: number; cardCount: number;
@@ -56,6 +57,9 @@ export default function MarketIndexPage() {
   return (
     <main className="max-w-4xl mx-auto px-4 py-8 text-zinc-100">
       <BackButton fallbackHref="/market" />
+      <div className="mt-1">
+        <AsOfDate date={last?.date ?? null} label="Index computed as of" />
+      </div>
 
       <div className="flex items-center justify-between flex-wrap gap-3 mt-3 mb-2">
         <div>

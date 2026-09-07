@@ -554,6 +554,7 @@ export interface ScoreboardRow {
   currentPrice: number;
   targetPrice6m: number;
   matchedPattern: string;
+  date: string;
 }
 export type ScoreboardDirection = 'bullish' | 'bearish' | 'neutral';
 export type ScoreboardSort = 'confidence' | 'price';
@@ -574,7 +575,7 @@ export async function getScoreboard(
   const { rows, timedOut } = await queryWithTimeout<any>(
     `SELECT scryfall_id as "scryfallId", card_name as "cardName", set_code as "setCode",
             prediction_direction as "predictionDirection", confidence_pct as "confidencePct",
-            current_price as "currentPrice", target_price_6m as "targetPrice6m", matched_pattern as "matchedPattern"
+            current_price as "currentPrice", target_price_6m as "targetPrice6m", matched_pattern as "matchedPattern", date
      FROM market_predictions
      WHERE date = (SELECT max(date) FROM market_predictions)
        AND prediction_direction = ?
@@ -583,7 +584,7 @@ export async function getScoreboard(
      LIMIT ?`,
     [direction, Math.min(limit, 100)]
   );
-  return { rows, timedOut };
+  return { rows: rows.map(r => ({ ...r, date: toDateString(r.date) })), timedOut };
 }
 
 export interface SetPredictionRow {
@@ -591,6 +592,7 @@ export interface SetPredictionRow {
   confidencePct: number; predictionDirection: string; matchedPattern: string;
 }
 export interface SetPrediction {
+  date: string;
   totalCards: number;
   bullishCount: number;
   bearishCount: number;
@@ -617,13 +619,14 @@ export async function getSetPrediction(setCode: string): Promise<SetPrediction |
   const { rows } = await queryWithTimeout<any>(
     `SELECT scryfall_id as "scryfallId", card_name as "cardName", current_price as "currentPrice",
             target_price_6m as "targetPrice6m", confidence_pct as "confidencePct",
-            prediction_direction as "predictionDirection", matched_pattern as "matchedPattern"
+            prediction_direction as "predictionDirection", matched_pattern as "matchedPattern", date
      FROM market_predictions
      WHERE date = (SELECT MAX(date) FROM market_predictions) AND set_code = ?
        AND current_price IS NOT NULL AND current_price > 0`,
     [setCode]
   );
   if (rows.length === 0) return null;
+  const date = toDateString(rows[0].date);
 
   const cards: SetPredictionRow[] = rows.map((r: any) => ({
     ...r, currentPrice: Number(r.currentPrice), confidencePct: Number(r.confidencePct),
@@ -661,6 +664,7 @@ export async function getSetPrediction(setCode: string): Promise<SetPrediction |
     : 'No strong bearish signal across this set right now.';
 
   return {
+    date,
     totalCards: cards.length,
     bullishCount: bullish.length,
     bearishCount: bearish.length,

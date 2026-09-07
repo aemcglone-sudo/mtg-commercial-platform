@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
       ? (params.get('sort') as ScoreboardSort) : 'confidence';
 
     const { rows, timedOut } = await getScoreboard(direction, sort);
-    return NextResponse.json({ rows, timedOut });
+    return NextResponse.json({ rows, timedOut, asOfDate: rows[0]?.date ?? null });
   } catch (e) {
     console.error('GET /api/market/scoreboard failed:', e);
     return NextResponse.json({ error: 'Failed to load scoreboard' }, { status: 500 });
