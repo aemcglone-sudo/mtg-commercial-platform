@@ -63,10 +63,19 @@ export default function PortfolioPage() {
     return rows.slice(0, 100);
   }, [summary, filter, sort]);
 
+  // Trim the coverage ramp-up: early history dates only had a fraction of
+  // the collection price-tracked (e.g. 312 of ~3,740 cards on day one),
+  // so normalizing "to 100 at the first point" against that tiny,
+  // unrepresentative base would make the line look like it multiplied
+  // 10x+ overnight once real coverage caught up — a charting artifact,
+  // not real appreciation. Starting the comparison once coverage is
+  // reasonably complete (>=90% of final) keeps the normalized line honest.
   const chartSeries = useMemo(() => {
-    if (!summary) return [];
+    if (!summary || summary.history.length === 0) return [];
+    const maxCoverage = Math.max(...summary.history.map(h => h.cardsPriced));
+    const stableHistory = summary.history.filter(h => h.cardsPriced >= maxCoverage * 0.9);
     return [
-      { label: 'My Portfolio', color: '#fbbf24', points: summary.history.map(h => ({ date: h.date, value: h.value })) },
+      { label: 'My Portfolio', color: '#fbbf24', points: stableHistory.map(h => ({ date: h.date, value: h.value })) },
       { label: 'Market Index', color: '#60a5fa', points: indexPoints.map(p => ({ date: p.date, value: p.indexValue })) },
     ];
   }, [summary, indexPoints]);
@@ -119,8 +128,9 @@ export default function PortfolioPage() {
           <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 mb-6">
             <p className="text-xs uppercase tracking-wide text-zinc-500 mb-1">Portfolio vs. Market (indexed to 100 at each line's own start)</p>
             <p className="text-xs text-zinc-600 mb-3">
-              Early portfolio value understates the true total — before full-catalog price tracking began (~Sept 3), only some of your
-              collection had a tracked price, so the line grows partly because coverage grew, not just because value did.
+              Starts once your collection's price coverage is stable (full-catalog tracking began ~Sept 3) — earlier dates only had a
+              small fraction of your cards priced, which would otherwise make the line look like it multiplied overnight as coverage
+              caught up, not because value actually changed.
             </p>
             <ComparisonChart series={chartSeries} height={240} />
           </div>

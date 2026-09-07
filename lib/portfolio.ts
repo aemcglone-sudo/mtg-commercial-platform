@@ -50,16 +50,20 @@ export interface PortfolioSummary {
 async function computeHoldings(userId: string): Promise<PortfolioHolding[]> {
   const rows = await query<any>(
     `WITH owned AS (
-       SELECT "scryfallId" as scryfall_id, SUM(quantity) as qty
+       SELECT "scryfallId" as scryfall_id,
+              bool_or(finish IN ('foil', 'etched')) as any_foil,
+              SUM(quantity) FILTER (WHERE finish IN ('foil', 'etched')) as foil_qty,
+              SUM(quantity) FILTER (WHERE finish IS DISTINCT FROM 'foil' AND finish IS DISTINCT FROM 'etched') as nonfoil_qty,
+              SUM(quantity) as qty
        FROM inventory_items
        WHERE "userId" = ? AND "scryfallId" IS NOT NULL
        GROUP BY "scryfallId"
      ),
      latest_price AS (
-       SELECT DISTINCT ON (s.scryfall_id) s.scryfall_id, s.card_name, s.set_code, s.usd
+       SELECT DISTINCT ON (s.scryfall_id) s.scryfall_id, s.card_name, s.set_code, s.usd, s.usd_foil
        FROM market_price_snapshots s
        JOIN owned o ON o.scryfall_id = s.scryfall_id
-       WHERE s.usd IS NOT NULL
+       WHERE s.usd IS NOT NULL OR s.usd_foil IS NOT NULL
        ORDER BY s.scryfall_id, s.price_date DESC
      ),
      latest_pred AS (
@@ -68,7 +72,8 @@ async function computeHoldings(userId: string): Promise<PortfolioHolding[]> {
        JOIN owned o ON o.scryfall_id = p.scryfall_id
        ORDER BY p.scryfall_id, p.date DESC
      )
-     SELECT o.scryfall_id as "scryfallId", o.qty, lp.card_name as "cardName", lp.set_code as "setCode", lp.usd,
+     SELECT o.scryfall_id as "scryfallId", o.qty, o.foil_qty as "foilQty", o.nonfoil_qty as "nonfoilQty",
+            lp.card_name as "cardName", lp.set_code as "setCode", lp.usd, lp.usd_foil as "usdFoil",
             pr.prediction_direction as "predictionDirection", pr.confidence_pct as "confidencePct",
             pr.target_price_6m as "targetPrice6m", pr.matched_pattern as "matchedPattern"
      FROM owned o
@@ -77,14 +82,27 @@ async function computeHoldings(userId: string): Promise<PortfolioHolding[]> {
     [userId],
     30000
   );
-  return rows.map((r: any) => ({
-    ...r,
-    qty: Number(r.qty),
-    usd: r.usd !== null ? Number(r.usd) : null,
-    positionValue: r.usd !== null ? Number(r.usd) * Number(r.qty) : null,
-    confidencePct: r.confidencePct !== null ? Number(r.confidencePct) : null,
-    targetPrice6m: r.targetPrice6m !== null ? Number(r.targetPrice6m) : null,
-  }));
+  // Mirrors lib/scryfall.ts's cardPrice(): foil/etched copies price off
+  // usd_foil when it's actually available, falling back to usd otherwise.
+  // A holding can be a mix of foil and nonfoil copies of the same
+  // printing (two separate inventory rows), so position value is built
+  // from each sub-quantity's correct price rather than one blended rate.
+  return rows.map((r: any) => {
+    const usd = r.usd !== null ? Number(r.usd) : null;
+    const usdFoil = r.usdFoil !== null ? Number(r.usdFoil) : null;
+    const foilQty = Number(r.foilQty ?? 0);
+    const nonfoilQty = Number(r.nonfoilQty ?? 0);
+    const foilPrice = usdFoil !== null && usdFoil > 0 ? usdFoil : usd;
+    const positionValue = (foilPrice !== null ? foilPrice * foilQty : 0) + (usd !== null ? usd * nonfoilQty : 0);
+    const effectivePrice = (foilQty > 0 && nonfoilQty === 0) ? foilPrice : usd;
+    return {
+      scryfallId: r.scryfallId, cardName: r.cardName, setCode: r.setCode,
+      qty: Number(r.qty), usd: effectivePrice,
+      positionValue: (usd !== null || usdFoil !== null) ? positionValue : null,
+      predictionDirection: r.predictionDirection, confidencePct: r.confidencePct !== null ? Number(r.confidencePct) : null,
+      targetPrice6m: r.targetPrice6m !== null ? Number(r.targetPrice6m) : null, matchedPattern: r.matchedPattern,
+    };
+  });
 }
 
 /** Total collection value on every date we have price history for the
@@ -96,15 +114,19 @@ async function computeHoldings(userId: string): Promise<PortfolioHolding[]> {
 async function computeHistory(userId: string): Promise<PortfolioPoint[]> {
   const rows = await query<any>(
     `WITH owned AS (
-       SELECT "scryfallId" as scryfall_id, SUM(quantity) as qty
+       SELECT "scryfallId" as scryfall_id,
+              SUM(quantity) FILTER (WHERE finish IN ('foil', 'etched')) as foil_qty,
+              SUM(quantity) FILTER (WHERE finish IS DISTINCT FROM 'foil' AND finish IS DISTINCT FROM 'etched') as nonfoil_qty
        FROM inventory_items
        WHERE "userId" = ? AND "scryfallId" IS NOT NULL
        GROUP BY "scryfallId"
      )
-     SELECT s.price_date as date, SUM(s.usd * o.qty) as value, COUNT(DISTINCT s.scryfall_id) as "cardsPriced"
+     SELECT s.price_date as date,
+       SUM(COALESCE(o.nonfoil_qty, 0) * COALESCE(s.usd, s.usd_foil) + COALESCE(o.foil_qty, 0) * COALESCE(NULLIF(s.usd_foil, 0), s.usd)) as value,
+       COUNT(DISTINCT s.scryfall_id) as "cardsPriced"
      FROM market_price_snapshots s
      JOIN owned o ON o.scryfall_id = s.scryfall_id
-     WHERE s.usd IS NOT NULL
+     WHERE s.usd IS NOT NULL OR s.usd_foil IS NOT NULL
      GROUP BY s.price_date
      ORDER BY s.price_date ASC`,
     [userId],
