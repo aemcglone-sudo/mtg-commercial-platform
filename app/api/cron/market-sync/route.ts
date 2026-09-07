@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { runDailyPriceSync } from '@/lib/market-sync';
 import { refreshMoversCache, vacuumSnapshots, vacuumPredictions, refreshHighValueCache, refreshCategoryHighValueCache, refreshFoilPremiumCache } from '@/lib/market';
+import { refreshDeckValueCache } from '@/lib/deck-value';
 import { refreshSetReleaseDates, calculateSignals } from '@/lib/signal-calculator';
 import { seedPatternLibrary, calculatePredictions } from '@/lib/prediction-engine';
 import { refreshCardNews } from '@/lib/card-news';
@@ -87,6 +88,15 @@ export async function GET(req: NextRequest) {
       portfolioResult = { error: e instanceof Error ? e.message : 'unknown' };
     }
 
+    let deckValueResult: unknown = { skipped: true };
+    try {
+      deckValueResult = await refreshDeckValueCache();
+      console.log('Deck value cache refreshed:', deckValueResult);
+    } catch (e) {
+      console.error('Deck value cache refresh failed (non-fatal):', e);
+      deckValueResult = { error: e instanceof Error ? e.message : 'unknown' };
+    }
+
     // Isolated from the rest: a Tavily/Gemini hiccup shouldn't fail a run
     // that already successfully wrote prices, signals, and predictions.
     let newsResult: unknown = { skipped: true };
@@ -110,7 +120,7 @@ export async function GET(req: NextRequest) {
       indexResult = { error: e instanceof Error ? e.message : 'unknown' };
     }
 
-    return NextResponse.json({ success: true, sync: syncResult, movers: moversResult, highValue: highValueResult, categoryHighValue: categoryResult, foilPremium: foilPremiumResult, signals: signalsResult, predictions: predictionsResult, portfolio: portfolioResult, news: newsResult, index: indexResult });
+    return NextResponse.json({ success: true, sync: syncResult, movers: moversResult, highValue: highValueResult, categoryHighValue: categoryResult, foilPremium: foilPremiumResult, signals: signalsResult, predictions: predictionsResult, portfolio: portfolioResult, deckValue: deckValueResult, news: newsResult, index: indexResult });
   } catch (e) {
     console.error('Market sync failed:', e);
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Sync failed' }, { status: 500 });

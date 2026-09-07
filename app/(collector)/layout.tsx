@@ -13,7 +13,9 @@ import {
 const NAV = [
   { href: '/?tab=collection', label: 'My Collection', exact: true, tourId: 'nav-collection', icon: <CollectionIcon /> },
   { href: '/?tab=insights',   label: 'Insights', tourId: 'nav-insights', icon: <InsightsIcon /> },
-  { href: '/?tab=mydecks',    label: 'My Decks & Lists', tourId: 'nav-mydecks', icon: <DecksIcon /> },
+  { href: '/?tab=mydecks',    label: 'My Decks & Lists', tourId: 'nav-mydecks', icon: <DecksIcon />, children: [
+    { href: '/decks/value',        label: 'Commander Deck Values' },
+  ]},
   { href: '/?tab=decks',      label: 'Top Decks', tourId: 'nav-decks', icon: <TrophyIcon /> },
   { href: '/?tab=news',       label: 'News', tourId: 'nav-news', icon: <NewsIcon /> },
   { href: '/?tab=chat',       label: 'Ask Khoa', tourId: 'nav-chat', icon: <ChatIcon /> },
