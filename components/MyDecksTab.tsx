@@ -34,6 +34,7 @@ export default function MyDecksTab({ collection }: Props) {
   const [showImport, setShowImport] = useState(false);
   const [loading, setLoading] = useState(true);
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
+  const [commanderImages, setCommanderImages] = useState<Map<string, string>>(new Map());
 
   useEffect(() => {
     loadDecks();
@@ -45,6 +46,48 @@ export default function MyDecksTab({ collection }: Props) {
       })
       .catch(() => {});
   }, []);
+
+  // Commander art thumbnails for the deck list — one batched Scryfall
+  // lookup (up to 75 names/request, same endpoint already used elsewhere
+  // in this file for paste-import matching) instead of a fetch per deck,
+  // since multiple decks commonly share a commander. Tracks attempted
+  // names in a ref (not state) so a commander Scryfall can't resolve
+  // doesn't get retried on every render — that would both hammer the API
+  // and infinite-loop the effect, since a plain "not yet in the map"
+  // check can't tell "still loading" apart from "permanently missing".
+  const attemptedCommanderNames = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const names = Array.from(new Set(
+      decks
+        .filter(d => d.format !== 'List' && d.commander)
+        .map(d => d.commander!.trim())
+    )).filter(name => !attemptedCommanderNames.current.has(name.toLowerCase()));
+    if (names.length === 0) return;
+    for (const name of names) attemptedCommanderNames.current.add(name.toLowerCase());
+
+    let cancelled = false;
+    (async () => {
+      const identifiers = names.slice(0, 75).map(name => ({ name }));
+      try {
+        const res = await fetch('https://api.scryfall.com/cards/collection', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ identifiers }),
+        });
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        const found: [string, string][] = [];
+        for (const card of (data.data ?? [])) {
+          const imageUrl = card.image_uris?.normal ?? card.card_faces?.[0]?.image_uris?.normal ?? null;
+          if (imageUrl) found.push([card.name.toLowerCase(), imageUrl]);
+        }
+        if (found.length > 0) setCommanderImages(prev => new Map([...prev, ...found]));
+      } catch {
+        // Non-critical — deck list still renders fine without commander art.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [decks]);
 
   async function loadDecks() {
     try {
@@ -262,13 +305,26 @@ export default function MyDecksTab({ collection }: Props) {
                     }}
                   >
                     <div className="flex items-start justify-between gap-4 mb-2">
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold text-zinc-100 truncate">{deck.name}</h3>
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                          <p className="text-xs text-zinc-500">{deck.format}</p>
-                          <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${deck.deckType === 'arena' ? 'bg-purple-900/50 text-purple-300' : 'bg-zinc-800 text-zinc-400'}`}>
-                            {deck.deckType === 'arena' ? '⚡ Arena' : '📄 Paper'}
-                          </span>
+                      <div className="flex items-start gap-3 flex-1 min-w-0">
+                        {deck.commander && commanderImages.get(deck.commander.trim().toLowerCase()) && (
+                          <img
+                            src={commanderImages.get(deck.commander.trim().toLowerCase())}
+                            alt={deck.commander}
+                            title={deck.commander}
+                            className="w-12 h-12 rounded-lg object-cover object-top border border-zinc-700 shrink-0"
+                          />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-semibold text-zinc-100 truncate">{deck.name}</h3>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <p className="text-xs text-zinc-500">{deck.format}</p>
+                            <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${deck.deckType === 'arena' ? 'bg-purple-900/50 text-purple-300' : 'bg-zinc-800 text-zinc-400'}`}>
+                              {deck.deckType === 'arena' ? '⚡ Arena' : '📄 Paper'}
+                            </span>
+                          </div>
+                          {deck.commander && (
+                            <p className="text-xs text-zinc-500 truncate mt-0.5">Commander: {deck.commander}</p>
+                          )}
                         </div>
                       </div>
                       <div className="flex items-center gap-3 shrink-0">
