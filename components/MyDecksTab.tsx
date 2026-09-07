@@ -269,12 +269,12 @@ export default function MyDecksTab({ collection }: Props) {
         </div>
       </div>
 
-      {/* Two column layout: Decks on left, Lists on right */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Decks Column */}
+      {/* Decks and Lists stacked full-width, each with its own responsive card grid */}
+      <div className="space-y-8">
+        {/* Decks Section */}
         <div className="space-y-4">
           <h3 className="text-lg font-semibold text-zinc-100">🎯 Decks ({deckList.length})</h3>
-          <div className="grid gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
             {deckList.length === 0 ? (
               <p className="text-sm text-zinc-500 py-4">No decks yet. Create one to get started!</p>
             ) : (
@@ -293,7 +293,7 @@ export default function MyDecksTab({ collection }: Props) {
                 return (
                   <div
                     key={deck.id}
-                    className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 hover:border-zinc-600 transition-colors space-y-3 cursor-pointer"
+                    className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 hover:border-zinc-600 transition-colors space-y-3 cursor-pointer"
                     onClick={() => setSelectedDeck(deck)}
                     role="button"
                     tabIndex={0}
@@ -307,12 +307,21 @@ export default function MyDecksTab({ collection }: Props) {
                     <div className="flex items-start justify-between gap-4 mb-2">
                       <div className="flex items-start gap-3 flex-1 min-w-0">
                         {deck.commander && commanderImages.get(deck.commander.trim().toLowerCase()) && (
-                          <img
-                            src={commanderImages.get(deck.commander.trim().toLowerCase())}
-                            alt={deck.commander}
-                            title={deck.commander}
-                            className="w-12 h-12 rounded-lg object-cover object-top border border-zinc-700 shrink-0"
-                          />
+                          <div className="relative group/thumb shrink-0">
+                            <img
+                              src={commanderImages.get(deck.commander.trim().toLowerCase())}
+                              alt={deck.commander}
+                              title={deck.commander}
+                              className="w-20 h-20 rounded-lg object-cover object-top border border-zinc-700"
+                            />
+                            <div className="hidden group-hover/thumb:block absolute z-20 top-0 left-full ml-2 pointer-events-none">
+                              <img
+                                src={commanderImages.get(deck.commander.trim().toLowerCase())}
+                                alt={deck.commander}
+                                className="w-56 rounded-xl border-2 border-zinc-600 shadow-2xl"
+                              />
+                            </div>
+                          </div>
                         )}
                         <div className="flex-1 min-w-0">
                           <h3 className="font-semibold text-zinc-100 truncate">{deck.name}</h3>
@@ -377,10 +386,10 @@ export default function MyDecksTab({ collection }: Props) {
           </div>
         </div>
 
-        {/* Lists Column */}
+        {/* Lists Section */}
         <div className="space-y-4">
           <h3 className="text-lg font-semibold text-zinc-100">📋 Lists ({listsList.length})</h3>
-          <div className="grid gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
             {listsList.length === 0 ? (
               <p className="text-sm text-zinc-500 py-2">No lists yet.</p>
             ) : (
