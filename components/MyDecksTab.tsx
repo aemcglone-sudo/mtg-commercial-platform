@@ -35,6 +35,7 @@ export default function MyDecksTab({ collection }: Props) {
   const [loading, setLoading] = useState(true);
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
   const [commanderImages, setCommanderImages] = useState<Map<string, string>>(new Map());
+  const [hoveredCommanderDeckId, setHoveredCommanderDeckId] = useState<string | null>(null);
 
   useEffect(() => {
     loadDecks();
@@ -307,20 +308,26 @@ export default function MyDecksTab({ collection }: Props) {
                     <div className="flex items-start justify-between gap-4 mb-2">
                       <div className="flex items-start gap-3 flex-1 min-w-0">
                         {deck.commander && commanderImages.get(deck.commander.trim().toLowerCase()) && (
-                          <div className="relative group/thumb shrink-0">
+                          <div
+                            className="relative shrink-0"
+                            onMouseEnter={() => setHoveredCommanderDeckId(deck.id)}
+                            onMouseLeave={() => setHoveredCommanderDeckId(prev => (prev === deck.id ? null : prev))}
+                          >
                             <img
                               src={commanderImages.get(deck.commander.trim().toLowerCase())}
                               alt={deck.commander}
                               title={deck.commander}
                               className="w-20 h-20 rounded-lg object-cover object-top border border-zinc-700"
                             />
-                            <div className="hidden group-hover/thumb:block absolute z-20 top-0 left-full ml-2 pointer-events-none">
-                              <img
-                                src={commanderImages.get(deck.commander.trim().toLowerCase())}
-                                alt={deck.commander}
-                                className="w-56 rounded-xl border-2 border-zinc-600 shadow-2xl"
-                              />
-                            </div>
+                            {hoveredCommanderDeckId === deck.id && (
+                              <div className="absolute z-50 top-0 left-full ml-2 pointer-events-none">
+                                <img
+                                  src={commanderImages.get(deck.commander.trim().toLowerCase())}
+                                  alt={deck.commander}
+                                  className="w-56 rounded-xl border-2 border-zinc-600 shadow-2xl"
+                                />
+                              </div>
+                            )}
                           </div>
                         )}
                         <div className="flex-1 min-w-0">
