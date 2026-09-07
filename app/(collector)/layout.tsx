@@ -27,6 +27,7 @@ const NAV = [
     { href: '/market/index',       label: 'Market Index' },
     { href: '/market/high-value',  label: 'Highest Value Cards' },
     { href: '/market/foil-premium', label: 'Foil Premium' },
+    { href: '/market/precons',     label: 'Precon Deck Values' },
   ]},
   { label: 'Shop', dividerAfter: true, tourId: 'nav-shop-group', icon: <ShopIcon />, children: [
     { href: '/stores',            label: 'Nearby Shops' },

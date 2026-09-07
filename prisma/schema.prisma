@@ -982,3 +982,40 @@ model MarketIndexSnapshot {
 
   @@map("market_index_snapshots")
 }
+
+// Official precon Commander deck PRODUCTS (sealed boxes like "Fallout:
+// Scrappy Survivors"), not custom decklists — see lib/precon.ts. Static
+// reference data sourced once from MTGJSON's DeckList/deck endpoints
+// (Scryfall has no concept of "which precon a card belongs to" — a
+// release like Fallout Commander is one set code shared across all 4
+// decks in it), re-ingested only when new precons release, not daily.
+model PreconProduct {
+  id          String   @id @default(cuid())
+  name        String
+  setCode     String   @map("set_code")
+  commander   String?
+  releaseDate DateTime? @map("release_date") @db.Date
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  cards PreconProductCard[]
+
+  @@unique([name, setCode])
+  @@map("precon_products")
+}
+
+model PreconProductCard {
+  id          String  @id @default(cuid())
+  productId   String  @map("product_id")
+  product     PreconProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+  scryfallId  String  @map("scryfall_id")
+  cardName    String  @map("card_name")
+  qty         Int
+  // True when this exact printing only ever exists as foil in this
+  // product (most modern precon exclusives) — determines whether pricing
+  // should prefer usd_foil over usd for this line.
+  foilOnly    Boolean @default(false) @map("foil_only")
+
+  @@unique([productId, scryfallId])
+  @@index([productId])
+  @@map("precon_product_cards")
+}
