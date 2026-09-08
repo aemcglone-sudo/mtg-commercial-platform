@@ -70,15 +70,27 @@ export async function GET(req: NextRequest) {
     const releaseDatesCount = await refreshSetReleaseDates();
     console.log('Set release dates refreshed:', releaseDatesCount);
 
-    const signalsResult = await calculateSignals();
-    console.log('Signals calculated:', signalsResult);
+    // Isolated like everything else below: a transient DB connection drop
+    // during this (long-running, per-card) step must not also take out
+    // portfolio/deck-value/precon-value/news/index for the whole run.
+    let signalsResult: unknown = { skipped: true };
+    let predictionsResult: unknown = { skipped: true };
+    try {
+      signalsResult = await calculateSignals();
+      console.log('Signals calculated:', signalsResult);
 
-    await seedPatternLibrary();
-    const predictionsResult = await calculatePredictions();
-    console.log('Predictions calculated:', predictionsResult);
+      await seedPatternLibrary();
+      predictionsResult = await calculatePredictions();
+      console.log('Predictions calculated:', predictionsResult);
 
-    await vacuumPredictions();
-    console.log('Vacuumed market_predictions.');
+      await vacuumPredictions();
+      console.log('Vacuumed market_predictions.');
+    } catch (e) {
+      console.error('Signals/predictions failed (non-fatal):', e);
+      const errMsg = e instanceof Error ? e.message : 'unknown';
+      if (signalsResult && typeof signalsResult === 'object' && 'skipped' in signalsResult) signalsResult = { error: errMsg };
+      if (predictionsResult && typeof predictionsResult === 'object' && 'skipped' in predictionsResult) predictionsResult = { error: errMsg };
+    }
 
     let portfolioResult: unknown = { skipped: true };
     try {

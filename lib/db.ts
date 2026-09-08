@@ -11,6 +11,14 @@ if (!g._pool) g._pool = new Pool({
 });
 const pool = g._pool;
 
+// pg.Pool emits 'error' on idle clients the server closes out from under it
+// (e.g. a managed Postgres restarting a backend). An EventEmitter's 'error'
+// event throws as an uncaught exception if nothing listens for it — which
+// was crashing in-flight requests app-wide, unrelated to their own try/catch.
+pool.on('error', (err) => {
+  console.error('Unexpected error on idle Postgres client:', err);
+});
+
 type Arg = string | number | boolean | null | string[];
 
 function toPostgres(sql: string): string {
