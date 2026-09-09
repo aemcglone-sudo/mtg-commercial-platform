@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import Link from 'next/link';
 import Sparkline from '@/components/Sparkline';
+import PriceChange from '@/components/PriceChange';
 
 interface CardSearchOption { name: string; scryfallId: string; imageUrl: string | null; typeLine: string | null; setCode: string | null; setName: string | null; }
 interface SetMeta { code: string; name: string; }
@@ -12,19 +13,6 @@ interface CardMover { scryfallId: string; cardName: string; setCode: string; usd
 interface WatchlistItem { id: string; kind: 'card' | 'set'; scryfallId: string | null; cardName: string | null; setCode: string | null; setName: string | null; createdAt: string; }
 
 const WINDOWS = [7, 30, 90];
-
-function fmtUsd(n: number): string {
-  return `$${n.toFixed(2)}`;
-}
-
-function ChangeBadge({ pct }: { pct: number }) {
-  const up = pct >= 0;
-  return (
-    <span className={`text-xs font-semibold ${up ? 'text-emerald-400' : 'text-red-400'}`}>
-      {up ? '▲' : '▼'} {Math.abs(pct).toFixed(1)}%
-    </span>
-  );
-}
 
 export default function MarketPage() {
   const [tab, setTab] = useState<'movers' | 'watchlist'>('movers');
@@ -176,12 +164,12 @@ export default function MarketPage() {
                 <h2 className="text-sm font-semibold text-zinc-300 mb-3">Card Movers ({days}d)</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <MoversTable
-                    title="Gainers" rows={cardMovers?.gainers ?? []} kind="card" setName={setName}
+                    title="Top Gainers" rows={cardMovers?.gainers ?? []} kind="card" setName={setName}
                     isWatched={r => isCardWatched(r.scryfallId)}
                     onWatch={r => addCardWatch(r.scryfallId, r.cardName, r.setCode)}
                   />
                   <MoversTable
-                    title="Losers" rows={cardMovers?.losers ?? []} kind="card" setName={setName}
+                    title="Top Losers" rows={cardMovers?.losers ?? []} kind="card" setName={setName}
                     isWatched={r => isCardWatched(r.scryfallId)}
                     onWatch={r => addCardWatch(r.scryfallId, r.cardName, r.setCode)}
                   />
@@ -265,8 +253,11 @@ function MoversTable<T extends { changePercent: number }>({
             {kind === 'set' && r.sparkline && r.sparkline.length >= 2 && (
               <Sparkline values={r.sparkline} positive={r.changePercent >= 0} />
             )}
-            <span className="text-zinc-500 text-xs shrink-0">{fmtUsd(kind === 'set' ? r.avgUsdNow : r.usdNow)}</span>
-            <span className="shrink-0"><ChangeBadge pct={r.changePercent} /></span>
+            <PriceChange
+              price={kind === 'set' ? r.avgUsdNow : r.usdNow}
+              changeAbs={(kind === 'set' ? r.avgUsdNow : r.usdNow) - (kind === 'set' ? r.avgUsdBefore : r.usdBefore)}
+              changePct={r.changePercent}
+            />
             <button type="button" onClick={() => onWatch(r)} disabled={isWatched(r)}
               className={`shrink-0 text-xs ${isWatched(r) ? 'text-amber-400' : 'text-zinc-600 hover:text-amber-400'}`}
               title={isWatched(r) ? 'Watching' : 'Add to watchlist'}>
@@ -301,8 +292,7 @@ function SetMoversPanel({
             {r.sparkline && r.sparkline.length >= 2 && (
               <Sparkline values={r.sparkline} positive={r.changePercent >= 0} width={160} height={28} />
             )}
-            <span className="text-zinc-500 text-xs shrink-0 w-16 text-right">{fmtUsd(r.avgUsdNow)}</span>
-            <span className="shrink-0 w-20 text-right"><ChangeBadge pct={r.changePercent} /></span>
+            <PriceChange price={r.avgUsdNow} changeAbs={r.avgUsdNow - r.avgUsdBefore} changePct={r.changePercent} />
             <button type="button" onClick={() => onWatch(r)} disabled={isWatched(r)}
               className={`shrink-0 text-xs ${isWatched(r) ? 'text-amber-400' : 'text-zinc-600 hover:text-amber-400'}`}
               title={isWatched(r) ? 'Watching' : 'Add to watchlist'}>

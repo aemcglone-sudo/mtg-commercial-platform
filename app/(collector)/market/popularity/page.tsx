@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import BackButton from '@/components/BackButton';
 import AsOfDate from '@/components/AsOfDate';
+import PriceChange from '@/components/PriceChange';
 
 interface PopularityPriceRow {
   cardName: string;
@@ -17,6 +18,7 @@ interface PopularityPriceRow {
   earliestInclusionRate: number | null;
   earliestDate: string | null;
   inclusionRateChangePct: number | null;
+  priceChangeAbs: number | null;
   priceChangePct: number | null;
   daysTracked: number;
 }
@@ -125,8 +127,7 @@ export default function PopularityVsPricePage() {
                   <th className="px-4 py-3 font-medium">Commander</th>
                   <th className="px-4 py-3 font-medium">Inclusion</th>
                   <th className="px-4 py-3 font-medium">Popularity Δ</th>
-                  <th className="px-4 py-3 font-medium">Price</th>
-                  <th className="px-4 py-3 font-medium">Price Δ</th>
+                  <th className="px-4 py-3 font-medium">Price / Δ</th>
                 </tr>
               </thead>
               <tbody>
@@ -146,9 +147,14 @@ export default function PopularityVsPricePage() {
                     <td className={`px-4 py-3 font-medium ${r.inclusionRateChangePct === null ? 'text-zinc-600' : r.inclusionRateChangePct > 0 ? 'text-emerald-400' : r.inclusionRateChangePct < 0 ? 'text-red-400' : 'text-zinc-400'}`}>
                       {r.inclusionRateChangePct === null ? '—' : fmtPct(r.inclusionRateChangePct)}
                     </td>
-                    <td className="px-4 py-3 text-zinc-400">{r.priceUsd !== null ? fmtUsd(r.priceUsd) : '—'}</td>
-                    <td className={`px-4 py-3 font-medium ${r.priceChangePct === null ? 'text-zinc-600' : r.priceChangePct > 0 ? 'text-emerald-400' : r.priceChangePct < 0 ? 'text-red-400' : 'text-zinc-400'}`}>
-                      {r.priceChangePct === null ? '—' : fmtPct(r.priceChangePct)}
+                    <td className="px-4 py-3">
+                      {r.priceUsd === null ? (
+                        <span className="text-zinc-600">—</span>
+                      ) : r.priceChangeAbs !== null && r.priceChangePct !== null ? (
+                        <PriceChange price={r.priceUsd} changeAbs={r.priceChangeAbs} changePct={r.priceChangePct} />
+                      ) : (
+                        <span className="text-zinc-400">{fmtUsd(r.priceUsd)}</span>
+                      )}
                     </td>
                   </tr>
                 ))}

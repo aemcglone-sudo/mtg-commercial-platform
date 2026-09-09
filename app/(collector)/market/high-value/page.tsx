@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import Sparkline from '@/components/Sparkline';
 import BackButton from '@/components/BackButton';
+import PriceChange from '@/components/PriceChange';
 
 interface Event {
   scryfallId: string; category: string; summary: string; sourceUrls: string[]; detectedAt: string;
@@ -132,9 +133,8 @@ export default function HighValueCardsPage() {
                 <tr className="text-left text-zinc-500 text-xs uppercase tracking-wide border-b border-zinc-800">
                   <th className="px-4 py-3 font-medium">#</th>
                   <th className="px-4 py-3 font-medium">Card</th>
-                  <th className="px-4 py-3 font-medium">Price</th>
                   <th className="px-4 py-3 font-medium">30d trend</th>
-                  <th className="px-4 py-3 font-medium">30d change</th>
+                  <th className="px-4 py-3 font-medium">Price / 30d change</th>
                   <th className="px-4 py-3 font-medium">News</th>
                 </tr>
               </thead>
@@ -150,7 +150,6 @@ export default function HighValueCardsPage() {
                           <span className="text-zinc-500 text-xs"> — {setName(c.setCode)}</span>
                         </Link>
                       </td>
-                      <td className="px-4 py-3 text-zinc-200 font-medium">{fmtUsd(c.usd)}</td>
                       <td className="px-4 py-3">
                         {c.sparkline.length >= 2
                           ? <Sparkline values={c.sparkline} positive={(change ?? 0) >= 0} width={100} height={24} />
@@ -158,10 +157,10 @@ export default function HighValueCardsPage() {
                       </td>
                       <td className="px-4 py-3">
                         {change !== null ? (
-                          <span className={`text-xs font-semibold ${change >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                            {change >= 0 ? '▲' : '▼'} {Math.abs(change).toFixed(1)}%
-                          </span>
-                        ) : <span className="text-zinc-600 text-xs">—</span>}
+                          <PriceChange price={c.usd} changeAbs={c.usd - c.sparkline[0]} changePct={change} />
+                        ) : (
+                          <span className="text-zinc-200 font-medium">{fmtUsd(c.usd)}</span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-xs text-zinc-500 max-w-[220px]">
                         {c.latestEvent ? (

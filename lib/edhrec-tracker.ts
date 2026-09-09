@@ -84,6 +84,7 @@ export interface PopularityPriceRow {
   earliestInclusionRate: number | null;
   earliestDate: string | null;
   inclusionRateChangePct: number | null;
+  priceChangeAbs: number | null;
   priceChangePct: number | null;
   daysTracked: number;
 }
@@ -184,6 +185,9 @@ export async function getPopularityVsPrice(lookbackDays = 30): Promise<Popularit
     const inclusionRateChangePct = early && early.inclusionRate > 0 && early.snapshotDate !== row.snapshotDate
       ? ((row.inclusionRate - early.inclusionRate) / early.inclusionRate) * 100
       : null;
+    const priceChangeAbs = currentPrice && earliestPrice && earliestPrice.date !== currentPrice.date
+      ? currentPrice.usd - earliestPrice.usd
+      : null;
     const priceChangePct = currentPrice && earliestPrice && earliestPrice.usd > 0 && earliestPrice.date !== currentPrice.date
       ? ((currentPrice.usd - earliestPrice.usd) / earliestPrice.usd) * 100
       : null;
@@ -199,6 +203,7 @@ export async function getPopularityVsPrice(lookbackDays = 30): Promise<Popularit
       priceDate: currentPrice?.date ?? null,
       earliestInclusionRate: early?.inclusionRate ?? null,
       earliestDate: early?.snapshotDate ?? null,
+      priceChangeAbs,
       inclusionRateChangePct,
       priceChangePct,
       daysTracked: daysByKey.get(key) ?? 1,
