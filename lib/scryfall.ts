@@ -14,7 +14,8 @@ export interface ScryfallCard {
   toughness?: string;
   artist?: string;           // card illustrator name
   image_uris?: { small: string; normal: string; large: string };
-  card_faces?: Array<{ image_uris?: { small: string; normal: string }; colors?: string[]; power?: string; toughness?: string }>;
+  card_faces?: Array<{ name?: string; type_line?: string; oracle_text?: string; mana_cost?: string; image_uris?: { small: string; normal: string }; colors?: string[]; power?: string; toughness?: string }>;
+  mana_cost?: string;
   prices: { usd: string | null; usd_foil: string | null };
   scryfall_uri: string;
   set: string;

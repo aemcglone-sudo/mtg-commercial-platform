@@ -77,6 +77,7 @@ export interface PopularityPriceRow {
   scryfallId: string | null;
   commanderName: string;
   commanderSlug: string;
+  commanderScryfallId: string | null;
   inclusionRate: number;
   numDecks: number;
   priceUsd: number | null;
@@ -170,14 +171,21 @@ export async function getPopularityVsPrice(lookbackDays = 30): Promise<Popularit
   }
 
   // Just for linking to the card detail page — the cheapest printing as of
-  // the most recent tracked date, one lookup, not per-day like the series above.
-  const scryfallIdRows = cardNames.length > 0
+  // the most recent tracked date, one lookup, not per-day like the series
+  // above. Covers commander names too (same lookup, so clicking a commander
+  // in the table goes to the same card-detail page any other card links
+  // to) — some EDHREC commander names ("Ur-Dragon, the") don't exactly
+  // match their Scryfall name ("The Ur-Dragon"), so this can legitimately
+  // miss for a handful of commanders; those just render as plain text.
+  const commanderNames = Array.from(new Set(latest.map(r => r.commanderName)));
+  const namesToResolve = Array.from(new Set([...cardNames, ...commanderNames]));
+  const scryfallIdRows = namesToResolve.length > 0
     ? await query<{ cardName: string; scryfallId: string }>(
         `SELECT DISTINCT ON (card_name) card_name as "cardName", scryfall_id as "scryfallId"
          FROM market_price_snapshots
          WHERE card_name = ANY(?) AND usd IS NOT NULL
          ORDER BY card_name, price_date DESC, usd ASC`,
-        [cardNames]
+        [namesToResolve]
       )
     : [];
   const scryfallIdByName = new Map(scryfallIdRows.map(r => [r.cardName, r.scryfallId]));
@@ -221,6 +229,7 @@ export async function getPopularityVsPrice(lookbackDays = 30): Promise<Popularit
       scryfallId: scryfallIdByName.get(row.cardName) ?? null,
       commanderName: row.commanderName,
       commanderSlug: row.commanderSlug,
+      commanderScryfallId: scryfallIdByName.get(row.commanderName) ?? null,
       inclusionRate: row.inclusionRate,
       numDecks: row.numDecks,
       priceUsd: currentPrice?.usd ?? null,

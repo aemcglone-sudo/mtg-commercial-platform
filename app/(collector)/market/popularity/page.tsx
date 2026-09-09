@@ -11,6 +11,7 @@ interface PopularityPriceRow {
   scryfallId: string | null;
   commanderName: string;
   commanderSlug: string;
+  commanderScryfallId: string | null;
   inclusionRate: number;
   numDecks: number;
   priceUsd: number | null;
@@ -157,7 +158,13 @@ export default function PopularityVsPricePage() {
                         <span className="text-zinc-200">{r.cardName}</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-zinc-500 text-xs">{r.commanderName}</td>
+                    <td className="px-4 py-3 text-zinc-500 text-xs">
+                      {r.commanderScryfallId ? (
+                        <Link href={`/market/card/${r.commanderScryfallId}`} className="hover:text-amber-400 transition-colors">
+                          {r.commanderName}
+                        </Link>
+                      ) : r.commanderName}
+                    </td>
                     <td className="px-4 py-3 text-zinc-400">{(r.inclusionRate * 100).toFixed(0)}%</td>
                     <td className={`px-4 py-3 font-medium ${r.inclusionRateChangePct === null ? 'text-zinc-600' : r.inclusionRateChangePct > 0 ? 'text-emerald-400' : r.inclusionRateChangePct < 0 ? 'text-red-400' : 'text-zinc-400'}`}>
                       {r.inclusionRateChangePct === null ? '—' : fmtPct(r.inclusionRateChangePct)}

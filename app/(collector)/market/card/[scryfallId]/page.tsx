@@ -8,7 +8,7 @@ import PredictionCard from '@/components/PredictionCard';
 import AsOfDate from '@/components/AsOfDate';
 
 interface PricePoint { date: string; usd: number | null; usdFoil: number | null; }
-interface CardInfo { scryfallId: string; name: string; setCode: string; setName: string; imageUrl: string | null; priceUsd: number | null; priceFoilUsd: number | null; rarity: string | null; scryfallUri: string; }
+interface CardInfo { scryfallId: string; name: string; setCode: string; setName: string; imageUrl: string | null; priceUsd: number | null; priceFoilUsd: number | null; rarity: string | null; scryfallUri: string; typeLine: string | null; oracleText: string | null; }
 interface CardSignal {
   date: string; setCode: string; rarity: string | null; cmc: number | null;
   daysSinceRelease: number | null; releasePhase: string | null;
@@ -134,7 +134,12 @@ export default function CardDetailPage() {
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div>
               <h1 className="text-2xl font-bold">{card?.name ?? 'Loading…'}</h1>
-              {card && <p className="text-sm text-zinc-500">{card.setName} ({card.setCode.toUpperCase()}) · {card.rarity}</p>}
+              {card && (
+                <p className="text-sm text-zinc-500">
+                  {card.setName} ({card.setCode.toUpperCase()}) · {card.rarity}
+                  {card.typeLine && <> · {card.typeLine}</>}
+                </p>
+              )}
             </div>
             {card && (
               <button type="button" onClick={toggleWatch}
@@ -158,6 +163,9 @@ export default function CardDetailPage() {
                 View on Scryfall →
               </a>
             </div>
+          )}
+          {card?.oracleText && (
+            <p className="text-sm text-zinc-300 mt-4 whitespace-pre-line leading-relaxed max-w-lg">{card.oracleText}</p>
           )}
         </div>
       </div>

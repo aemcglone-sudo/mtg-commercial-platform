@@ -12,6 +12,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ scry
     const card = cards.get(scryfallId);
     if (!card) return NextResponse.json({ error: 'Card not found' }, { status: 404 });
 
+    // Double-faced cards carry oracle text per-face, not at the top level —
+    // join both faces (front // back) the way Scryfall's own site presents them.
+    const typeLine = card.type_line ?? card.card_faces?.map(f => f.type_line).filter(Boolean).join(' // ') ?? null;
+    const oracleText = card.oracle_text ?? (card.card_faces && card.card_faces.length > 0
+      ? card.card_faces.map(f => [f.name, f.mana_cost, f.oracle_text].filter(Boolean).join(' ')).join('\n\n// \n\n')
+      : null);
+
     return NextResponse.json({
       card: {
         scryfallId: card.id,
@@ -23,6 +30,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ scry
         priceFoilUsd: card.prices.usd_foil ? parseFloat(card.prices.usd_foil) : null,
         rarity: card.rarity ?? null,
         scryfallUri: card.scryfall_uri,
+        typeLine,
+        oracleText,
       },
     });
   } catch (e) {
