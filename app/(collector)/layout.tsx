@@ -23,11 +23,13 @@ const NAV = [
   { href: '/simulator',       label: 'Commander Simulator', icon: <SimulatorIcon /> },
   { href: '/market',          label: 'Market', tourId: 'nav-market-group', icon: <MarketIcon />, children: [
     { href: '/portfolio',          label: 'My Portfolio' },
+    { href: '/market/signals',     label: 'Market Signals' },
     { href: '/market/scoreboard',  label: 'Speculation Scoreboard' },
     { href: '/market/index',       label: 'Market Index' },
     { href: '/market/high-value',  label: 'Highest Value Cards' },
     { href: '/market/foil-premium', label: 'Foil Premium' },
     { href: '/market/precons',     label: 'Precon Deck Values' },
+    { href: '/market/popularity',  label: 'Popularity vs Price' },
   ]},
   { label: 'Shop', dividerAfter: true, tourId: 'nav-shop-group', icon: <ShopIcon />, children: [
     { href: '/stores',            label: 'Nearby Shops' },

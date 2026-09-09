@@ -3,6 +3,7 @@ import { runDailyPriceSync } from '@/lib/market-sync';
 import { refreshMoversCache, vacuumSnapshots, vacuumPredictions, refreshHighValueCache, refreshCategoryHighValueCache, refreshFoilPremiumCache } from '@/lib/market';
 import { refreshDeckValueCache } from '@/lib/deck-value';
 import { refreshPreconValueCache } from '@/lib/precon';
+import { refreshEdhrecSnapshots, refreshEdhrecPopularityCache } from '@/lib/edhrec-tracker';
 import { refreshSetReleaseDates, calculateSignals } from '@/lib/signal-calculator';
 import { seedPatternLibrary, calculatePredictions } from '@/lib/prediction-engine';
 import { refreshCardNews } from '@/lib/card-news';
@@ -119,6 +120,19 @@ export async function GET(req: NextRequest) {
       preconValueResult = { error: e instanceof Error ? e.message : 'unknown' };
     }
 
+    // Isolated: EDHREC pulls ~20 external pages sequentially — a timeout
+    // or their site blocking us shouldn't fail an otherwise-successful run.
+    let edhrecResult: unknown = { skipped: true };
+    try {
+      const snapshotResult = await refreshEdhrecSnapshots();
+      const cacheResult = await refreshEdhrecPopularityCache();
+      edhrecResult = { ...snapshotResult, ...cacheResult };
+      console.log('EDHREC popularity snapshots refreshed:', edhrecResult);
+    } catch (e) {
+      console.error('EDHREC popularity snapshot refresh failed (non-fatal):', e);
+      edhrecResult = { error: e instanceof Error ? e.message : 'unknown' };
+    }
+
     // Isolated from the rest: a Tavily/Gemini hiccup shouldn't fail a run
     // that already successfully wrote prices, signals, and predictions.
     let newsResult: unknown = { skipped: true };
@@ -142,7 +156,7 @@ export async function GET(req: NextRequest) {
       indexResult = { error: e instanceof Error ? e.message : 'unknown' };
     }
 
-    return NextResponse.json({ success: true, sync: syncResult, movers: moversResult, highValue: highValueResult, categoryHighValue: categoryResult, foilPremium: foilPremiumResult, signals: signalsResult, predictions: predictionsResult, portfolio: portfolioResult, deckValue: deckValueResult, preconValue: preconValueResult, news: newsResult, index: indexResult });
+    return NextResponse.json({ success: true, sync: syncResult, movers: moversResult, highValue: highValueResult, categoryHighValue: categoryResult, foilPremium: foilPremiumResult, signals: signalsResult, predictions: predictionsResult, portfolio: portfolioResult, deckValue: deckValueResult, preconValue: preconValueResult, edhrecPopularity: edhrecResult, news: newsResult, index: indexResult });
   } catch (e) {
     console.error('Market sync failed:', e);
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Sync failed' }, { status: 500 });

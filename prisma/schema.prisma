@@ -1019,3 +1019,25 @@ model PreconProductCard {
   @@index([productId])
   @@map("precon_product_cards")
 }
+
+// Daily snapshot of EDHREC's per-commander card inclusion rates — see
+// lib/edhrec-tracker.ts. Joined against market_price_snapshots by card
+// name to let a "did rising popularity precede a price move" view build
+// up over time; one row per (commander, card, day) since inclusion rate
+// is meaningful per-commander, not just per-card globally.
+model EdhrecCardSnapshot {
+  id             String   @id @default(cuid())
+  commanderSlug  String   @map("commander_slug")
+  commanderName  String   @map("commander_name")
+  cardName       String   @map("card_name")
+  numDecks       Int      @map("num_decks")
+  potentialDecks Int      @map("potential_decks")
+  inclusionRate  Float    @map("inclusion_rate")
+  snapshotDate   DateTime @map("snapshot_date") @db.Date
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@unique([commanderSlug, cardName, snapshotDate])
+  @@index([cardName, snapshotDate])
+  @@index([commanderSlug, snapshotDate])
+  @@map("edhrec_card_snapshots")
+}
