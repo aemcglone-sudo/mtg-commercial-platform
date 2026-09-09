@@ -21,6 +21,8 @@ interface PopularityPriceRow {
   priceChangeAbs: number | null;
   priceChangePct: number | null;
   daysTracked: number;
+  commanderCoveragePct: number;
+  isStaple: boolean;
 }
 
 type Sort = 'inclusion_desc' | 'price_desc' | 'inclusion_change_desc' | 'price_change_desc' | 'name';
@@ -39,6 +41,10 @@ export default function PopularityVsPricePage() {
   const [computedAt, setComputedAt] = useState<string | null>(null);
   const [sort, setSort] = useState<Sort>('inclusion_desc');
   const [filter, setFilter] = useState<Filter>('all');
+  // Sol Ring, Arcane Signet, Command Tower, basic lands, etc. show up in
+  // nearly every deck and drown out cards whose popularity is actually
+  // specific to an archetype — hidden by default, one click to bring back.
+  const [showStaples, setShowStaples] = useState(false);
 
   const load = useCallback(async () => {
     const res = await fetch('/api/market/popularity').then(r => r.json());
@@ -50,9 +56,11 @@ export default function PopularityVsPricePage() {
 
   const maxDaysTracked = useMemo(() => rows && rows.length > 0 ? Math.max(...rows.map(r => r.daysTracked)) : 0, [rows]);
 
+  const staplesHiddenCount = useMemo(() => rows ? rows.filter(r => r.isStaple).length : 0, [rows]);
+
   const visible = useMemo(() => {
     if (!rows) return [];
-    let out = rows;
+    let out = showStaples ? rows : rows.filter(r => !r.isStaple);
     if (filter === 'rising_popularity') out = out.filter(r => r.inclusionRateChangePct !== null && r.inclusionRateChangePct > 0);
     if (filter === 'has_history') out = out.filter(r => r.inclusionRateChangePct !== null);
     out = [...out].sort((a, b) => {
@@ -63,7 +71,7 @@ export default function PopularityVsPricePage() {
       return a.cardName.localeCompare(b.cardName);
     });
     return out;
-  }, [rows, filter, sort]);
+  }, [rows, filter, sort, showStaples]);
 
   return (
     <main className="max-w-5xl mx-auto px-4 py-8 text-zinc-100">
@@ -81,6 +89,9 @@ export default function PopularityVsPricePage() {
           ? "Tracking just started — change columns will fill in as more days accumulate. Check back in a week or two for a real trend."
           : `Change columns compare today against each card's earliest snapshot in the last 30 days (up to ${maxDaysTracked} day${maxDaysTracked === 1 ? '' : 's'} of history so far).`}
         {' '}Price is the cheapest tracked printing by name (not a specific printing), same proxy used elsewhere on this site.
+        {' '}Staples (Sol Ring, Arcane Signet, Command Tower, basic lands — anything showing up under half or more of the
+        commanders we track) are hidden by default since they're auto-includes everywhere and don't tell you anything
+        archetype-specific; toggle them back on below.
       </p>
 
       {rows === null && <p className="text-sm text-zinc-500">Loading…</p>}
@@ -104,6 +115,10 @@ export default function PopularityVsPricePage() {
                   {f.label}
                 </button>
               ))}
+              <button type="button" onClick={() => setShowStaples(s => !s)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium ${showStaples ? 'bg-amber-400 text-black' : 'bg-zinc-800 text-zinc-400'}`}>
+                {showStaples ? `Hide staples` : `Show staples (${staplesHiddenCount} hidden)`}
+              </button>
             </div>
             <div className="flex items-center gap-1.5 text-xs text-zinc-500 flex-wrap">
               Sort by

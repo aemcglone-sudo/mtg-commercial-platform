@@ -87,7 +87,20 @@ export interface PopularityPriceRow {
   priceChangeAbs: number | null;
   priceChangePct: number | null;
   daysTracked: number;
+  // How many of the tracked commanders this card shows up under, as a
+  // fraction — Sol Ring, Arcane Signet, Command Tower, basic lands, etc.
+  // are near 1.0 (they're auto-includes almost everywhere) and drown out
+  // the cards whose popularity is actually specific to one archetype.
+  commanderCoveragePct: number;
+  isStaple: boolean;
 }
+
+const BASIC_LAND_RE = /^(Plains|Island|Swamp|Mountain|Forest|Wastes|Snow-Covered (Plains|Island|Swamp|Mountain|Forest))$/;
+// A card counts as a "staple" (filtered out by default) once it shows up
+// under at least this fraction of all tracked commanders — chosen so
+// genuinely archetype-specific cards (which cluster under a handful of
+// related commanders, not the whole cross-color-pair spread) stay in.
+const STAPLE_COVERAGE_THRESHOLD = 0.5;
 
 /** Today's inclusion rate for every tracked (commander, card) pair, its
  * current tracked price (cheapest printing by name — same ambiguous-name
@@ -107,6 +120,14 @@ export async function getPopularityVsPrice(lookbackDays = 30): Promise<Popularit
   if (latest.length === 0) return [];
 
   const cardNames = Array.from(new Set(latest.map(r => r.cardName)));
+
+  const totalCommanders = new Set(latest.map(r => r.commanderSlug)).size;
+  const commandersByCard = new Map<string, Set<string>>();
+  for (const r of latest) {
+    const set = commandersByCard.get(r.cardName) ?? new Set<string>();
+    set.add(r.commanderSlug);
+    commandersByCard.set(r.cardName, set);
+  }
 
   const earliest = await query<{ commanderSlug: string; cardName: string; inclusionRate: number; snapshotDate: string }>(
     `SELECT DISTINCT ON (commander_slug, card_name)
@@ -192,6 +213,9 @@ export async function getPopularityVsPrice(lookbackDays = 30): Promise<Popularit
       ? ((currentPrice.usd - earliestPrice.usd) / earliestPrice.usd) * 100
       : null;
 
+    const commanderCoveragePct = totalCommanders > 0 ? (commandersByCard.get(row.cardName)?.size ?? 0) / totalCommanders : 0;
+    const isStaple = BASIC_LAND_RE.test(row.cardName) || commanderCoveragePct >= STAPLE_COVERAGE_THRESHOLD;
+
     return {
       cardName: row.cardName,
       scryfallId: scryfallIdByName.get(row.cardName) ?? null,
@@ -207,6 +231,8 @@ export async function getPopularityVsPrice(lookbackDays = 30): Promise<Popularit
       inclusionRateChangePct,
       priceChangePct,
       daysTracked: daysByKey.get(key) ?? 1,
+      commanderCoveragePct,
+      isStaple,
     };
   });
 }
